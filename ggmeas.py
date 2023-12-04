@@ -20,7 +20,7 @@ def get_sigma_crit_inv(lzred, szred, cc):
     # sigma_crit_calculations for a given lense-source pair
     sigm_crit_inv = cc.angular_diameter_distance(lzred).value * cc.angular_diameter_distance_z1z2(lzred, szred).value * (1.0 + lzred)**2 * 1.0/cc.angular_diameter_distance(szred).value
     sigm_crit_inv = sigm_crit_inv * 4*np.pi*gee*1.0/cee**2
-    sigm_crit_inv = 1e12*sigm_crit_inv #esd's are in pc not in Mpc
+    #sigm_crit_inv = 1e12*sigm_crit_inv #esd's are in pc not in Mpc
 
     return sigm_crit_inv
 
@@ -51,7 +51,8 @@ def get_earr(file):
     data = pd.read_csv(file, delim_whitespace=2)
     et = 0.0*data['lra(deg)']
     ex = 0.0*data['lra(deg)']
-    cc      = FlatLambdaCDM(H0=100, Om0=0.27)
+    cc      = FlatLambdaCDM(H0=100, Om0=0.27, Ob0=0.0457)
+    #cc      = FlatLambdaCDM(H0=100, Om0=0.27)
     #for ii in range(len(et)):
     for ii in range(50000):
         thetamax = 1/cc.comoving_distance(data['lzred'][ii]).value * 180/np.pi
@@ -69,11 +70,10 @@ def get_earr(file):
         sl_sep = np.sqrt((lx - sx)**2 + (ly - sy)**2 + (lz - sz)**2)
         sl_sep = sl_sep * cc.comoving_distance(l_zred).value
         if sl_sep>1.0 or sl_sep<0.01:
-            print("here")
             continue
 
         et[ii], ex[ii] = get_et_ex(l_ra, l_dec, sra, sdec, data['se1'][ii], data['se2'][ii])
-    et = et/get_sigma_crit_inv(0.4, 0.8, cc)
+    #et = et/get_sigma_crit_inv(0.4, 0.8, cc)
     return et,ex
 
 
@@ -93,15 +93,20 @@ if __name__ == "__main__":
         hp      = halo(dat['llog_mh'][0], dat['lconc'][0], omg_m=0.27)
         stel    = stellar(dat['llog_mstel'][0])
         from scipy.integrate import quad
-        rbin = np.linspace(1e-10,1,30)
+        rbin = np.linspace(0.005,1,30)
         esd = hp.esd_nfw(rbin) + stel.esd_pointmass(rbin)
-        esd = esd/1e12
-        print(esd)
+        esd = esd
+        #print(esd)
         from  scipy.interpolate import interp1d
         f = interp1d(rbin, esd)
         pred = quad(lambda x: 2*x*f(x), 0.01, 1)[0]
-        print(pred)
-        plt.plot(mm, pred/(np.pi*(1 - 1e-4)),'.k')
+
+        cc  = FlatLambdaCDM(H0=100, Om0=0.27, Ob0=0.0457)
+        val = pred/((1 - 1e-4)) * get_sigma_crit_inv(0.4, 0.8, cc)
+
+        plt.plot(mm, val,'.k')
+
+        print('factor', np.mean(et)/val)
 
     plt.yscale('log')
     plt.ylabel(r'$\gamma_t$')

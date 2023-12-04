@@ -135,7 +135,7 @@ if __name__ == "__main__":
     sdec = ldec + spos[:,1]
     szred = 0.8
     # intrinsic shapes
-    se = np.random.normal(1.0, 0.27, int(2*len(sra))).reshape((-1,2))
+    se = 0.0*np.random.normal(1.0, 0.27, int(2*len(sra))).reshape((-1,2))
     se1 = se[:,0]
     se2 = se[:,1]
 
