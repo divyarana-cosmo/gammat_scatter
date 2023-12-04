@@ -7,7 +7,6 @@ class constants:
     """Useful constants"""
     G = 4.301e-9 #km^2 Mpc M_sun^-1 s^-2 gravitational constant
     H0 = 100. #h kms-1 Mpc-1 hubble constant at present
-    omg_m = 0.3 #omega_matter
 
 class stellar(constants):
     """Useful functions for weak lensing signal modelling"""
@@ -29,7 +28,15 @@ class stellar(constants):
 
     def avg_sigma_pointmass(self,r):
         """analytical average projected of pointmass profile"""
-        val = 10**self.log_mstel*1.0/r**2
+        val = 0.0*r
+        c=0
+        for i in r:
+            if i<5e-3:
+                val[c] = 10**self.log_mstel*1.0/(5e-3)**2
+            else:
+                val[c] = 10**self.log_mstel*1.0/r**2
+
+            c=c+1
         return val
 
     def esd_pointmass(self,r):

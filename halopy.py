@@ -34,16 +34,8 @@ class halo(constants):
         sig = 0.0*r
         c=0
         for i in r:
-            #x = i/r_s
-            #if x < 1:
-            #    value = (1 - np.arccosh(1/x)/np.sqrt(1-x**2))/(x**2-1)
-            #elif x > 1:
-            #    value = (1 - np.arccos(1/x)/np.sqrt(x**2-1))/(x**2-1)
-            #else:
-            #    value = 1./3.
-            #sig[c] = value*k
-            if i<1e-3:
-                sig[c] = self.sigma_nfw_scalar(1e-3)
+            if i<5e-3:
+                sig[c] = self.sigma_nfw_scalar(5e-3)
             else:
                 sig[c] = self.sigma_nfw_scalar(i)
             c=c+1
@@ -57,18 +49,8 @@ class halo(constants):
         sig = 0.0*r
         c=0
         for i in r:
-            #x = i/r_s
-            #if x < 1:
-            #    value = np.arccosh(1/x)/np.sqrt(1-x**2) + np.log(x/2.0)
-            #    value = value*2.0/x**2
-            #elif x > 1:
-            #    value = np.arccos(1/x)/np.sqrt(x**2-1)  + np.log(x/2.0)
-            #    value = value*2.0/x**2
-            #else:
-            #    value = 2*(1-np.log(2))
-            #sig[c] = value*k
-            if i<1e-3:
-                sig[c] = self.avg_sigma_nfw_scalar(1e-3)
+            if i<5e-3:
+                sig[c] = self.avg_sigma_nfw_scalar(5e-3)
             else:
                 sig[c] = self.avg_sigma_nfw_scalar(i)
 
