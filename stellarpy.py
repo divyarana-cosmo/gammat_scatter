@@ -34,7 +34,7 @@ class stellar(constants):
             if i<5e-3:
                 val[c] = 10**self.log_mstel*1.0/(5e-3)**2
             else:
-                val[c] = 10**self.log_mstel*1.0/r**2
+                val[c] = 10**self.log_mstel*1.0/i**2
 
             c=c+1
         return val

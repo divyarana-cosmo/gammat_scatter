@@ -51,7 +51,7 @@ def get_earr(file):
     data = pd.read_csv(file, delim_whitespace=2)
     et = 0.0*data['lra(deg)']
     ex = 0.0*data['lra(deg)']
-    cc      = FlatLambdaCDM(H0=100, Om0=0.3)
+    cc      = FlatLambdaCDM(H0=100, Om0=0.27)
     #for ii in range(len(et)):
     for ii in range(50000):
         thetamax = 1/cc.comoving_distance(data['lzred'][ii]).value * 180/np.pi
@@ -68,7 +68,8 @@ def get_earr(file):
         # getting the radial separations for a lense source pair functionality for later use
         sl_sep = np.sqrt((lx - sx)**2 + (ly - sy)**2 + (lz - sz)**2)
         sl_sep = sl_sep * cc.comoving_distance(l_zred).value
-        if sl_sep>1.0:
+        if sl_sep>1.0 or sl_sep<0.01:
+            print("here")
             continue
 
         et[ii], ex[ii] = get_et_ex(l_ra, l_dec, sra, sdec, data['se1'][ii], data['se2'][ii])
@@ -98,9 +99,9 @@ if __name__ == "__main__":
         print(esd)
         from  scipy.interpolate import interp1d
         f = interp1d(rbin, esd)
-        pred = quad(lambda x: 2*x*f(x), 1e-5, 1)[0]
+        pred = quad(lambda x: 2*x*f(x), 0.01, 1)[0]
         print(pred)
-        plt.plot(mm, pred,'.k')
+        plt.plot(mm, pred/(np.pi*(1 - 1e-4)),'.k')
 
     plt.yscale('log')
     plt.ylabel(r'$\gamma_t$')

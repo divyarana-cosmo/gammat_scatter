@@ -65,8 +65,8 @@ class halo(constants):
 
     def esd_scalar(self,r):
         """ESD profile from analytical predictions"""
-        if r<1e-3:
-            val = self.avg_sigma_nfw_scalar(1e-3) - self.sigma_nfw_scalar(1e-3)
+        if r<5e-3:
+            val = self.avg_sigma_nfw_scalar(5e-3) - self.sigma_nfw_scalar(5e-3)
         else:
             val = self.avg_sigma_nfw_scalar(r) - self.sigma_nfw_scalar(r)
         return val
