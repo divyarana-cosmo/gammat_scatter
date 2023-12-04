@@ -1,0 +1,28 @@
+#cosmological parameters
+H0: 100 #h km s-1 Mpc-1 
+Om0: 0.27 
+Ob0: 0.0457 
+Tcmb0: 2.7255 
+Neff: 3.046
+sigma8: 0.82 
+ns: 0.96
+
+outputdir: debug
+#outdir: debug_s
+
+# Whether to output lens source pair information
+# Lens configuration (to be used in splashback_select.py:lens_select)
+lens:
+    log_mstel: 10 # total stellar pointmass h-1 Msun
+    log_mh: 12    # total mass of the halo in 200m h-1 Msun
+    lra: 130.0    # angles in degrees
+    ldec: 0.0
+    lzred: 0.4
+    Rmax: 1       # maximum projected radius in h-1 Mpc
+
+# Source configuration (to be used in splashback_select.py:source_select)
+#source:
+#  # Source file related
+#  nsrc: 30 # source density Euclid-like
+#  szred: 0.8 # all the sources are at the same redshift
+
