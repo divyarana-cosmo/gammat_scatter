@@ -14,65 +14,45 @@ class stellar(constants):
         self.log_mstel = log_mstel # total mass of the halo
         print("Intialing point mass parameter\n log_mstel = %s"%(log_mstel))
 
-    def sigma_pointmass(self,r):
-        "delta function projected profile"
-        val=0.0*r
-        c=0
-        for i in r:
-            if i>0:
-                val[c]=0
-            else:
-                val[c] = np.inf
-            c+=1
-        return val
-
-    def avg_sigma_pointmass(self,r):
-        """analytical average projected of pointmass profile"""
-        val = 0.0*r
-        c=0
-        for i in r:
-            if i<5e-3:
-                val[c] = 10**self.log_mstel*1.0/(5e-3)**2
-            else:
-                val[c] = 10**self.log_mstel*1.0/i**2
-
-            c=c+1
-        return val
-
     def esd_pointmass(self,r):
+        """ESD profile from analytical predictions"""
+        if np.isscalar(r):
+            return self.esd_pointmass_scalar(r)
+        else:
+            val = 0.0 * r
+            for ii,rr  in enumerate(r):
+                val[ii] = self.esd_pointmass_scalar(rr)
+            return val
+
+    def esd_pointmass_scalar(self,r):
         """ESD profile from analytical predictions"""
         val = self.avg_sigma_pointmass(r) - self.sigma_pointmass(r)
         return val
 
+    def sigma_pointmass(self,r):
+        "delta function projected profile"
+        if r>0:
+            return 0
+        else:
+            return np.inf
+
+    def avg_sigma_pointmass(self,r):
+        """analytical average projected of pointmass profile"""
+        if r<5e-3:
+            return 10**self.log_mstel*1.0/(np.pi*(5e-3)**2)
+        else:
+            return 10**self.log_mstel*1.0/(np.pi*r**2)
+
 if __name__ == "__main__":
     plt.subplot(2,2,1)
     rbin = np.logspace(-2,np.log10(5),10)
-    hp = halo(10**14.5,4)
+    hp = stellar(10)
     #print hp.r_200
-    yy = hp.esd(rbin)/(1e12)
+    yy = hp.esd_pointmass(rbin)/(1e12)
     plt.plot(rbin, yy, '-')
-    #xx = rbin
-    #yy = 0.0*xx
 
-    #for ii,rr in enumerate(rbin):
-    #    yy[ii] = hp.esd_scalar(rr)
-
-    #plt.plot(xx, yy/(1e12), 's', lw=0.0)
-    #plt.plot(xx, hp.esd(xx)/(1e12))
-
-    #hp = halo(10**14,10)
-    hp = halo(10**14.5,6)
-    yy1 = hp.esd(rbin)/(1e12)
-    plt.plot(rbin, yy1)
-
-    #plt.plot(rbin, hp.num_delta_sigma(rbin)/(1e12), '.', lw=0.0)
     plt.xscale('log')
     plt.yscale('log')
     plt.xlabel(r'$R [{\rm h^{-1}Mpc}]$')
     plt.ylabel(r'$\Delta \Sigma (R) [{\rm h M_\odot pc^{-2}}]$')
-
-    plt.subplot(2,2,2)
-    plt.plot(rbin, yy1*1.0/yy)
-    plt.axhline(1.0, color='grey', ls='--')
-    plt.xscale('log')
     plt.savefig('test.png', dpi=300)
