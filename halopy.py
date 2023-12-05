@@ -27,41 +27,16 @@ class halo(constants):
         value  = self.rho_0/((r/r_s)*(1+r/r_s)**2)
         return value
 
-    def sigma_nfw(self,r):
-        """analytical projection of NFW"""
-        r_s = self.r_200/self.c
-        k = 2*r_s*self.rho_0
-        sig = 0.0*r
-        c=0
-        for i in r:
-            if i<5e-3:
-                sig[c] = self.sigma_nfw_scalar(5e-3)
-            else:
-                sig[c] = self.sigma_nfw_scalar(i)
-            c=c+1
-
-        return sig
-
-    def avg_sigma_nfw(self,r):
-        """analytical average projected of NFW"""
-        r_s = self.r_200/self.c
-        k = 2*r_s*self.rho_0
-        sig = 0.0*r
-        c=0
-        for i in r:
-            if i<5e-3:
-                sig[c] = self.avg_sigma_nfw_scalar(5e-3)
-            else:
-                sig[c] = self.avg_sigma_nfw_scalar(i)
-
-            c=c+1
-
-        return sig
 
     def esd_nfw(self,r):
         """ESD profile from analytical predictions"""
-        val = self.avg_sigma_nfw(r) - self.sigma_nfw(r)
-        return val
+        if np.isscalar(r):
+            return self.esd_scalar(r)
+        else:
+            sig = 0.0*r
+            for ii,rr in enumerate(r):
+                sig[ii] = self.esd_scalar(rr)
+            return sig
 
     def esd_scalar(self,r):
         """ESD profile from analytical predictions"""
@@ -126,14 +101,19 @@ class halo(constants):
 
 if __name__ == "__main__":
     plt.subplot(2,2,1)
-    rbin = 1.0+ 0.0*np.logspace(-2,np.log10(5),10)
+    rbin = np.logspace(-2,np.log10(5),10)
     hp = halo(14,4)
     #print hp.r_200
-    #yy = hp.esd_nfw(rbin)/(1e12)
-    yy = hp.avg_sigma_nfw(rbin)/(1e12)
-    print(yy)
-    exit()
+    yy = hp.esd_nfw(rbin)/(1e12)
     plt.plot(rbin, yy, '-')
+    plt.plot(rbin, hp.num_delta_sigma(rbin)/(1e12), '.', lw=0.0)
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xlabel(r'$R [{\rm h^{-1}Mpc}]$')
+    plt.ylabel(r'$\Delta \Sigma (R) [{\rm h M_\odot pc^{-2}}]$')
+
+    plt.savefig('test.png', dpi=300)
+
     #xx = rbin
     #yy = 0.0*xx
 
@@ -144,18 +124,37 @@ if __name__ == "__main__":
     #plt.plot(xx, hp.esd(xx)/(1e12))
 
     #hp = halo(10**14,10)
-    hp = halo(14.5,6)
-    yy1 = hp.esd(rbin)/(1e12)
-    plt.plot(rbin, yy1)
+    #hp = halo(14.5,6)
+    #yy1 = hp.esd(rbin)/(1e12)
+    #plt.plot(rbin, yy1)
+    #def sigma_nfw(self,r):
+    #    """analytical projection of NFW"""
+    #    r_s = self.r_200/self.c
+    #    k = 2*r_s*self.rho_0
+    #    sig = 0.0*r
+    #    c=0
+    #    for i in r:
+    #        if i<5e-3:
+    #            sig[c] = self.sigma_nfw_scalar(5e-3)
+    #        else:
+    #            sig[c] = self.sigma_nfw_scalar(i)
+    #        c=c+1
 
-    #plt.plot(rbin, hp.num_delta_sigma(rbin)/(1e12), '.', lw=0.0)
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.xlabel(r'$R [{\rm h^{-1}Mpc}]$')
-    plt.ylabel(r'$\Delta \Sigma (R) [{\rm h M_\odot pc^{-2}}]$')
+    #    return sig
 
-    plt.subplot(2,2,2)
-    plt.plot(rbin, yy1*1.0/yy)
-    plt.axhline(1.0, color='grey', ls='--')
-    plt.xscale('log')
-    plt.savefig('test.png', dpi=300)
+    #def avg_sigma_nfw(self,r):
+    #    """analytical average projected of NFW"""
+    #    r_s = self.r_200/self.c
+    #    k = 2*r_s*self.rho_0
+    #    sig = 0.0*r
+    #    c=0
+    #    for i in r:
+    #        if i<5e-3:
+    #            sig[c] = self.avg_sigma_nfw_scalar(5e-3)
+    #        else:
+    #            sig[c] = self.avg_sigma_nfw_scalar(i)
+
+    #        c=c+1
+
+    #    return sig
+
