@@ -38,6 +38,16 @@ class halo(constants):
                 sig[ii] = self.esd_scalar(rr)
             return sig
 
+    def sigma_nfw(self,r):
+        """analytical projection of NFW"""
+        if np.isscalar(r):
+            return self.sigma_nfw_scalar(r)
+        else:
+            sig = 0.0*r
+            for ii,rr in enumerate(r):
+                sig[ii] = self.sigma_nfw_scalar(rr)
+            return sig
+
     def esd_scalar(self,r):
         """ESD profile from analytical predictions"""
         if r<5e-3:

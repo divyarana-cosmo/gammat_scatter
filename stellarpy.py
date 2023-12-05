@@ -24,19 +24,31 @@ class stellar(constants):
                 val[ii] = self.esd_pointmass_scalar(rr)
             return val
 
+    def sigma_pointmass(self,r):
+        "delta function projected profile"
+        if np.isscalar(r):
+            return self.sigma_pointmass_scalar(r)
+        else:
+            val = 0.0 * r
+            for ii,rr  in enumerate(r):
+                val[ii] = self.sigma_pointmass_scalar(rr)
+            return val
+
+
+
     def esd_pointmass_scalar(self,r):
         """ESD profile from analytical predictions"""
-        val = self.avg_sigma_pointmass(r) - self.sigma_pointmass(r)
+        val = self.avg_sigma_pointmass_scalar(r) - self.sigma_pointmass_scalar(r)
         return val
 
-    def sigma_pointmass(self,r):
+    def sigma_pointmass_scalar(self,r):
         "delta function projected profile"
         if r>0:
             return 0
         else:
             return np.inf
 
-    def avg_sigma_pointmass(self,r):
+    def avg_sigma_pointmass_scalar(self,r):
         """analytical average projected of pointmass profile"""
         if r<5e-3:
             return 10**self.log_mstel*1.0/(np.pi*(5e-3)**2)
