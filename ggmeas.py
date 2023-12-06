@@ -116,12 +116,14 @@ if __name__ == "__main__":
     for fil in flist:
         et_obs, ex, et_applied = get_earr(fil)
         mm  = float(fil.split('_')[-1].split('.dat')[0])
-        plt.errorbar(mm, np.mean(et_obs), yerr=np.std(et_obs)/np.sqrt(len(et_obs)), fmt='.', capsize=3)
-        plt.plot(mm, np.mean(et_applied),'+k', zorder=10)
+        #plt.errorbar(mm, np.mean(et_obs), yerr=np.std(et_obs)/np.sqrt(len(et_obs)), fmt='.', capsize=3)
+        plt.errorbar(mm, np.mean(ex), yerr=np.std(ex)/np.sqrt(len(et_obs)), fmt='.', capsize=3)
+        #plt.plot(mm, np.mean(et_applied),'+k', zorder=10)
 
         #print(np.mean(et))
         #plt.scatter(mm + 0.0*et, et, s=1.0, lw=0.0)
     #plt.yscale('log')
+    plt.axhline(0.0, fmt='--', color='grey')
     plt.ylabel(r'$\gamma_{t}$')
     plt.xlabel(r'$\log(M_h / [h^{-1} M_\odot])$')
 
