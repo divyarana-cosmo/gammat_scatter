@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from astropy.cosmology import FlatLambdaCDM
 
 
+# testing the code over a radial range of the 0.01-1 h-1 Mpc with single bin
 
 def get_xyz(ra, dec):
     ra = ra*np.pi/180.
