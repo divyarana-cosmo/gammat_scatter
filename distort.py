@@ -89,7 +89,8 @@ class simshear():
         # tangential shear
         g_1     = - g*(2*c_phi**2 - 1)
         g_2     = - g*(2*c_phi * s_phi)
-        return g_1, g_2, g, c_phi, s_phi
+        #return g_1, g_2, g, c_phi, s_phi
+        return 0, 0, 0, c_phi, s_phi
         #return g_1, g_2, g, c_phi, s_phi
 
 
@@ -132,12 +133,12 @@ if __name__ == "__main__":
 
     np.random.seed(123)
     nsrcs   = int(1e5)
-    spos    = np.random.uniform(-thetamax/2.0, thetamax/2.0, nsrcs).reshape((-1,2)) # it has to be over sphere please correct.
+    spos    = np.random.uniform(-thetamax, thetamax, nsrcs).reshape((-1,2)) # it has to be over sphere please correct.
     sra     = lra + spos[:,0]
     sdec    = spos[:,1]
     szred = 0.8
     # intrinsic shapes
-    se = 0.0*np.random.normal(0.0, 0.27, int(2*len(sra))).reshape((-1,2))
+    se = np.random.normal(0.0, 0.27, int(2*len(sra))).reshape((-1,2))
     #se = np.random.normal(1.0, 0.27, int(2*len(sra))).reshape((-1,2))
     se1 = se[:,0]
     se2 = se[:,1]
