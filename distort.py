@@ -87,20 +87,20 @@ class simshear():
         # tangential shear
         g_1     = - g*(2*c_phi**2 - 1)
         g_2     = - g*(2*c_phi * s_phi)
-        return g_1, g_2
+        return g_1, g_2, gamma
 
 
 
     def shear_src(self, sra, sdec, se1, se2, lzred, szred):
         "apply shear on to the source galaxies with given intrinsic shapes"
-        g_1, g_2 = self.get_g(sra, sdec, lzred, szred)
-        g   = complex(g_1,g_2)
+        g_1, g_2, etan = self.get_g(sra, sdec, lzred, szred)
+        g   = complex(g_1, g_2)
         es  = complex(se1, se2)
         if np.abs(g)<1:
             e = (es + g)/(1.0 + np.conj(g)*es)
         if np.abs(g)>1:
             e = (1 + g*np.conj(es))/(np.conj(es) + np.conj(g))
-        return np.real(e), np.imag(e)
+        return np.real(e), np.imag(e), etan
 
 
 
@@ -144,10 +144,10 @@ if __name__ == "__main__":
     call("mkdir -p %s" % (config["outputdir"]), shell=1)
     fdata = open('%s/simed_sources_logmh_%s.dat'%(config['outputdir'], config['lens']['log_mh']),'w')
 
-    fdata.write('lra(deg)\tldec(deg)\tlzred\tllog_mstel\tllog_mh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\n')
+    fdata.write('lra(deg)\tldec(deg)\tlzred\tllog_mstel\tllog_mh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\n')
     for ii in range(len(sra)):
-        s1, s2 = ss.shear_src(sra[ii], sdec[ii], se1[ii], se2[ii], lzred, szred)
-        fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lra, ldec, lzred, config['lens']['log_mstel'], config['lens']['log_mh'], ss.conc, sra[ii], sdec[ii], szred, s1, s2))
+        s1, s2, etan = ss.shear_src(sra[ii], sdec[ii], se1[ii], se2[ii], lzred, szred)
+        fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lra, ldec, lzred, config['lens']['log_mstel'], config['lens']['log_mh'], ss.conc, sra[ii], sdec[ii], szred, s1, s2, etan))
 
     fdata.close()
 
