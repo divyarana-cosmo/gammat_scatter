@@ -7,6 +7,7 @@
 # have to implement smhm properly with a scatter
 # put the argsparse in it
 
+# remember to clip the sin and cos to -1,1
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -65,46 +66,47 @@ class simshear():
         sra  = sra*np.pi/180
         sdec = sdec*np.pi/180
 
-        c_theta = np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec)
+        c_theta = np.clip(np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec), -1, 1)
         s_theta = np.sqrt(1-c_theta**2)
+        if s_theta==0:
+            return np.nan, np.nan, np.nan, np.nan, np.nan
 
         #projected separation on the lense plane
         proj_sep = self.cc.comoving_distance(lzred).value * s_theta/c_theta # in h-1 Mpc
-        proj_sep = np.array([proj_sep])
 
         #considering only tangential shear and adding both contributions
-        #hp = halo(log_mh, conc, omg_m=self.omg_m)
-        #stel = stellar(log_mstel)
         gamma = (self.hp.esd_nfw(proj_sep) + self.stel.esd_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
         kappa = (self.hp.sigma_nfw(proj_sep) + self.stel.sigma_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
 
         g = gamma/(1.0 - kappa)
+        if np.abs(kappa)>1.0:
+            print("strong lensing regime")
 
         # phi to get the compute the tangential shear
-        c_phi   = np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta
-        s_phi   = (-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta
+        c_phi   = np.clip( np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta, -1, 1 )
+        s_phi   = np.clip((-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta, -1, 1)
 
         # tangential shear
         g_1     = - g*(2*c_phi**2 - 1)
         g_2     = - g*(2*c_phi * s_phi)
-        return g_1, g_2, gamma
+        return g_1, g_2, g, c_phi, s_phi
+        #return g_1, g_2, g, c_phi, s_phi
 
 
 
     def shear_src(self, sra, sdec, se1, se2, lzred, szred):
         "apply shear on to the source galaxies with given intrinsic shapes"
-        g_1, g_2, etan = self.get_g(sra, sdec, lzred, szred)
+        g_1, g_2, etan, c_phi, s_phi = self.get_g(sra, sdec, lzred, szred)
+        if np.isnan(g_1):
+            return np.nan, np.nan, np.nan
         g   = complex(g_1, g_2)
         es  = complex(se1, se2)
+
         if np.abs(g)<1:
             e = (es + g)/(1.0 + np.conj(g)*es)
         if np.abs(g)>1:
             e = (1 + g*np.conj(es))/(np.conj(es) + np.conj(g))
         return np.real(e), np.imag(e), etan
-
-
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--config", help="Configuration file")
@@ -129,13 +131,14 @@ if __name__ == "__main__":
     thetamax = config['lens']['Rmax']/cc.comoving_distance(lzred).value * 180/np.pi
 
     np.random.seed(123)
-    nsrcs = int(1e5)
-    spos = np.random.uniform(-thetamax/2.0, thetamax/2.0, nsrcs).reshape((-1,2)) # it has to be over sphere please correct.
-    sra = lra + spos[:,0]
-    sdec = ldec + spos[:,1]
+    nsrcs   = int(1e5)
+    spos    = np.random.uniform(-thetamax/2.0, thetamax/2.0, nsrcs).reshape((-1,2)) # it has to be over sphere please correct.
+    sra     = lra + spos[:,0]
+    sdec    = spos[:,1]
     szred = 0.8
     # intrinsic shapes
-    se = 0.0*np.random.normal(1.0, 0.27, int(2*len(sra))).reshape((-1,2))
+    #se = 0.0*np.random.normal(1.0, 0.27, int(2*len(sra))).reshape((-1,2))
+    se = np.random.normal(1.0, 0.27, int(2*len(sra))).reshape((-1,2))
     se1 = se[:,0]
     se2 = se[:,1]
 
@@ -143,12 +146,34 @@ if __name__ == "__main__":
     from subprocess import call
     call("mkdir -p %s" % (config["outputdir"]), shell=1)
     fdata = open('%s/simed_sources_logmh_%s.dat'%(config['outputdir'], config['lens']['log_mh']),'w')
-
     fdata.write('lra(deg)\tldec(deg)\tlzred\tllog_mstel\tllog_mh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\n')
     for ii in range(len(sra)):
         s1, s2, etan = ss.shear_src(sra[ii], sdec[ii], se1[ii], se2[ii], lzred, szred)
+        if np.isnan(s1):
+            continue
+
         fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lra, ldec, lzred, config['lens']['log_mstel'], config['lens']['log_mh'], ss.conc, sra[ii], sdec[ii], szred, s1, s2, etan))
 
     fdata.close()
+
+
+#def get_et_ex(lra, ldec, sra, sdec, se1, se2):
+#    "computes the etan and ecross for a given  lens-source pair"
+#    lra  = lra*np.pi/180
+#    ldec = ldec*np.pi/180
+#    sra  = sra*np.pi/180
+#    sdec = sdec*np.pi/180
+#
+#    c_theta = np.clip(np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec), -1, 1)
+#    s_theta = np.sqrt(1-c_theta**2)
+#
+#    # phi to get the compute the tangential shear
+#    c_phi   = np.clip(np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta, -1, 1)
+#    s_phi   = np.clip((-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta, -1, 1)
+#    # tangential shear
+#    e_t     = - se1*(2*c_phi**2 -1) - se2*(2*c_phi * s_phi)
+#    e_x     = - se1*(2*c_phi * s_phi) + se2*(2*c_phi**2 -1)
+#
+#    return e_t, e_x
 
 
