@@ -55,8 +55,8 @@ def get_earr(file):
     et_applied = -999 + 0.0*data['lra(deg)']
     cc      = FlatLambdaCDM(H0=100, Om0=0.27, Ob0=0.0457)
     #cc      = FlatLambdaCDM(H0=100, Om0=0.27)
-    for ii in range(len(et)):
-    #for ii in range(50000):
+    from tqdm import tqdm
+    for ii in tqdm(range(len(et))):
         thetamax = 1/cc.comoving_distance(data['lzred'][ii]).value * 180/np.pi
         l_ra   = data['lra(deg)'][ii]
         l_dec  = data['ldec(deg)'][ii]
@@ -115,29 +115,4 @@ if __name__ == "__main__":
     plt.savefig('test.png', dpi=300)
 
 
-
-
-
-    #a,b,c = plt.hist(et, histxype='step', bins=20, label=r'$e_t$')
-    #plt.axvline(np.mean(et), x='C0')
-
-        #plt.errorbar(mm, np.mean(et), yerr=np.std(et)/np.sqrt(len(et)), fmt='.', capsize=3)
-        #dat = pd.read_csv(fil, delim_whitespace=1)
-        #hp      = halo(dat['llog_mh'][0], dat['lconc'][0], omg_m=0.27)
-        #stel    = stellar(dat['llog_mstel'][0])
-        #from scipy.integrate import quad
-        #rbin = np.linspace(0.005,1,30)
-        #esd = hp.esd_nfw(rbin) + stel.esd_pointmass(rbin)
-        #esd = esd
-        ##print(esd)
-        #from  scipy.interpolate import interp1d
-        #f = interp1d(rbin, esd)
-        #pred = quad(lambda x: 2*x*f(x), 0.01, 1)[0]
-
-        #cc  = FlatLambdaCDM(H0=100, Om0=0.27, Ob0=0.0457)
-        #val = pred/((1 - 1e-4)) * get_sigma_crit_inv(0.4, 0.8, cc)
-
-        #plt.plot(mm, val,'.k')
-
-        #print('factor', np.mean(et)/val)
 

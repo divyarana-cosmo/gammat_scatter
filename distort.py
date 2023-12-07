@@ -87,14 +87,12 @@ class simshear():
         s_phi   = np.clip((-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta, -1, 1)
 
         #just of check
-        g=0.0
+        #g=0.0
 
         # tangential shear
         g_1     = - g*(2*c_phi**2 - 1)
         g_2     = - g*(2*c_phi * s_phi)
         return g_1, g_2, g, c_phi, s_phi
-        #return g_1, g_2, g, c_phi, s_phi
-
 
 
     def shear_src(self, sra, sdec, se1, se2, lzred, szred):
@@ -178,20 +176,17 @@ if __name__ == "__main__":
     call("mkdir -p %s" % (config["outputdir"]), shell=1)
     fname = '%s/simed_sources_logmh_%s.dat'%(config['outputdir'], config['lens']['log_mh'])
     fdata = open(fname,'w')
-    fdata.write('lra(deg)\tldec(deg)\tlzred\tllog_mstel\tllog_mh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\n')
-    for ii in range(len(sra)):
+    fdata.write('lra(deg)\tldec(deg)\tlzred\tllog_mstel\tllog_mh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\t ex_obs\n')
+    from tqdm import tqdm
+    for ii in tqdm(range(len(sra))):
         s1, s2, etan = ss.shear_src(sra[ii], sdec[ii], se1[ii], se2[ii], lzred, szred)
         if np.isnan(s1):
             continue
         et, ex = get_et_ex(lra, ldec, sra[ii], sdec[ii], se1[ii], se2[ii])
 
-        fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lra, ldec, lzred, config['lens']['log_mstel'], config['lens']['log_mh'], ss.conc, sra[ii], sdec[ii], szred, s1, s2, etan, et))
+        fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lra, ldec, lzred, config['lens']['log_mstel'], config['lens']['log_mh'], ss.conc, sra[ii], sdec[ii], szred, s1, s2, etan, et, ex))
 
     fdata.close()
-
-    import pandas as pd
-    data = pd.read_csv(fname, delim_whitespace=1)
-    print(np.mean(data['etan_obs']), np.std(data['etan_obs'])/np.sqrt(len(data['etan_obs'])), np.mean(data['etan']))
 
 
 
