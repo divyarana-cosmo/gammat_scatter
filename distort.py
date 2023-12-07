@@ -140,7 +140,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--config", help="Configuration file")
     parser.add_argument("--outdir", help="Output filename with pairs information", default="debug")
-    parser.add_argument("--log_mh", help="dark matter halo mass", type=float, default=13.0)
+    parser.add_argument("--log_mh", help="dark matter halo mass", type=float, default=12.0)
 
     args = parser.parse_args()
 

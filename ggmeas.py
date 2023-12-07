@@ -47,28 +47,6 @@ def get_et_ex(lra, ldec, sra, sdec, se1, se2):
 
     return e_t, e_x
 
-
-
-
-#def get_et_ex(lra, ldec, sra, sdec, se1, se2):
-#    "computes the etan and ecross for a given  lens-source pair"
-#    lra  = lra*np.pi/180
-#    ldec = ldec*np.pi/180
-#    sra  = sra*np.pi/180
-#    sdec = sdec*np.pi/180
-#
-#    c_theta = np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec)
-#    s_theta = np.sqrt(1-c_theta**2)
-#
-#    # phi to get the compute the tangential shear
-#    c_phi   = np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta
-#    s_phi   = (-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta
-#    # tangential shear
-#    e_t     = - se1*(2*c_phi**2 -1) - se2*(2*c_phi * s_phi)
-#    e_x     = - se1*(2*c_phi * s_phi) + se2*(2*c_phi**2 -1)
-#
-#    return e_t, e_x
-
 def get_earr(file):
     import pandas as pd
     data = pd.read_csv(file, delim_whitespace=1)
@@ -77,8 +55,8 @@ def get_earr(file):
     et_applied = -999 + 0.0*data['lra(deg)']
     cc      = FlatLambdaCDM(H0=100, Om0=0.27, Ob0=0.0457)
     #cc      = FlatLambdaCDM(H0=100, Om0=0.27)
-    #for ii in range(len(et)):
-    for ii in range(50000):
+    for ii in range(len(et)):
+    #for ii in range(50000):
         thetamax = 1/cc.comoving_distance(data['lzred'][ii]).value * 180/np.pi
         l_ra   = data['lra(deg)'][ii]
         l_dec  = data['ldec(deg)'][ii]
@@ -95,8 +73,8 @@ def get_earr(file):
         # getting the radial separations for a lense source pair functionality for later use
         sl_sep = np.sqrt((lx - sx)**2 + (ly - sy)**2 + (lz - sz)**2)
         sl_sep = sl_sep * cc.comoving_distance(l_zred).value
-        if sl_sep>1.0 or sl_sep<0.01:
-            continue
+        #if sl_sep>1.0 or sl_sep<0.01:
+        #    continue
 
         et[ii], ex[ii] = get_et_ex(l_ra, l_dec, sra, sdec, data['se1'][ii], data['se2'][ii])
     idx = (et!=-999) & (ex!=-999)
@@ -118,6 +96,7 @@ if __name__ == "__main__":
         et_obs, ex, et_applied = get_earr(fil)
         mm  = float(fil.split('_')[-1].split('.dat')[0])
         ax = plt.subplot(2,2,1)
+        print(np.mean(et_obs))
         ax.errorbar(mm, np.mean(et_obs), yerr=np.std(et_obs)/np.sqrt(len(et_obs)), fmt='.', capsize=3)
         #ax.errorbar(mm, np.mean(ex), yerr=np.std(ex)/np.sqrt(len(et_obs)), fmt='.', capsize=3)
         ax.plot(mm, np.mean(et_applied),'+k', zorder=10)
@@ -134,6 +113,10 @@ if __name__ == "__main__":
 
     #plt.legend()
     plt.savefig('test.png', dpi=300)
+
+
+
+
 
     #a,b,c = plt.hist(et, histxype='step', bins=20, label=r'$e_t$')
     #plt.axvline(np.mean(et), x='C0')
