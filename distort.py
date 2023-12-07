@@ -86,11 +86,13 @@ class simshear():
         c_phi   = np.clip( np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta, -1, 1 )
         s_phi   = np.clip((-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta, -1, 1)
 
+        #just of check
+        g=0.0
+
         # tangential shear
         g_1     = - g*(2*c_phi**2 - 1)
         g_2     = - g*(2*c_phi * s_phi)
-        #return g_1, g_2, g, c_phi, s_phi
-        return 0, 0, 0, c_phi, s_phi
+        return g_1, g_2, g, c_phi, s_phi
         #return g_1, g_2, g, c_phi, s_phi
 
 
@@ -107,7 +109,33 @@ class simshear():
             e = (es + g)/(1.0 + np.conj(g)*es)
         if np.abs(g)>1:
             e = (1 + g*np.conj(es))/(np.conj(es) + np.conj(g))
+
         return np.real(e), np.imag(e), etan
+
+
+
+def get_et_ex(lra, ldec, sra, sdec, se1, se2):
+    "computes the etan and ecross for a given  lens-source pair"
+    lra  = lra*np.pi/180
+    ldec = ldec*np.pi/180
+    sra  = sra*np.pi/180
+    sdec = sdec*np.pi/180
+
+    c_theta = np.clip(np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec), -1, 1)
+    s_theta = np.sqrt(1-c_theta**2)
+
+    # phi to get the compute the tangential shear
+    c_phi   = np.clip(np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta, -1, 1)
+    s_phi   = np.clip((-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta, -1, 1)
+    # tangential shear
+    e_t     = - se1*(2*c_phi**2 -1) - se2*(2*c_phi * s_phi)
+    e_x     = - se1*(2*c_phi * s_phi) + se2*(2*c_phi**2 -1)
+
+    return e_t, e_x
+
+
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--config", help="Configuration file")
@@ -132,49 +160,38 @@ if __name__ == "__main__":
     thetamax = config['lens']['Rmax']/cc.comoving_distance(lzred).value * 180/np.pi
 
     np.random.seed(123)
-    nsrcs   = int(1e5)
-    spos    = np.random.uniform(-thetamax, thetamax, nsrcs).reshape((-1,2)) # it has to be over sphere please correct.
-    sra     = lra + spos[:,0]
-    sdec    = spos[:,1]
+    nsrcs   = int(1e6)
+
+    cdec    = np.random.uniform(np.cos((90+thetamax)*np.pi/180), np.cos((90-thetamax)*np.pi/180), nsrcs)
+    sdec    = (90.0-np.arccos(cdec)*180/np.pi)
+    sra     = lra + np.random.uniform(-thetamax, thetamax, nsrcs)
     szred = 0.8
     # intrinsic shapes
     se = np.random.normal(0.0, 0.27, int(2*len(sra))).reshape((-1,2))
-    #se = np.random.normal(1.0, 0.27, int(2*len(sra))).reshape((-1,2))
+    #theta = np.random.uniform(size=len(sra))*np.pi/2
+
     se1 = se[:,0]
     se2 = se[:,1]
 
 
     from subprocess import call
     call("mkdir -p %s" % (config["outputdir"]), shell=1)
-    fdata = open('%s/simed_sources_logmh_%s.dat'%(config['outputdir'], config['lens']['log_mh']),'w')
-    fdata.write('lra(deg)\tldec(deg)\tlzred\tllog_mstel\tllog_mh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\n')
+    fname = '%s/simed_sources_logmh_%s.dat'%(config['outputdir'], config['lens']['log_mh'])
+    fdata = open(fname,'w')
+    fdata.write('lra(deg)\tldec(deg)\tlzred\tllog_mstel\tllog_mh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\n')
     for ii in range(len(sra)):
         s1, s2, etan = ss.shear_src(sra[ii], sdec[ii], se1[ii], se2[ii], lzred, szred)
         if np.isnan(s1):
             continue
+        et, ex = get_et_ex(lra, ldec, sra[ii], sdec[ii], se1[ii], se2[ii])
 
-        fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lra, ldec, lzred, config['lens']['log_mstel'], config['lens']['log_mh'], ss.conc, sra[ii], sdec[ii], szred, s1, s2, etan))
+        fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lra, ldec, lzred, config['lens']['log_mstel'], config['lens']['log_mh'], ss.conc, sra[ii], sdec[ii], szred, s1, s2, etan, et))
 
     fdata.close()
 
+    import pandas as pd
+    data = pd.read_csv(fname, delim_whitespace=1)
+    print(np.mean(data['etan_obs']), np.std(data['etan_obs'])/np.sqrt(len(data['etan_obs'])), np.mean(data['etan']))
 
-#def get_et_ex(lra, ldec, sra, sdec, se1, se2):
-#    "computes the etan and ecross for a given  lens-source pair"
-#    lra  = lra*np.pi/180
-#    ldec = ldec*np.pi/180
-#    sra  = sra*np.pi/180
-#    sdec = sdec*np.pi/180
-#
-#    c_theta = np.clip(np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec), -1, 1)
-#    s_theta = np.sqrt(1-c_theta**2)
-#
-#    # phi to get the compute the tangential shear
-#    c_phi   = np.clip(np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta, -1, 1)
-#    s_phi   = np.clip((-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta, -1, 1)
-#    # tangential shear
-#    e_t     = - se1*(2*c_phi**2 -1) - se2*(2*c_phi * s_phi)
-#    e_x     = - se1*(2*c_phi * s_phi) + se2*(2*c_phi**2 -1)
-#
-#    return e_t, e_x
 
 

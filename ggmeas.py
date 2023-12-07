@@ -71,13 +71,14 @@ def get_et_ex(lra, ldec, sra, sdec, se1, se2):
 
 def get_earr(file):
     import pandas as pd
-    data = pd.read_csv(file, delim_whitespace=2)
+    data = pd.read_csv(file, delim_whitespace=1)
     et = -999 + 0.0*data['lra(deg)']
     ex = -999 + 0.0*data['lra(deg)']
     et_applied = -999 + 0.0*data['lra(deg)']
     cc      = FlatLambdaCDM(H0=100, Om0=0.27, Ob0=0.0457)
     #cc      = FlatLambdaCDM(H0=100, Om0=0.27)
-    for ii in range(len(et)):
+    #for ii in range(len(et)):
+    for ii in range(50000):
         thetamax = 1/cc.comoving_distance(data['lzred'][ii]).value * 180/np.pi
         l_ra   = data['lra(deg)'][ii]
         l_dec  = data['ldec(deg)'][ii]
