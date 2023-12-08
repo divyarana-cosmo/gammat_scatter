@@ -41,7 +41,7 @@ class simshear():
         colossus_cosmo = cosmology.fromAstropy(self.cc, sigma8 = sigma8, ns = ns, cosmo_name='my_cosmo')
         self.conc = concentration.concentration(10**self.log_mh, '200m', self.lzred, model = 'diemer19')
 
-        print("Intialing  parameters\n omgM = %s\n log(mstel / [h-1 Msun]) = %s\n log(mh200m / [h-1 Msun]) = %s\n conc = %s"%(self.omg_m, self.log_mstel, self.log_mh, self.conc))
+        print("Intialing  parameters\n omgM = %s\n log(Mstel / [h-1 Msun]) = %s\n log(M200m / [h-1 Msun]) = %s\n conc = %s"%(self.omg_m, self.log_mstel, self.log_mh, self.conc))
         self.hp         = halo(self.log_mh, self.conc, omg_m=self.omg_m)
         self.stel       = stellar(self.log_mstel)
 
@@ -95,12 +95,12 @@ class simshear():
         g        =   g[sflag]
         c_phi    =   c_phi[sflag]
         s_phi    =   s_phi[sflag]
-        return g_1, g_2, g, c_phi, s_phi
+        return g_1, g_2, g, c_phi, s_phi, proj_sep
 
 
     def shear_src(self, sra, sdec, se1, se2, lzred, szred):
         "apply shear on to the source galaxies with given intrinsic shapes"
-        g_1, g_2, etan, c_phi, s_phi = self.get_g(sra, sdec, lzred, szred)
+        g_1, g_2, etan, c_phi, s_phi, proj_sep = self.get_g(sra, sdec, lzred, szred)
         g   = g_1 + 1j* g_2
         es  = se1 + 1j* se2  # intrinsic sizes
 
@@ -109,7 +109,9 @@ class simshear():
         idx = np.abs(g)<1
         e[idx] = (es[idx] + g[idx])/(1.0 + np.conj(g[idx])*es[idx])
         e[~idx] = (1 + g[~idx]*np.conj(es[~idx]))/(np.conj(es[~idx]) + np.conj(g[~idx])) # mod(g)>1
-        return np.real(e), np.imag(e), etan
+        return np.real(e), np.imag(e), etan, proj_sep
+
+
 
 
 
@@ -140,12 +142,17 @@ if __name__ == "__main__":
     parser.add_argument("--config", help="Configuration file")
     parser.add_argument("--outdir", help="Output filename with pairs information", default="debug")
     parser.add_argument("--log_mh", help="dark matter halo mass", type=float, default=12.0)
+    parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=123)
 
     args = parser.parse_args()
 
     with open(args.config, 'r') as ymlfile:
         config = yaml.safe_load(ymlfile)
     config['lens']['log_mh'] = args.log_mh
+
+    if  "seed" not in config:
+        config["seed"] = args.seed
+
     print(config)
     ss = simshear(H0 = config['H0'], Om0 = config['Om0'], Ob0 = config['Ob0'], Tcmb0 = config['Tcmb0'], Neff = config['Neff'], sigma8 = config['sigma8'], ns = config['ns'], log_mstel = config['lens']['log_mstel'], log_mh = config['lens']['log_mh'], lra = config['lens']['lra'], ldec = config['lens']['ldec'], lzred = config['lens']['lzred'])
 
@@ -158,7 +165,7 @@ if __name__ == "__main__":
     cc      = FlatLambdaCDM(H0=100, Om0 = config['Om0'])
     thetamax = config['lens']['Rmax']/cc.comoving_distance(lzred).value * 180/np.pi
 
-    np.random.seed(123)
+    np.random.seed(config["seed"])
     nsrcs   = int(1e6)
 
     cdec    = np.random.uniform(np.cos((90+thetamax)*np.pi/180), np.cos((90-thetamax)*np.pi/180), nsrcs) # uniform over the sphere
@@ -171,10 +178,10 @@ if __name__ == "__main__":
     se1 = se[:,0]
     se2 = se[:,1]
 
-    s1, s2, etan = ss.shear_src(sra, sdec, se1, se2, lzred, szred)
+    s1, s2, etan, proj_sep = ss.shear_src(sra, sdec, se1, se2, lzred, szred)
     et, ex = get_et_ex(lra, ldec, sra, sdec, s1, s2)
 
-    df = {'lra(deg)': lra, 'ldec(deg)': ldec, 'lzred': lzred*np.ones(len(sra)) , 'log_mstel': config['lens']['log_mstel']*np.ones(len(sra)), 'log_mh': config['lens']['log_mh']*np.ones(len(sra)), 'conc': ss.conc*np.ones(len(sra)), 'sra(deg)': sra, 'sdec(deg)': sdec, 'szred': szred, 'se1': se1, 'se2': se2, 'etan': etan, 'etan_obs': et, 'ex_obs': ex}
+    df = {'lra(deg)': lra, 'ldec(deg)': ldec, 'lzred': lzred*np.ones(len(sra)) , 'log_mstel': config['lens']['log_mstel']*np.ones(len(sra)), 'log_mh': config['lens']['log_mh']*np.ones(len(sra)), 'conc': ss.conc*np.ones(len(sra)), 'sra(deg)': sra, 'sdec(deg)': sdec, 'szred': szred, 'se1': se1, 'se2': se2, 'etan': etan, 'etan_obs': et, 'ex_obs': ex, 'proj_sep': proj_sep}
 
     import pandas as pd
     df = pd.DataFrame(df)
