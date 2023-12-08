@@ -68,8 +68,6 @@ class simshear():
 
         c_theta = np.clip(np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec), -1, 1)
         s_theta = np.sqrt(1-c_theta**2)
-        if s_theta==0:
-            return np.nan, np.nan, np.nan, np.nan, np.nan
 
         #projected separation on the lense plane
         proj_sep = self.cc.comoving_distance(lzred).value * s_theta/c_theta # in h-1 Mpc
@@ -79,41 +77,44 @@ class simshear():
         kappa = (self.hp.sigma_nfw(proj_sep) + self.stel.sigma_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
 
         g = gamma/(1.0 - kappa)
-        if np.abs(kappa)>1.0:
-            print("strong lensing regime")
+
+        sflag = (s_theta!=0) & (np.abs(kappa)<1.0)   #strong lensing flag and proximity flag
 
         # phi to get the compute the tangential shear
         c_phi   = np.clip( np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta, -1, 1 )
         s_phi   = np.clip((-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta, -1, 1)
 
-        #just of check
-        #g=0.0
 
         # tangential shear
         g_1     = - g*(2*c_phi**2 - 1)
         g_2     = - g*(2*c_phi * s_phi)
+
+        #weeding out to the strong lensing systems
+        g_1      =   g_1[sflag]
+        g_2      =   g_2[sflag]
+        g        =   g[sflag]
+        c_phi    =   c_phi[sflag]
+        s_phi    =   s_phi[sflag]
         return g_1, g_2, g, c_phi, s_phi
 
 
     def shear_src(self, sra, sdec, se1, se2, lzred, szred):
         "apply shear on to the source galaxies with given intrinsic shapes"
         g_1, g_2, etan, c_phi, s_phi = self.get_g(sra, sdec, lzred, szred)
-        if np.isnan(g_1):
-            return np.nan, np.nan, np.nan
-        g   = complex(g_1, g_2)
-        es  = complex(se1, se2)
+        g   = g_1 + 1j* g_2
+        es  = se1 + 1j* se2  # intrinsic sizes
 
-        if np.abs(g)<1:
-            e = (es + g)/(1.0 + np.conj(g)*es)
-        if np.abs(g)>1:
-            e = (1 + g*np.conj(es))/(np.conj(es) + np.conj(g))
-
+        e   = 0.0*es # sheared shapes
+        #using the seitz and schnider 1995 formalism to shear the galaxy
+        idx = np.abs(g)<1
+        e[idx] = (es[idx] + g[idx])/(1.0 + np.conj(g[idx])*es[idx])
+        e[~idx] = (1 + g[~idx]*np.conj(es[~idx]))/(np.conj(es[~idx]) + np.conj(g[~idx])) # mod(g)>1
         return np.real(e), np.imag(e), etan
 
 
 
 def get_et_ex(lra, ldec, sra, sdec, se1, se2):
-    "computes the etan and ecross for a given  lens-source pair"
+    "measures the etan and ecross for a given  lens-source pair"
     lra  = lra*np.pi/180
     ldec = ldec*np.pi/180
     sra  = sra*np.pi/180
@@ -160,33 +161,42 @@ if __name__ == "__main__":
     np.random.seed(123)
     nsrcs   = int(1e6)
 
-    cdec    = np.random.uniform(np.cos((90+thetamax)*np.pi/180), np.cos((90-thetamax)*np.pi/180), nsrcs)
+    cdec    = np.random.uniform(np.cos((90+thetamax)*np.pi/180), np.cos((90-thetamax)*np.pi/180), nsrcs) # uniform over the sphere
     sdec    = (90.0-np.arccos(cdec)*180/np.pi)
     sra     = lra + np.random.uniform(-thetamax, thetamax, nsrcs)
     szred = 0.8
     # intrinsic shapes
     se = np.random.normal(0.0, 0.27, int(2*len(sra))).reshape((-1,2))
-    #theta = np.random.uniform(size=len(sra))*np.pi/2
 
     se1 = se[:,0]
     se2 = se[:,1]
+
+    s1, s2, etan = ss.shear_src(sra, sdec, se1, se2, lzred, szred)
+    et, ex = get_et_ex(lra, ldec, sra, sdec, s1, s2)
+
+    df = {'lra(deg)': lra, 'ldec(deg)': ldec, 'lzred': lzred*np.ones(len(sra)) , 'log_mstel': config['lens']['log_mstel']*np.ones(len(sra)), 'log_mh': config['lens']['log_mh']*np.ones(len(sra)), 'conc': ss.conc*np.ones(len(sra)), 'sra(deg)': sra, 'sdec(deg)': sdec, 'szred': szred, 'se1': se1, 'se2': se2, 'etan': etan, 'etan_obs': et, 'ex_obs': ex}
+
+    import pandas as pd
+    df = pd.DataFrame(df)
 
 
     from subprocess import call
     call("mkdir -p %s" % (config["outputdir"]), shell=1)
     fname = '%s/simed_sources_logmh_%s.dat'%(config['outputdir'], config['lens']['log_mh'])
-    fdata = open(fname,'w')
-    fdata.write('lra(deg)\tldec(deg)\tlzred\tllog_mstel\tllog_mh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\t ex_obs\n')
-    from tqdm import tqdm
-    for ii in tqdm(range(len(sra))):
-        s1, s2, etan = ss.shear_src(sra[ii], sdec[ii], se1[ii], se2[ii], lzred, szred)
-        if np.isnan(s1):
-            continue
-        et, ex = get_et_ex(lra, ldec, sra[ii], sdec[ii], se1[ii], se2[ii])
+    df.to_csv(fname, index=0, sep=' ')
 
-        fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lra, ldec, lzred, config['lens']['log_mstel'], config['lens']['log_mh'], ss.conc, sra[ii], sdec[ii], szred, s1, s2, etan, et, ex))
+    #fdata = open(fname,'w')
+    #fdata.write('\tldec(deg)\tlzred\tllog_mstel\tllog_mh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\t ex_obs\n')
+    #from tqdm import tqdm
+    #for ii in tqdm(range(len(sra))):
+    #    s1, s2, etan = ss.shear_src(sra[ii], sdec[ii], se1[ii], se2[ii], lzred, szred)
+    #    if np.isnan(s1):
+    #        continue
+    #    et, ex = get_et_ex(lra, ldec, sra[ii], sdec[ii], s1, s2)
 
-    fdata.close()
+    #    fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lra, ldec, lzred, config['lens']['log_mstel'], config['lens']['log_mh'], ss.conc, sra[ii], sdec[ii], szred, s1, s2, etan, et, ex))
+
+    #fdata.close()
 
 
 

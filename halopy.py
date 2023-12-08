@@ -114,16 +114,26 @@ class halo(constants):
 
 if __name__ == "__main__":
     plt.subplot(2,2,1)
-    rbin = np.logspace(-2,np.log10(5),10)
-    hp = halo(14,4)
+    mlist =  [12, 13, 14]
+    for mm in mlist:
+        hp = halo(mm,4)
+        rbin = np.logspace(-2,np.log10(1),10)
+        yy = 0.0*rbin
+        for ii, rr in enumerate(rbin):
+            yy[ii] = hp.avg_sigma_nfw_scalar(rr)* np.pi*rr**2
+
+
+        plt.plot(rbin, yy)
+
     #print hp.r_200
-    yy = hp.esd_nfw(rbin)/(1e12)
-    plt.plot(rbin, yy, '-')
-    plt.plot(rbin, hp.num_delta_sigma(rbin)/(1e12), '.', lw=0.0)
-    plt.xscale('log')
+    #yy = hp.esd_nfw(rbin)/(1e12)
+    #plt.plot(rbin, yy, '-')
+    #plt.plot(rbin, hp.num_delta_sigma(rbin)/(1e12), '.', lw=0.0)
+    #plt.xscale('log')
     plt.yscale('log')
     plt.xlabel(r'$R [{\rm h^{-1}Mpc}]$')
-    plt.ylabel(r'$\Delta \Sigma (R) [{\rm h M_\odot pc^{-2}}]$')
+    plt.ylabel(r'$M (<R)$')
+    #plt.ylabel(r'$\Delta \Sigma (R) [{\rm h M_\odot pc^{-2}}]$')
 
     plt.savefig('test.png', dpi=300)
 
