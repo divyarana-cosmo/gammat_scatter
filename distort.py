@@ -141,56 +141,86 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--config", help="Configuration file")
     parser.add_argument("--outdir", help="Output filename with pairs information", default="debug")
-    parser.add_argument("--log_mh", help="dark matter halo mass", type=float, default=12.0)
+    #parser.add_argument("--log_mh", help="dark matter halo mass", type=float, default=12.0)
     parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=123)
+    parser.add_argument("--sig0", help="scatter in stellar or halo mass", type=float, default=0.2)
+    parser.add_argument("--scatter_stel", help="scatter stellar mass", type=bool, default=False)
+    parser.add_argument("--scatter_halo", help="scatter halo mass", type=bool, default=False)
 
     args = parser.parse_args()
 
     with open(args.config, 'r') as ymlfile:
         config = yaml.safe_load(ymlfile)
-    config['lens']['log_mh'] = args.log_mh
+    print(config)
+
+    #make the directory for the output
+    from subprocess import call
+    call("mkdir -p %s" % (config["outputdir"]), shell=1)
 
     if  "seed" not in config:
         config["seed"] = args.seed
+    np.random.seed(config['seed']) #fixing the seed for reproducibility
 
-    print(config)
-    ss = simshear(H0 = config['H0'], Om0 = config['Om0'], Ob0 = config['Ob0'], Tcmb0 = config['Tcmb0'], Neff = config['Neff'], sigma8 = config['sigma8'], ns = config['ns'], log_mstel = config['lens']['log_mstel'], log_mh = config['lens']['log_mh'], lra = config['lens']['lra'], ldec = config['lens']['ldec'], lzred = config['lens']['lzred'])
+    nlens = 1000
+    logscat = np.random.normal(0.0,args.sig0, nlens)
 
+    if args.scatter_stel:
+        config['lens']['log_mstel'] +=logscat
+        config['lens']['log_mh'] =config['lens']['log_mh'] + 0.0*logscat
+        outputfilename = '%s/simed_sources_scatter_stel_sig0_%s.dat'%(config['outputdir'], argv.sig0)
+    if args.scatter_halo:
+        config['lens']['log_mh'] +=logscat
+        config['lens']['log_mstel'] =config['lens']['log_mstel'] + 0.0*logscat
+        outputfilename = '%s/simed_sources_scatter_halo_sig0_%s.dat'%(config['outputdir'], argv.sig0)
+
+    #config['lens']['log_mh'] = args.log_mh
+
+    logmstelarr = config['lens']['log_mstel']
+    logmharr    = config['lens']['log_mh']
     # lets say lens are in gama like survey
     lra = config['lens']['lra']
     ldec = config['lens']['ldec']
     lzred = config['lens']['lzred']
 
-    # sampling 1000 sources with in the 1 h-1 Mpc comoving separation
+    #fixing the simulation aperture
     cc      = FlatLambdaCDM(H0=100, Om0 = config['Om0'])
     thetamax = config['lens']['Rmax']/cc.comoving_distance(lzred).value * 180/np.pi
 
-    np.random.seed(config["seed"])
-    nsrcs   = int(1e6)
+    fdata = open(outputfilename,'w')
+    fdata.write('lra(deg)\tldec(deg)\tlzred\tllog_mstel\tllog_mh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\n')
 
-    cdec    = np.random.uniform(np.cos((90+thetamax)*np.pi/180), np.cos((90-thetamax)*np.pi/180), nsrcs) # uniform over the sphere
-    sdec    = (90.0-np.arccos(cdec)*180/np.pi)
-    sra     = lra + np.random.uniform(-thetamax, thetamax, nsrcs)
-    szred = 0.8
-    # intrinsic shapes
-    se = np.random.normal(0.0, 0.27, int(2*len(sra))).reshape((-1,2))
+    for ii in tqdm(range(logmharr)):
+        ss = simshear(H0 = config['H0'], Om0 = config['Om0'], Ob0 = config['Ob0'], Tcmb0 = config['Tcmb0'], Neff = config['Neff'], sigma8 = config['sigma8'], ns = config['ns'], log_mstel = logmstelarr[ii], log_mh = logmharr[ii], lra = config['lens']['lra'], ldec = config['lens']['ldec'], lzred = config['lens']['lzred'])
 
-    se1 = se[:,0]
-    se2 = se[:,1]
+        # sampling 1000 sources with in the 1 h-1 Mpc comoving separation
+        nsrcs   = int(1e3)
+        cdec    = np.random.uniform(np.cos((90+thetamax)*np.pi/180), np.cos((90-thetamax)*np.pi/180), nsrcs) # uniform over the sphere
+        sdec    = (90.0-np.arccos(cdec)*180/np.pi)
+        sra     = lra + np.random.uniform(-thetamax, thetamax, nsrcs)
+        szred = 0.8
+        # intrinsic shapes
+        se = np.random.normal(0.0, 0.27, int(2*len(sra))).reshape((-1,2))
+        se1 = se[:,0]
+        se2 = se[:,1]
 
-    s1, s2, etan, proj_sep = ss.shear_src(sra, sdec, se1, se2, lzred, szred)
-    et, ex = get_et_ex(lra, ldec, sra, sdec, s1, s2)
+        s1, s2, etan, proj_sep = ss.shear_src(sra, sdec, se1, se2, lzred, szred)
+        et, ex = get_et_ex(lra, ldec, sra, sdec, s1, s2)
 
-    df = {'lra(deg)': lra, 'ldec(deg)': ldec, 'lzred': lzred*np.ones(len(sra)) , 'log_mstel': config['lens']['log_mstel']*np.ones(len(sra)), 'log_mh': config['lens']['log_mh']*np.ones(len(sra)), 'conc': ss.conc*np.ones(len(sra)), 'sra(deg)': sra, 'sdec(deg)': sdec, 'szred': szred, 'se1': se1, 'se2': se2, 'etan': etan, 'etan_obs': et, 'ex_obs': ex, 'proj_sep': proj_sep}
-
-    import pandas as pd
-    df = pd.DataFrame(df)
+        for jj in range(len(sra):
+            fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lra, ldec, lzred, logmstelarr[ii], logmharr[ii], ss.conc, sra[jj], sdec[jj], szred, s1[jj], s2[jj], etan[jj], et[jj], ex[jj], proj_sep[jj]))
 
 
-    from subprocess import call
-    call("mkdir -p %s" % (config["outputdir"]), shell=1)
-    fname = '%s/simed_sources_logmh_%s.dat'%(config['outputdir'], config['lens']['log_mh'])
-    df.to_csv(fname, index=0, sep=' ')
+    fdata.close()
+
+
+    #df = {'lra(deg)': lra, 'ldec(deg)': ldec, 'lzred': lzred*np.ones(len(sra)) , 'log_mstel': config['lens']['log_mstel']*np.ones(len(sra)), 'log_mh': config['lens']['log_mh']*np.ones(len(sra)), 'conc': ss.conc*np.ones(len(sra)), 'sra(deg)': sra, 'sdec(deg)': sdec, 'szred': szred, 'se1': se1, 'se2': se2, 'etan': etan, 'etan_obs': et, 'ex_obs': ex, 'proj_sep': proj_sep}
+
+    #import pandas as pd
+    #df = pd.DataFrame(df)
+
+
+    #fname = '%s/simed_sources_logmh_%s.dat'%(config['outputdir'], config['lens']['log_mh'])
+    #df.to_csv(fname, index=0, sep=' ')
 
     #fdata = open(fname,'w')
     #fdata.write('\tldec(deg)\tlzred\tllog_mstel\tllog_mh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\t ex_obs\n')
