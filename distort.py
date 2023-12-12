@@ -143,9 +143,6 @@ if __name__ == "__main__":
     parser.add_argument("--outdir", help="Output filename with pairs information", default="debug")
     #parser.add_argument("--log_mh", help="dark matter halo mass", type=float, default=12.0)
     parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=123)
-    parser.add_argument("--sig0", help="scatter in stellar or halo mass", type=float, default=0.2)
-    parser.add_argument("--scatter_stel", help="scatter stellar mass", type=bool, default=False)
-    parser.add_argument("--scatter_halo", help="scatter halo mass", type=bool, default=False)
 
     args = parser.parse_args()
 
@@ -193,7 +190,7 @@ if __name__ == "__main__":
         ss = simshear(H0 = config['H0'], Om0 = config['Om0'], Ob0 = config['Ob0'], Tcmb0 = config['Tcmb0'], Neff = config['Neff'], sigma8 = config['sigma8'], ns = config['ns'], log_mstel = logmstelarr[ii], log_mh = logmharr[ii], lra = config['lens']['lra'], ldec = config['lens']['ldec'], lzred = config['lens']['lzred'])
 
         # sampling 1000 sources with in the 1 h-1 Mpc comoving separation
-        nsrcs   = int(1e3)
+        nsrcs   = config['sources']['nsrc'] # number density in arcmin-2
         cdec    = np.random.uniform(np.cos((90+thetamax)*np.pi/180), np.cos((90-thetamax)*np.pi/180), nsrcs) # uniform over the sphere
         sdec    = (90.0-np.arccos(cdec)*180/np.pi)
         sra     = lra + np.random.uniform(-thetamax, thetamax, nsrcs)
