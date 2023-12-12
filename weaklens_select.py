@@ -322,7 +322,7 @@ def source_select(sourceargs, chunksize):
     np.random.seed(10)
     #njack = sourceargs['Njacks']
 
-    if sourceargs['type'] == "decals_lowz" and sourceargs['filetype'] == "ascii":
+    if sourceargs['type'] == "euclid_like" and sourceargs['filetype'] == "ascii":
         itern = sourceargs['iter']
         if itern == 0:
             sourceargs['dfchunks'] = pandas.read_csv('./lrgs_decals_lowz/lowz_lrgs.dat', delim_whitespace=1, iterator=True, chunksize=chunksize)

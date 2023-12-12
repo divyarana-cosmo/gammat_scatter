@@ -17,7 +17,8 @@ from stellarpy import stellar
 from colossus.cosmology import cosmology
 from colossus.halo import concentration
 from astropy.cosmology import FlatLambdaCDM
-
+from scipy.integrate import quad
+from scipy.interpolate import interp1d
 import argparse
 import yaml
 
@@ -134,6 +135,24 @@ def get_et_ex(lra, ldec, sra, sdec, se1, se2):
 
     return e_t, e_x
 
+def getszred():
+    "assigns redshifts respecting the distribution"
+    n0=1.8048
+    a=0.417
+    b=4.8685
+    c=0.7841
+    f = lambda zred: n0*(zred**a + zred**(a*b))/(zred**b + c)
+    zmin = 0.0
+    zmax = 2.5
+    zarr = np.linspace(zmin, zmax, 20)
+    xx  = 0.0 * zarr
+    for ii in range(len(xx)):
+        xx[ii] = quad(getzred, zmin, zarr[ii])[0]/quad(getzred, zmin, zmax)[0]
+    proj = interp1d(xx,zarr)
+    return proj
+
+
+
 
 
 
@@ -183,6 +202,9 @@ if __name__ == "__main__":
     cc      = FlatLambdaCDM(H0=100, Om0 = config['Om0'])
     thetamax = config['lens']['Rmax']/cc.comoving_distance(lzred).value * 180/np.pi
 
+    # putting the interpolation for source redshift assignment
+    proj = getszred()
+
     fdata = open(outputfilename,'w')
     fdata.write('lra(deg)\tldec(deg)\tlzred\tllog_mstel\tllog_mh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\n')
 
@@ -194,7 +216,12 @@ if __name__ == "__main__":
         cdec    = np.random.uniform(np.cos((90+thetamax)*np.pi/180), np.cos((90-thetamax)*np.pi/180), nsrcs) # uniform over the sphere
         sdec    = (90.0-np.arccos(cdec)*180/np.pi)
         sra     = lra + np.random.uniform(-thetamax, thetamax, nsrcs)
-        szred = 0.8
+
+        numbsrc = round(nsrc * thetamax**2*60**2)      # area of square in deg^2 --> arcmin^2
+
+        np.random.seed(lid)  # setting the seed to be the id numerber of lens
+        xarr = np.random.uniform(size=numbsrc)
+        szred = proj(xarr)
         # intrinsic shapes
         se = np.random.normal(0.0, 0.27, int(2*len(sra))).reshape((-1,2))
         se1 = se[:,0]
