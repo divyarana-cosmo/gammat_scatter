@@ -35,6 +35,10 @@ class simshear():
         params = dict(H0 = H0, Om0 = Om0, Ob0 = Ob0, Tcmb0 = Tcmb0, Neff = Neff)
         self.cc = FlatLambdaCDM(**params)
         colossus_cosmo = cosmology.fromAstropy(self.cc, sigma8 = sigma8, ns = ns, cosmo_name='my_cosmo')
+        self.sigma8 = sigma8
+        self.ns = ns
+        self.cosmo_name='my_cosmo'
+
         print("fixing cosmology \n")
 
     def get_sigma_crit_inv(self, lzred, szred):
@@ -52,13 +56,24 @@ class simshear():
             sigm_crit_inv = sigm_crit_inv * 4*np.pi*gee*1.0/cee**2
             return sigm_crit_inv
 
+
+    def _get_g(self,logmstel, logmh, lzred, szred, proj_sep):
+        colossus_cosmo = cosmology.fromAstropy(self.cc, sigma8 = self.sigma8, ns = self.ns, cosmo_name=self.cosmo_name)
+        self.conc = concentration.concentration(10**logmh, '200m', lzred, model = 'diemer19')
+        self.hp         = halo(logmh, self.conc, omg_m=self.omg_m)
+        self.stel       = stellar(logmstel)
+        #considering only tangential shear and adding both contributions
+        gamma = (self.hp.esd_nfw(proj_sep) + self.stel.esd_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
+        kappa = (self.hp.sigma_nfw(proj_sep) + self.stel.sigma_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
+        return gamma, kappa
+
     #def get_g(self, sra, sdec, lzred, szred):
     def get_g(self, lra, ldec, lzred, logmstel, logmh, sra, sdec, szred):
         "computes the g1 and g2 components for the reduced shear"
         # we are using diemer19 cocentration-mass relation
-        self.conc = concentration.concentration(10**logmh, '200m', lzred, model = 'diemer19')
-        self.hp         = halo(logmh, self.conc, omg_m=self.omg_m)
-        self.stel       = stellar(logmstel)
+        #self.conc = concentration.concentration(10**logmh, '200m', lzred, model = 'diemer19')
+        #self.hp         = halo(logmh, self.conc, omg_m=self.omg_m)
+        #self.stel       = stellar(logmstel)
 
         # need to supply the angles in radians
         lra  = lra*np.pi/180
@@ -73,8 +88,9 @@ class simshear():
         proj_sep = self.cc.comoving_distance(lzred).value * s_theta/c_theta # in h-1 Mpc
 
         #considering only tangential shear and adding both contributions
-        gamma = (self.hp.esd_nfw(proj_sep) + self.stel.esd_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
-        kappa = (self.hp.sigma_nfw(proj_sep) + self.stel.sigma_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
+        #gamma = (self.hp.esd_nfw(proj_sep) + self.stel.esd_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
+        #kappa = (self.hp.sigma_nfw(proj_sep) + self.stel.sigma_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
+        gamma, kappa = self._get_g(logmstel, logmh, lzred, szred, proj_sep)
 
         g = gamma/(1.0 - kappa)
 
