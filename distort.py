@@ -28,28 +28,14 @@ from subprocess import  call
 
 class simshear():
     "simulated the shear for a given configuration of dark matter and stellar profiles"
-    def __init__(self, H0, Om0, Ob0, Tcmb0, Neff, sigma8, ns, log_mstel, log_mh, lra, ldec, lzred):
-    #def __init__(self, H0 = 100, Om0 = 0.3, Ob0 = 0.0457, Tcmb0 = 2.7255, Neff = 3.046, sigma8=0.82, ns=0.96, log_mstel, log_mh, lra, ldec, lzred):
+    def __init__(self, H0, Om0, Ob0, Tcmb0, Neff, sigma8, ns ):
         "initialize the parameters"
         #fixing the cosmology
+        self.omg_m = Om0
         params = dict(H0 = H0, Om0 = Om0, Ob0 = Ob0, Tcmb0 = Tcmb0, Neff = Neff)
         self.cc = FlatLambdaCDM(**params)
-
-        self.log_mstel  = log_mstel # total stellar pointmass
-        self.log_mh     = log_mh    # total mass of the halo
-        self.omg_m      = Om0
-        self.lra        = lra
-        self.ldec       = ldec
-        self.lzred      = lzred
-
-        # we are using diemer19 cocentration-mass relation
         colossus_cosmo = cosmology.fromAstropy(self.cc, sigma8 = sigma8, ns = ns, cosmo_name='my_cosmo')
-        self.conc = concentration.concentration(10**self.log_mh, '200m', self.lzred, model = 'diemer19')
-
-        print("Intialing  parameters\n omgM = %s\n log(Mstel / [h-1 Msun]) = %s\n log(M200m / [h-1 Msun]) = %s\n conc = %s"%(self.omg_m, self.log_mstel, self.log_mh, self.conc))
-        self.hp         = halo(self.log_mh, self.conc, omg_m=self.omg_m)
-        self.stel       = stellar(self.log_mstel)
-
+        print("fixing cosmology \n")
 
     def get_sigma_crit_inv(self, lzred, szred):
         "evaluates the lensing efficency geometrical factor"
@@ -66,11 +52,17 @@ class simshear():
             sigm_crit_inv = sigm_crit_inv * 4*np.pi*gee*1.0/cee**2
             return sigm_crit_inv
 
-    def get_g(self, sra, sdec, lzred, szred):
+    #def get_g(self, sra, sdec, lzred, szred):
+    def get_g(self, lra, ldec, lzred, logmstel, logmh, sra, sdec, szred):
         "computes the g1 and g2 components for the reduced shear"
-        # need to supply the angles in degrees
-        lra  = self.lra*np.pi/180
-        ldec = self.ldec*np.pi/180
+        # we are using diemer19 cocentration-mass relation
+        self.conc = concentration.concentration(10**logmh, '200m', lzred, model = 'diemer19')
+        self.hp         = halo(logmh, self.conc, omg_m=self.omg_m)
+        self.stel       = stellar(logmstel)
+
+        # need to supply the angles in radians
+        lra  = lra*np.pi/180
+        ldec = ldec*np.pi/180
         sra  = sra*np.pi/180
         sdec = sdec*np.pi/180
 
@@ -101,9 +93,10 @@ class simshear():
         return g_1, g_2, g, c_phi, s_phi, proj_sep, sflag
 
 
-    def shear_src(self, sra, sdec, se1, se2, lzred, szred):
+    def shear_src(self, lra, ldec, lzred, logmstel, logmh, sra, sdec, szred, se1, se2):
         "apply shear on to the source galaxies with given intrinsic shapes"
-        g_1, g_2, etan, c_phi, s_phi, proj_sep, sflag = self.get_g(sra, sdec, lzred, szred)
+        g_1, g_2, etan, c_phi, s_phi, proj_sep, sflag = self.get_g(lra, ldec, lzred, logmstel, logmh, sra, sdec, szred)
+        #g_1, g_2, etan, c_phi, s_phi, proj_sep, sflag = self.get_g(sra, sdec, lzred, szred)
         g   = g_1 + 1j* g_2
         es  = se1 + 1j* se2  # intrinsic sizes
         #print(len(g_1), len(se1), len(szred))
@@ -162,7 +155,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--config", help="Configuration file")
     parser.add_argument("--outdir", help="Output filename with pairs information", default="debug")
-    #parser.add_argument("--log_mh", help="dark matter halo mass", type=float, default=12.0)
+    #parser.add_argument("--logmh", help="dark matter halo mass", type=float, default=12.0)
     parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=123)
     parser.add_argument("--no_shape_noise", help="scatter halo mass", type=bool, default=True)
 
@@ -185,7 +178,7 @@ if __name__ == "__main__":
 
     #picking up the lens data
     lensargs = config['lens']
-    lid, lra, ldec, lzred, llogmstel, llogmh   = lens_select(lensargs)
+    lid, lra, ldec, lzred, logmstel, logmh   = lens_select(lensargs)
 
     # putting the interpolation for source redshift assignment
     interp_szred = getszred()
@@ -194,18 +187,17 @@ if __name__ == "__main__":
     comm = MPI.COMM_WORLD
     rank = comm.rank
     size = comm.size
-
     outputfilename = outputfilename + '_proc_%d'%rank
 
+    #creating class instance
+    ss = simshear(H0 = config['H0'], Om0 = config['Om0'], Ob0 = config['Ob0'], Tcmb0 = config['Tcmb0'], Neff = config['Neff'], sigma8 = config['sigma8'], ns = config['ns'])
 
     fdata = open(outputfilename,'w')
-    fdata.write('lra(deg)\tldec(deg)\tlzred\tllog_mstel\tllog_mh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\n')
+    fdata.write('lra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\n')
 
     for ii in tqdm(range(len(lra))):
         if ii%size != rank :
              continue
-
-        ss = simshear(H0 = config['H0'], Om0 = config['Om0'], Ob0 = config['Ob0'], Tcmb0 = config['Tcmb0'], Neff = config['Neff'], sigma8 = config['sigma8'], ns = config['ns'], log_mstel = llogmstel[ii], log_mh = llogmh[ii], lra = lra[ii], ldec = ldec[ii], lzred = lzred[ii])
 
         # sampling sources within the 1 h-1 Mpc comoving separation
         # fixing the simulation aperture
@@ -231,16 +223,15 @@ if __name__ == "__main__":
             se1 = se[:,0]
             se2 = se[:,1]
 
-        s1, s2, etan, proj_sep, sflag = ss.shear_src(sra, sdec, se1, se2, lzred[ii], szred)
+        s1, s2, etan, proj_sep, sflag = ss.shear_src(lra[ii], ldec[ii], lzred[ii], logmstel[ii], logmh[ii], sra, sdec, szred, se1, se2)
         et, ex = get_et_ex(lra[ii], ldec[ii], sra, sdec, s1, s2)
 
         for jj in range(len(sra)):
         #weeding out to the strong lensing systems and foreground sources configuration
             if (sflag[jj]!=1.0) and (etan[jj]==0.0):
                 continue
-            fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], ss.conc, sra[jj], sdec[jj], szred, s1[jj], s2[jj], etan[jj], et[jj], ex[jj], proj_sep[jj]))
+            fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lra[ii], ldec[ii], lzred[ii], logmstel[ii], logmh[ii], ss.conc, sra[jj], sdec[jj], szred, s1[jj], s2[jj], etan[jj], et[jj], ex[jj], proj_sep[jj]))
 
-    #comm.Barrier()
     fdata.close()
     comm.Barrier()
 
