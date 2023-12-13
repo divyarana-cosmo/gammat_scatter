@@ -65,6 +65,7 @@ def lens_select(lensargs,jk=10000):
         df = fits.open(fname)[1].data
         idx  =  (df['lmstellar'] > lensargs['logmstelmin'])  & (df['lmstellar'] < lensargs['logmstelmax'])
         idx  =  idx & ((df['z_cgal_v'] > lensargs['zmin'])) & (df['z_cgal_v'] < lensargs['zmax'])
+        idx  =  idx & (df['flag_central']==0)
         df = df[idx]
 
         #datalens = np.transpose([df['unique_gal_id'], df['ra_gal'], df['dec_gal'], df['z_cgal_v'], df['lmstellar'], df['lmhalo']])

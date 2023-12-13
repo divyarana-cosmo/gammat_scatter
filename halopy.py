@@ -27,67 +27,61 @@ class halo(constants):
         value  = self.rho_0/((r/r_s)*(1+r/r_s)**2)
         return value
 
-
     def esd_nfw(self,r):
         """ESD profile from analytical predictions"""
         if np.isscalar(r):
-            return self.esd_scalar(r)
-        else:
-            sig = 0.0*r
-            for ii,rr in enumerate(r):
-                sig[ii] = self.esd_scalar(rr)
-            return sig
+            r = np.array([r])
+        sig = 0.0*r
+        sig = self.avg_sigma_nfw(r) - self.sigma_nfw(r)
+
+        idx = r<5e-3
+        sig[idx]= 0.0
+        return sig
+
+
+    def avg_sigma_nfw(self,r):
+        """analytical projection of NFW"""
+        if np.isscalar(r):
+            r = np.array([r])
+        r_s = self.r_200/self.c
+        k = 2*r_s*self.rho_0
+        x = r/r_s
+        value = 0.0*x
+        idx =  (x < 1)
+        if sum(idx)!=0:
+            value[idx] = np.arccosh(1/x[idx])/np.sqrt(1-x[idx]**2) + np.log(x[idx]/2.0)
+            value[idx] = value[idx]*2.0/x[idx]**2
+        idx = (x > 1)
+        if sum(idx)!=0:
+            value[idx] = np.arccos(1/x[idx])/np.sqrt(x[idx]**2-1)  + np.log(x[idx]/2.0)
+            value[idx] = value[idx]*2.0/x[idx]**2
+        idx = (x == 1)
+        if sum(idx)!=0:
+            value[idx] = 2*(1-np.log(2))
+        sig = value*k
+        return sig
+
 
     def sigma_nfw(self,r):
         """analytical projection of NFW"""
         if np.isscalar(r):
-            return self.sigma_nfw_scalar(r)
-        else:
-            sig = 0.0*r
-            for ii,rr in enumerate(r):
-                sig[ii] = self.sigma_nfw_scalar(rr)
-            return sig
-
-    def esd_scalar(self,r):
-        """ESD profile from analytical predictions"""
-        if r<5e-3:
-            val = 0.0
-        else:
-            val = self.avg_sigma_nfw_scalar(r) - self.sigma_nfw_scalar(r)
-        return val
-
-    def sigma_nfw_scalar(self,r):
-        """analytical projection of NFW"""
-        if r<5e-3:#cut at the 5h-1kpc
-            r=5e-3
+            r = np.array([r])
+        idx = r<5e-3#cut at the 5h-1kpc
+        r[idx]=5e-3
 
         r_s = self.r_200/self.c
         k = 2*r_s*self.rho_0
-
+        value =0.0*r
         x = r/r_s
-        if x < 1:
-            value = (1 - np.arccosh(1/x)/np.sqrt(1-x**2))/(x**2-1)
-        elif x > 1:
-            value = (1 - np.arccos(1/x)/np.sqrt(x**2-1))/(x**2-1)
-        else:
-            value = 1./3.
-        sig = value*k
-
-        return sig
-
-    def avg_sigma_nfw_scalar(self,r):
-        """analytical average projected of NFW"""
-        r_s = self.r_200/self.c
-        k = 2*r_s*self.rho_0
-        x = r/r_s
-        if x < 1:
-            value = np.arccosh(1/x)/np.sqrt(1-x**2) + np.log(x/2.0)
-            value = value*2.0/x**2
-        elif x > 1:
-            value = np.arccos(1/x)/np.sqrt(x**2-1)  + np.log(x/2.0)
-            value = value*2.0/x**2
-        else:
-            value = 2*(1-np.log(2))
+        idx = x < 1
+        if sum(idx)!=0:
+            value[idx] = (1 - np.arccosh(1/x[idx])/np.sqrt(1-x[idx]**2))/(x[idx]**2-1)
+        idx = x > 1
+        if sum(idx)!=0:
+            value[idx] = (1 - np.arccos(1/x[idx])/np.sqrt(x[idx]**2-1))/(x[idx]**2-1)
+        idx = x == 1
+        if sum(idx)!=0:
+            value[idx] = 1./3.
         sig = value*k
         return sig
 
@@ -114,22 +108,24 @@ class halo(constants):
 
 if __name__ == "__main__":
     plt.subplot(2,2,1)
-    mlist =  [12, 13, 14]
+    mlist =  [12]
     for mm in mlist:
         hp = halo(mm,4)
         rbin = np.logspace(-2,np.log10(1),10)
         yy = 0.0*rbin
-        for ii, rr in enumerate(rbin):
-            yy[ii] = hp.avg_sigma_nfw_scalar(rr)* np.pi*rr**2
-
-
+        yy = hp.esd_nfw(rbin)
+        yy0 = 0.0*yy
+        #for ii, rr in enumerate(rbin):
+        #    yy0[ii] = hp.esd_scalar(rr)
+        yy0 = hp.num_delta_sigma(rbin)
         plt.plot(rbin, yy)
+        plt.plot(rbin, yy0,'.')
 
     #print hp.r_200
     #yy = hp.esd_nfw(rbin)/(1e12)
     #plt.plot(rbin, yy, '-')
     #plt.plot(rbin, hp.num_delta_sigma(rbin)/(1e12), '.', lw=0.0)
-    #plt.xscale('log')
+    plt.xscale('log')
     plt.yscale('log')
     plt.xlabel(r'$R [{\rm h^{-1}Mpc}]$')
     plt.ylabel(r'$M (<R)$')
@@ -180,4 +176,55 @@ if __name__ == "__main__":
     #        c=c+1
 
     #    return sig
+
+    #def esd_scalar(self,r):
+    #    """ESD profile from analytical predictions"""
+    #    if r<5e-3:
+    #        val = 0.0
+    #    else:
+    #        val = self.avg_sigma_nfw_scalar(r) - self.sigma_nfw_scalar(r)
+    #    return val
+
+    #def sigma_nfw_scalar(self,r):
+    #    """analytical projection of NFW"""
+    #    if r<5e-3:#cut at the 5h-1kpc
+    #        r=5e-3
+
+    #    r_s = self.r_200/self.c
+    #    k = 2*r_s*self.rho_0
+
+    #    x = r/r_s
+    #    if x < 1:
+    #        value = (1 - np.arccosh(1/x)/np.sqrt(1-x**2))/(x**2-1)
+    #    elif x > 1:
+    #        value = (1 - np.arccos(1/x)/np.sqrt(x**2-1))/(x**2-1)
+    #    else:
+    #        value = 1./3.
+    #    sig = value*k
+
+    #    return sig
+
+    #def avg_sigma_nfw_scalar(self,r):
+    #    """analytical average projected of NFW"""
+    #    r_s = self.r_200/self.c
+    #    k = 2*r_s*self.rho_0
+    #    x = r/r_s
+
+
+    #    if x < 1:
+    #        value = np.arccosh(1/x)/np.sqrt(1-x**2) + np.log(x/2.0)
+    #        value = value*2.0/x**2
+    #    elif x > 1:
+    #        value = np.arccos(1/x)/np.sqrt(x**2-1)  + np.log(x/2.0)
+    #        value = value*2.0/x**2
+    #    else:
+    #        value = 2*(1-np.log(2))
+    #    sig = value*k
+    #    return sig
+
+
+            #for ii,rr in enumerate(r):
+            #    sig[ii] = self.sigma_nfw_scalar(rr)
+            #return sig
+
 
