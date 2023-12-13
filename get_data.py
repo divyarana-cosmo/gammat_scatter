@@ -67,9 +67,9 @@ def lens_select(lensargs,jk=10000):
         idx  =  idx & ((df['z_cgal_v'] > lensargs['zmin'])) & (df['z_cgal_v'] < lensargs['zmax'])
         df = df[idx]
 
-        datalens = np.transpose([df['unique_gal_id'], df['ra_gal'], df['dec_gal'], df['z_cgal_v'], df['lmstellar'], df['lmhalo']])
-        sys.stdout.write("Number of real GW events: %d \n" % (sum(idx)))
-        return datalens
+        #datalens = np.transpose([df['unique_gal_id'], df['ra_gal'], df['dec_gal'], df['z_cgal_v'], df['lmstellar'], df['lmhalo']])
+        sys.stdout.write("Number of lenses: %d \n" % (sum(idx)))
+        return df['unique_gal_id'], df['ra_gal'], df['dec_gal'], df['z_cgal_v'], df['lmstellar'], df['lmhalo']
 
 
 def source_select(sourceargs, chunksize):
