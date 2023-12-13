@@ -23,6 +23,8 @@ from get_data import lens_select
 from tqdm import tqdm
 import argparse
 import yaml
+from mpi4py import MPI
+from subprocess import  call
 
 class simshear():
     "simulated the shear for a given configuration of dark matter and stellar profiles"
@@ -188,10 +190,21 @@ if __name__ == "__main__":
     # putting the interpolation for source redshift assignment
     interp_szred = getszred()
 
+
+    comm = MPI.COMM_WORLD
+    rank = comm.rank
+    size = comm.size
+
+    outputfilename = outputfilename + '_proc_%d'%rank
+
+
     fdata = open(outputfilename,'w')
     fdata.write('lra(deg)\tldec(deg)\tlzred\tllog_mstel\tllog_mh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\n')
 
     for ii in tqdm(range(len(lra))):
+        if ii%size != rank :
+             continue
+
         ss = simshear(H0 = config['H0'], Om0 = config['Om0'], Ob0 = config['Ob0'], Tcmb0 = config['Tcmb0'], Neff = config['Neff'], sigma8 = config['sigma8'], ns = config['ns'], log_mstel = llogmstel[ii], log_mh = llogmh[ii], lra = lra[ii], ldec = ldec[ii], lzred = lzred[ii])
 
         # sampling sources within the 1 h-1 Mpc comoving separation
@@ -199,6 +212,7 @@ if __name__ == "__main__":
         cc      = FlatLambdaCDM(H0=100, Om0 = config['Om0'])
         thetamax = config['lens']['Rmax']/cc.comoving_distance(lzred[ii]).value * 180/np.pi
         numbsrc = round(config['source']['nsrc'] * thetamax**2*60**2)      # area of square in deg^2 --> arcmin^2
+        print('number of sources: ', numbsrc)
 
         if numbsrc==0:
             continue
@@ -221,7 +235,7 @@ if __name__ == "__main__":
         et, ex = get_et_ex(lra[ii], ldec[ii], sra, sdec, s1, s2)
 
         for jj in range(len(sra)):
-        #weeding out to the strong lensing systems
+        #weeding out to the strong lensing systems and foreground sources configuration
             if (sflag[jj]!=1.0) and (etan[jj]==0.0):
                 continue
             fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], ss.conc, sra[jj], sdec[jj], szred, s1[jj], s2[jj], etan[jj], et[jj], ex[jj], proj_sep[jj]))
