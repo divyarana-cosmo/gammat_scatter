@@ -240,7 +240,8 @@ if __name__ == "__main__":
                 continue
             fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], ss.conc, sra[jj], sdec[jj], szred, s1[jj], s2[jj], etan[jj], et[jj], ex[jj], proj_sep[jj]))
 
-
+    #comm.Barrier()
     fdata.close()
+    comm.Barrier()
 
 
