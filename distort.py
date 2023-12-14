@@ -174,6 +174,9 @@ if __name__ == "__main__":
     #parser.add_argument("--logmh", help="dark matter halo mass", type=float, default=12.0)
     parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=123)
     parser.add_argument("--no_shape_noise", help="scatter halo mass", type=bool, default=True)
+    parser.add_argument("--ideal_case", help="testing the ideal case", type=bool, default=False)
+    parser.add_argument("--logmstelmin", help="log stellar mass minimum", type=float, default=11.0)
+    parser.add_argument("--logmstelmax", help="log stellar mass maximum", type=float, default=13.0)
 
     args = parser.parse_args()
 
@@ -186,15 +189,25 @@ if __name__ == "__main__":
     call("mkdir -p %s" % (config["outputdir"]), shell=1)
 
     outputfilename = '%s/simed_sources.dat'%(config['outputdir'])
+
+    if 'logmstelmin'not in config:
+        config['lens']['logmstelmin'] = args.logmstelmin
+    if 'logmstelmax'not in config:
+        config['lens']['logmstelmax'] = args.logmstelmax
+
+    outputfilename = outputfile + '_lmstelmin_%2.2f_lmstelmax_%2.2f'%(args.logmstelmin, args.logmstelmax)
+
     if args.no_shape_noise:
         outputfilename = outputfilename + '_no_shape_noise'
     else:
         outputfilename = outputfilename + '_with_shape_noise'
-
-
     #picking up the lens data
     lensargs = config['lens']
     lid, lra, ldec, lzred, logmstel, logmh   = lens_select(lensargs)
+    if args.ideal_case:
+        np.random.seed(123)
+        logmstel = np.mean(logmstel) + np.random.normal(0,0.1, size=len(lra))
+        logmh = np.mean(logmh) + 0.0*logmh
 
     # putting the interpolation for source redshift assignment
     interp_szred = getszred()
@@ -215,7 +228,6 @@ if __name__ == "__main__":
         if ii%size != rank :
              continue
 
-        # sampling sources within the 1 h-1 Mpc comoving separation
         # fixing the simulation aperture
         cc      = FlatLambdaCDM(H0=100, Om0 = config['Om0'])
         thetamax = config['lens']['Rmax']/cc.comoving_distance(lzred[ii]).value * 180/np.pi

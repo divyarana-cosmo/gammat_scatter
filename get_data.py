@@ -6,6 +6,7 @@ import sys
 import glob
 from astropy.io import fits
 import healpy as hp
+import fitsio
 #import matplotlib.pyplot as plt
 #cc = cosmology(omg_m0=0.31,omg_l0=0.69)
 #cc = cosmology(omg_m0=0.315,omg_l0=0.685)
@@ -61,17 +62,10 @@ def get_rands_wgts(rra,rdec,ra,dec):
 
 def lens_select(lensargs,jk=10000):
     if lensargs['type'] == "micecatv2" :
-        fname = './Datastore/micecatv2/15407.fits'
-        import fitsio
-
-        df = fitsio.read(fname)
-        idx  =  (df['lmstellar'] > lensargs['logmstelmin'])  & (df['lmstellar'] < lensargs['logmstelmax'])
-        idx  =  idx & ((df['z_cgal_v'] > lensargs['zmin'])) & (df['z_cgal_v'] < lensargs['zmax'])
-        idx  =  idx & (df['flag_central']==0)
-        df = df[idx]
-
-        #datalens = np.transpose([df['unique_gal_id'], df['ra_gal'], df['dec_gal'], df['z_cgal_v'], df['lmstellar'], df['lmhalo']])
-        sys.stdout.write("Number of lenses: %d \n" % (sum(idx)))
+        fname = './Datastore/micecatv2/15412.fits'
+        df = fitsio.FITS(fname)
+        df = df[1][df[1].where('flag_central == 0 && lmstellar > %2.2f && lmstellar < %2.2f && z_cgal_v > %2.2f && z_cgal_v < %2.2f'%(lensargs['logmstelmin'], lensargs['logmstelmax'], lensargs['zmin'], lensargs['zmax']))]
+        sys.stdout.write("Number of lenses: %d \n" % (len(df['ra_gal'])))
         return df['unique_gal_id'], df['ra_gal'], df['dec_gal'], df['z_cgal_v'], df['lmstellar'], df['lmhalo']
 
 
