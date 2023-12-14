@@ -10,7 +10,7 @@ etan    = np.array([])
 
 import pandas as pd
 from glob import glob
-flist = glob('./debug/simed_sources.dat_no_shape_noise_proc_*')
+flist = glob('./debug/simed_sources.dat_lmstelmin_11.00_lmstelmax_11.30_no_shape_noise_ideal_case_proc_*')
 for fil in flist:
     df = pd.read_csv(fil, delim_whitespace=1)
     yd    =   np.append(yd, df['etan_obs'])
@@ -25,7 +25,7 @@ etan  = etan[idx]
 print(sum(np.isnan(yd)))
 
 
-rbins = np.logspace(-2, 0, 6)
+rbins = np.logspace(-2, np.log10(0.8), 6)
 yy = 0.0*rbins[:-1]
 yyerr = 0.0*rbins[:-1]
 
