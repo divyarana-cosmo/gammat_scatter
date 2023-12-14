@@ -62,7 +62,9 @@ def get_rands_wgts(rra,rdec,ra,dec):
 def lens_select(lensargs,jk=10000):
     if lensargs['type'] == "micecatv2" :
         fname = './Datastore/micecatv2/15407.fits'
-        df = fits.open(fname)[1].data
+        import fitsio
+
+        df = fitsio.read(fname)
         idx  =  (df['lmstellar'] > lensargs['logmstelmin'])  & (df['lmstellar'] < lensargs['logmstelmax'])
         idx  =  idx & ((df['z_cgal_v'] > lensargs['zmin'])) & (df['z_cgal_v'] < lensargs['zmax'])
         idx  =  idx & (df['flag_central']==0)

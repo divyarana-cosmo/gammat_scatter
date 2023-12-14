@@ -3,39 +3,82 @@ import numpy as np
 import matplotlib.pyplot as plt
 from glob import glob
 
+ax = plt.subplot(2,2,1)
+yd    = np.array([])
+sep = np.array([])
+etan    = np.array([])
+
+import pandas as pd
+from glob import glob
+flist = glob('./debug/simed_sources.dat_no_shape_noise_proc_*')
+for fil in flist:
+    df = pd.read_csv(fil, delim_whitespace=1)
+    yd    =   np.append(yd, df['etan_obs'])
+    sep =  np.append(sep, df['proj_sep'])
+    etan = np.append(etan, df['etan'])
+#added hack to cleanup numerical issues
+idx = (etan>0) & (etan<1.0)
+yd    =  yd[idx]
+sep  = sep[idx]
+etan  = etan[idx]
+
+print(sum(np.isnan(yd)))
 
 
-def getzred(zred):
-    n0=1.8048
-    a=0.417
-    b=4.8685
-    c=0.7841
-    return n0*(zred**a + zred**(a*b))/(zred**b + c)
+rbins = np.logspace(-2, 0, 6)
+yy = 0.0*rbins[:-1]
+yyerr = 0.0*rbins[:-1]
+
+yyt = 0.0*rbins[:-1]
+for rr in range(5):
+    idx = (sep>rbins[rr]) & (sep<rbins[rr+1])
+    yyerr[rr] = np.std(yd[idx])/np.sqrt(sum(idx))
+    yy[rr] = np.mean(yd[idx])
+    yyt[rr] = np.mean(etan[idx])
+
+print(yyerr/yy * 100)
+ax.errorbar((rbins[:-1] + rbins[1:])*0.5, yy, yerr=yyerr, fmt='.', capsize=3)
+ax.plot((rbins[:-1] + rbins[1:])*0.5, yyt, 'xk', lw=0.0)
+plt.ylabel(r'$\gamma_t$')
+plt.xlabel(r'$R[{\rm h^{-1} Mpc}]$')
+
+plt.xscale('log')
+plt.yscale('log')
+
+plt.savefig('./debug/test.png', dpi=300)
 
 
-
-
-zmin = 0.0
-zmax = 2.5
-zarr = np.linspace(zmin, zmax, 20)
-
-xx  = 0.0 * zarr
-from scipy.integrate import quad
-
-for ii in range(len(xx)):
-    xx[ii] = quad(getzred, zmin, zarr[ii])[0]/quad(getzred, zmin, zmax)[0]
-
-from scipy.interpolate import interp1d
-proj = interp1d(xx,zarr)
-
-
-np.random.seed(123)
-xarr = np.random.uniform(size=100000)
-yarr = proj(xarr)
-
-plt.hist(yarr, histtype='step')
-
-plt.savefig('test.png', dpi=300)
+#def getzred(zred):
+#    n0=1.8048
+#    a=0.417
+#    b=4.8685
+#    c=0.7841
+#    return n0*(zred**a + zred**(a*b))/(zred**b + c)
+#
+#
+#
+#
+#zmin = 0.0
+#zmax = 2.5
+#zarr = np.linspace(zmin, zmax, 20)
+#
+#xx  = 0.0 * zarr
+#from scipy.integrate import quad
+#
+#for ii in range(len(xx)):
+#    xx[ii] = quad(getzred, zmin, zarr[ii])[0]/quad(getzred, zmin, zmax)[0]
+#
+#from scipy.interpolate import interp1d
+#proj = interp1d(xx,zarr)
+#
+#
+#np.random.seed(123)
+#xarr = np.random.uniform(size=100000)
+#yarr = proj(xarr)
+#
+#plt.hist(yarr, histtype='step')
+#
+#plt.savefig('test.png', dpi=300)
 
 exit()
 
@@ -80,21 +123,7 @@ exit()
 
 
 
-#ax = plt.subplot(2,2,1)
-#for ii in [12.0, 13.0, 14.0]:
-#    data = pd.read_csv('./debug/simed_sources_logmh_%s.dat'%ii, delim_whitespace=1)
-#    yyerr = np.std(data['etan_obs'])/np.sqrt(len(data['etan_obs']))
-#    yy = np.mean(data['etan_obs'])
-#
-#    print(yyerr/yy * 100)
-#    ax.errorbar(ii, yy, yerr=yyerr, fmt='.', capsize=3)
-#    ax.plot(ii, np.mean(data['etan']), '.k', lw=0.0)
-#
-#plt.ylabel(r'$\gamma_t$')
-#plt.xlabel(r'$\log ({\rm M_{\rm 200m}/[h^{-1}M_{\odot}]})$')
-#
-#plt.savefig('./debug/test.png', dpi=300)
-#
+
 #
 #
 #
