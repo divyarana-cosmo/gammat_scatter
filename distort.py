@@ -17,7 +17,7 @@ from stellarpy import stellar
 from colossus.cosmology import cosmology
 from colossus.halo import concentration
 from astropy.cosmology import FlatLambdaCDM
-
+from tqdm import tqdm
 import argparse
 import yaml
 
@@ -48,6 +48,9 @@ class simshear():
 
     def get_sigma_crit_inv(self, lzred, szred):
         "evaluates the lensing efficency geometrical factor"
+        if lzred>szred:
+            return 0.0
+
         # some important constants for the sigma crit computations
         gee = 4.301e-9 #km^2 Mpc M_sun^-1 s^-2 gravitational constant
         cee = 3e5 #km s^-1
@@ -89,18 +92,15 @@ class simshear():
         g_1     = - g*(2*c_phi**2 - 1)
         g_2     = - g*(2*c_phi * s_phi)
 
-        #weeding out to the strong lensing systems
-        g_1      =   g_1[sflag]
-        g_2      =   g_2[sflag]
-        g        =   g[sflag]
-        c_phi    =   c_phi[sflag]
-        s_phi    =   s_phi[sflag]
-        return g_1, g_2, g, c_phi, s_phi, proj_sep
+        return g_1, g_2, g, c_phi, s_phi, proj_sep, sflag
 
 
     def shear_src(self, sra, sdec, se1, se2, lzred, szred):
         "apply shear on to the source galaxies with given intrinsic shapes"
-        g_1, g_2, etan, c_phi, s_phi, proj_sep = self.get_g(sra, sdec, lzred, szred)
+        g_1, g_2, etan, c_phi, s_phi, proj_sep, sflag = self.get_g(sra, sdec, lzred, szred)
+
+       #weeding out to the strong lensing systems
+
         g   = g_1 + 1j* g_2
         es  = se1 + 1j* se2  # intrinsic sizes
 
@@ -109,7 +109,7 @@ class simshear():
         idx = np.abs(g)<1
         e[idx] = (es[idx] + g[idx])/(1.0 + np.conj(g[idx])*es[idx])
         e[~idx] = (1 + g[~idx]*np.conj(es[~idx]))/(np.conj(es[~idx]) + np.conj(g[~idx])) # mod(g)>1
-        return np.real(e), np.imag(e), etan, proj_sep
+        return np.real(e), np.imag(e), etan, proj_sep, sflag
 
 
 
@@ -146,6 +146,8 @@ if __name__ == "__main__":
     parser.add_argument("--sig0", help="scatter in stellar or halo mass", type=float, default=0.2)
     parser.add_argument("--scatter_stel", help="scatter stellar mass", type=bool, default=False)
     parser.add_argument("--scatter_halo", help="scatter halo mass", type=bool, default=False)
+    parser.add_argument("--no_shape_noise", help="scatter halo mass", type=bool, default=False)
+
 
     args = parser.parse_args()
 
@@ -167,11 +169,16 @@ if __name__ == "__main__":
     if args.scatter_stel:
         config['lens']['log_mstel'] +=logscat
         config['lens']['log_mh'] =config['lens']['log_mh'] + 0.0*logscat
-        outputfilename = '%s/simed_sources_scatter_stel_sig0_%s.dat'%(config['outputdir'], argv.sig0)
+        outputfilename = '%s/simed_sources_scatter_stel_sig0_%s.dat'%(config['outputdir'], args.sig0)
     if args.scatter_halo:
         config['lens']['log_mh'] +=logscat
         config['lens']['log_mstel'] =config['lens']['log_mstel'] + 0.0*logscat
-        outputfilename = '%s/simed_sources_scatter_halo_sig0_%s.dat'%(config['outputdir'], argv.sig0)
+        outputfilename = '%s/simed_sources_scatter_halo_sig0_%s.dat'%(config['outputdir'], args.sig0)
+
+    if args.no_shape_noise:
+        outputfilename = outputfilename + 'no_shape_noise'
+    else:
+        outputfilename = outputfilename + 'with_shape_noise'
 
     #config['lens']['log_mh'] = args.log_mh
 
@@ -189,24 +196,32 @@ if __name__ == "__main__":
     fdata = open(outputfilename,'w')
     fdata.write('lra(deg)\tldec(deg)\tlzred\tllog_mstel\tllog_mh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\n')
 
-    for ii in tqdm(range(logmharr)):
+    for ii in tqdm(range(len(logmharr))):
         ss = simshear(H0 = config['H0'], Om0 = config['Om0'], Ob0 = config['Ob0'], Tcmb0 = config['Tcmb0'], Neff = config['Neff'], sigma8 = config['sigma8'], ns = config['ns'], log_mstel = logmstelarr[ii], log_mh = logmharr[ii], lra = config['lens']['lra'], ldec = config['lens']['ldec'], lzred = config['lens']['lzred'])
 
         # sampling 1000 sources with in the 1 h-1 Mpc comoving separation
-        nsrcs   = int(1e3)
+        nsrcs   = int(1e4)
         cdec    = np.random.uniform(np.cos((90+thetamax)*np.pi/180), np.cos((90-thetamax)*np.pi/180), nsrcs) # uniform over the sphere
         sdec    = (90.0-np.arccos(cdec)*180/np.pi)
         sra     = lra + np.random.uniform(-thetamax, thetamax, nsrcs)
         szred = 0.8
         # intrinsic shapes
-        se = np.random.normal(0.0, 0.27, int(2*len(sra))).reshape((-1,2))
+        if args.no_shape_noise:
+            se = 0.0*np.random.normal(0.0, 0.27, int(2*len(sra))).reshape((-1,2))
+        else:
+            se = np.random.normal(0.0, 0.27, int(2*len(sra))).reshape((-1,2))
+
         se1 = se[:,0]
         se2 = se[:,1]
 
-        s1, s2, etan, proj_sep = ss.shear_src(sra, sdec, se1, se2, lzred, szred)
+        s1, s2, etan, proj_sep, sflag = ss.shear_src(sra, sdec, se1, se2, lzred, szred)
         et, ex = get_et_ex(lra, ldec, sra, sdec, s1, s2)
 
-        for jj in range(len(sra):
+        for jj in range(len(sra)):
+            #weeding out to the strong lensing systems
+            if sflag[jj] !=1.0:
+                continue
+
             fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lra, ldec, lzred, logmstelarr[ii], logmharr[ii], ss.conc, sra[jj], sdec[jj], szred, s1[jj], s2[jj], etan[jj], et[jj], ex[jj], proj_sep[jj]))
 
 
