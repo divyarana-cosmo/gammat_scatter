@@ -195,7 +195,7 @@ if __name__ == "__main__":
     if 'logmstelmax'not in config:
         config['lens']['logmstelmax'] = args.logmstelmax
 
-    outputfilename = outputfile + '_lmstelmin_%2.2f_lmstelmax_%2.2f'%(args.logmstelmin, args.logmstelmax)
+    outputfilename = outputfilename + '_lmstelmin_%2.2f_lmstelmax_%2.2f'%(args.logmstelmin, args.logmstelmax)
 
     if args.no_shape_noise:
         outputfilename = outputfilename + '_no_shape_noise'
@@ -208,6 +208,7 @@ if __name__ == "__main__":
         np.random.seed(123)
         logmstel = np.mean(logmstel) + np.random.normal(0,0.1, size=len(lra))
         logmh = np.mean(logmh) + 0.0*logmh
+        outputfilename = outputfilename + '_ideal_case'
 
     # putting the interpolation for source redshift assignment
     interp_szred = getszred()
