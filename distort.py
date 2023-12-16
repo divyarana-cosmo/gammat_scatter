@@ -11,7 +11,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-import galsim
+#import galsim
 from halopy import halo
 from stellarpy import stellar
 from colossus.cosmology import cosmology
@@ -25,7 +25,7 @@ import argparse
 import yaml
 from mpi4py import MPI
 from subprocess import  call
-
+#exit()
 class simshear():
     "simulated the shear for a given configuration of dark matter and stellar profiles"
     def __init__(self, H0, Om0, Ob0, Tcmb0, Neff, sigma8, ns ):
@@ -94,7 +94,8 @@ class simshear():
 
         g = gamma/(1.0 - kappa)
 
-        sflag = (s_theta!=0) & (np.abs(kappa)<1.0)   #strong lensing flag and proximity flag
+        sflag = (s_theta!=0) & (np.abs(kappa)<0.5)   #strong lensing flag and proximity flag
+        #sflag = (s_theta!=0) & (np.abs(kappa)<1.0)   #strong lensing flag and proximity flag
 
         # phi to get the compute the tangential shear
         c_phi   = np.clip( np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta, -1, 1 )
