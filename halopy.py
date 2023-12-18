@@ -19,7 +19,7 @@ class halo(constants):
         self.rho_0 = con_par**3 *self.m_tot/(4*np.pi*self.r_200**3 *(np.log(1+con_par)-con_par/(1+con_par)))
         self.init_sigma = False
         #print("Intialing NFW parameters\n log_mtot = %s h-1 M_sun\nconc_parm = %s\nrho_0 = %s h-1 M_sun/(h-3 Mpc^3)\n r_s = %s h-1 Mpc"%(log_mtot,con_par,self.rho_0,self.r_200/self.c))
-        print("Intialing NFW parameters\n log_mtot = %s\n conc_parm = %s"%(log_mtot, con_par))
+        print("Intialing NFW parameters\n log_Mh = %s\n conc_parm = %s"%(log_mtot, con_par))
 
     def nfw(self,r):
         """given r, this gives nfw profile as per the instantiated parameters"""

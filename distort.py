@@ -68,6 +68,7 @@ class simshear():
         self.hp         = halo(logmh, self.conc, omg_m=self.omg_m)
         self.stel       = stellar(logmstel)
         #considering only tangential shear and adding both contributions
+        #print(len(self.stel.esd_pointmass(proj_sep)), len(self.get_sigma_crit_inv(lzred, szred)), self.get_sigma_crit_inv(lzred, szred))
         gamma_s     = (self.stel.esd_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
         gamma_dm    = (self.hp.esd_nfw(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
         kappa_s     = (self.stel.sigma_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)

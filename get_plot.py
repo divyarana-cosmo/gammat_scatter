@@ -54,41 +54,40 @@ if __name__ == "__main__":
     lid         = np.array([])
     
     # variables for the model predictions at the avg parameters
-    logmstel    =   0.0# np.array([])
-    logmh       =   0.0# np.array([])
-    conc        =   0.0# np.array([])
-    lzred       =   0.0# np.array([])
-    szred       =   0.0# np.array([])
+    logmstel    =   np.array([])
+    logmh       =   np.array([])
+    lzred       =   np.array([])
+    szred       =   0.0
 
     flist = glob(outputfilename)
     #collecting the data
-    for fil in flist:
+    for fil in flist[:1]:
         df = pd.read_csv(fil, delim_whitespace=1)
         df = df[(df['proj_sep']>args.Rmin) & ( df['proj_sep']<args.Rmax)]
         etan_obs    =   np.append(etan_obs, df['etan_obs'])
         sep         =   np.append(sep, df['proj_sep'])
-        lid         =   np.append(lid, df['proj_sep'])
+        lid         =   np.append(lid, df['lid'])
         #etan        =   np.append(etan, df['etan'])
-        logmstel    +=   sum(df['llogmstel'])
-        logmh       +=   sum(df['llogmh'])
-        conc        +=   sum(df['lconc'])
-        lzred       +=   sum(df['lzred'])
+        logmstel    =   np.append(logmstel,  df['llogmstel'])
+        logmh       =   np.append(logmh,  df['llogmh'])
+        lzred       =   np.append(lzred,  df['lzred'])
         szred       +=   sum(df['szred'])
         print(fil)
-    
-    #averaging here
-    logmstel    /=   len(sep)    
-    logmh       /=   len(sep)
-    conc        /=   len(sep)
-    lzred       /=   len(sep)
-    szred       /=   len(sep)
-   
-    # assigning the jackknife indices
+
+
     np.random.seed(123)
+    ulid, indx = np.unique(lid, return_index=True)
+    logmstel=   np.mean(logmstel[indx])
+    logmh   =   np.mean(logmh[indx])
+    lzred   =   np.mean(lzred[indx])
+    szred   /=  (len(etan_obs))
+
+    # assigning the jackknife indices
     ulid, indices = np.unique(lid, return_inverse=True)
     jkreg = np.random.randint(args.Njacks, size=len(ulid))
-    xjkreg = jkred[indices]
+    xjkreg = jkreg[indices]
 
+  
     rbins = np.logspace(np.log10(args.Rmin), np.log10(args.Rmax), args.Rbins + 1)
     yy = np.zeros((args.Njacks, args.Rbins))
     #yyerr = np.zeros((len(rbins[:-1]), args.Njacks))
@@ -96,23 +95,24 @@ if __name__ == "__main__":
     for ii in range(args.Njacks):
         for rr in range(args.Rbins):
             idx = (xjkreg !=ii) & (sep>rbins[rr]) & (sep<rbins[rr+1])
-            #yy[ii, rr] = np.mean(etan[idx])
             yy[ii, rr] = np.mean(etan_obs[idx])
 
     yyerr = np.sqrt(args.Njacks -1) * np.std(yy, axis=0)   #correcting for the jackknife method check norberg et al 2009
     yy = np.mean(yy, axis=0)
+    print(yyerr/yy)
     rbins = np.array((rbins[:-1] + rbins[1:])*0.5)
     tgamma_s, tgamma_d, tkappa_s, tkappa_d = ss._get_g(logmstel , logmh, lzred, szred, rbins)
- 
+    
+
     ax = plt.subplot(2,2,1)
     ax.errorbar(rbins, yy, yerr=yyerr, fmt='.', capsize=3)
-    ax.plot(rbins, tgamma_s/(1-tkappa_s), '--', label=r'stellar, $\log M_{\rm stel} = %2.2f$'%logmstel)
-    ax.plot(rbins, tgamma_d/(1-tkappa_d), '--', label='dark matter, $\log M_{\rm stel} = %2.2f'%(logmh))
-    ax.plot(rbins, (tgamma_s + tgamma_d)/(1- (tkappa_s + tkappa_d)), '-k', label='total')
+    ax.plot(rbins, tgamma_s, '--', label=r'Stellar, $\log M_{\rm stel} = %2.2f$'%logmstel)
+    ax.plot(rbins, tgamma_d, '--', label=r'Dark matter, $\log M_{\rm h} = %2.2f $'%(logmh))
+    ax.plot(rbins, tgamma_s + tgamma_d, '-k', label='total')
  
     plt.ylabel(r'$\gamma_t$')
     plt.xlabel(r'$R[{\rm h^{-1} Mpc}]$')
-    plt.ylim(1e-3, 1)
+    #plt.ylim(1e-3, 1)
     
     plt.xscale('log')
     plt.yscale('log')
