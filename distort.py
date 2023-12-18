@@ -45,6 +45,11 @@ class simshear():
         "evaluates the lensing efficency geometrical factor"
         sigm_crit_inv = 0.0*szred
         idx =  szred>lzred   # if sources are in foreground then lensing is zero
+        if np.isscalar(idx):
+            lzred = np.array([lzred])
+            szred = np.array([szred])
+            idx = np.array([idx])
+            sigm_crit_inv = np.array([sigm_crit_inv])
         if sum(idx)==0:
             return sigm_crit_inv
         else:
@@ -63,9 +68,11 @@ class simshear():
         self.hp         = halo(logmh, self.conc, omg_m=self.omg_m)
         self.stel       = stellar(logmstel)
         #considering only tangential shear and adding both contributions
-        gamma = (self.hp.esd_nfw(proj_sep) + self.stel.esd_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
-        kappa = (self.hp.sigma_nfw(proj_sep) + self.stel.sigma_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
-        return gamma, kappa
+        gamma_s     = (self.stel.esd_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
+        gamma_dm    = (self.hp.esd_nfw(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
+        kappa_s     = (self.stel.sigma_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
+        kappa_dm    = (self.hp.sigma_nfw(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
+        return gamma_s, gamma_dm, kappa_s, kappa_dm
 
     #def get_g(self, sra, sdec, lzred, szred):
     def get_g(self, lra, ldec, lzred, logmstel, logmh, sra, sdec, szred):
@@ -90,7 +97,9 @@ class simshear():
         #considering only tangential shear and adding both contributions
         #gamma = (self.hp.esd_nfw(proj_sep) + self.stel.esd_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
         #kappa = (self.hp.sigma_nfw(proj_sep) + self.stel.sigma_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
-        gamma, kappa = self._get_g(logmstel, logmh, lzred, szred, proj_sep)
+        gamma_s, gamma_dm, kappa_s, kappa_dm = self._get_g(logmstel, logmh, lzred, szred, proj_sep)
+        gamma = gamma_s + gamma_dm
+        kappa = kappa_s + kappa_dm
 
         g = gamma/(1.0 - kappa)
 
@@ -174,8 +183,9 @@ if __name__ == "__main__":
     parser.add_argument("--outdir", help="Output filename with pairs information", default="debug")
     #parser.add_argument("--logmh", help="dark matter halo mass", type=float, default=12.0)
     parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=123)
-    parser.add_argument("--no_shape_noise", help="scatter halo mass", type=bool, default=True)
+    parser.add_argument("--no_shape_noise", help="scatter halo mass", type=bool, default=False)
     parser.add_argument("--ideal_case", help="testing the ideal case", type=bool, default=False)
+    parser.add_argument("--rot90", help="testing the ideal case", type=bool, default=False)
     parser.add_argument("--logmstelmin", help="log stellar mass minimum", type=float, default=11.0)
     parser.add_argument("--logmstelmax", help="log stellar mass maximum", type=float, default=13.0)
 
@@ -202,6 +212,8 @@ if __name__ == "__main__":
         outputfilename = outputfilename + '_no_shape_noise'
     else:
         outputfilename = outputfilename + '_with_shape_noise'
+        if args.rot90:
+            outputfilename = outputfilename + '_with_90_rotation'
     #picking up the lens data
     lensargs = config['lens']
     lid, lra, ldec, lzred, logmstel, logmh   = lens_select(lensargs)
@@ -252,6 +264,9 @@ if __name__ == "__main__":
             se = np.random.normal(0.0, 0.27, int(2*len(sra))).reshape((-1,2))
             se1 = se[:,0]
             se2 = se[:,1]
+            if args.rot90:
+                se1*=-1
+                se2*=-1
 
         s1, s2, etan, proj_sep, sflag = ss.shear_src(lra[ii], ldec[ii], lzred[ii], logmstel[ii], logmh[ii], sra, sdec, szred, se1, se2)
         et, ex = get_et_ex(lra[ii], ldec[ii], sra, sdec, s1, s2)
