@@ -103,7 +103,7 @@ class simshear():
 
         g = gamma/(1.0 - kappa)
 
-        sflag = (s_theta!=0) & (np.abs(kappa)<0.5)   #strong lensing flag and proximity flag
+        sflag = (s_theta!=0) & (np.abs(kappa)<0.5)   #weak lensing flag and proximity flag
         #sflag = (s_theta!=0) & (np.abs(kappa)<1.0)   #strong lensing flag and proximity flag
 
         # phi to get the compute the tangential shear
@@ -236,7 +236,7 @@ if __name__ == "__main__":
     ss = simshear(H0 = config['H0'], Om0 = config['Om0'], Ob0 = config['Ob0'], Tcmb0 = config['Tcmb0'], Neff = config['Neff'], sigma8 = config['sigma8'], ns = config['ns'])
 
     fdata = open(outputfilename,'w')
-    fdata.write('lra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\n')
+    fdata.write('lid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\n')
 
     for ii in tqdm(range(len(lra))):
         if ii%size != rank :
@@ -275,7 +275,7 @@ if __name__ == "__main__":
         #weeding out to the strong lensing systems and foreground sources configuration
             if (sflag[jj]!=1.0) and (etan[jj]==0.0):
                 continue
-            fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lra[ii], ldec[ii], lzred[ii], logmstel[ii], logmh[ii], ss.conc, sra[jj], sdec[jj], szred[jj], s1[jj], s2[jj], etan[jj], et[jj], ex[jj], proj_sep[jj]))
+            fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lid[ii], lra[ii], ldec[ii], lzred[ii], logmstel[ii], logmh[ii], ss.conc, sra[jj], sdec[jj], szred[jj], s1[jj], s2[jj], etan[jj], et[jj], ex[jj], proj_sep[jj]))
 
     fdata.close()
     comm.Barrier()
