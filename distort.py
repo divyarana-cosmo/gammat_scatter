@@ -185,6 +185,7 @@ if __name__ == "__main__":
     #parser.add_argument("--logmh", help="dark matter halo mass", type=float, default=12.0)
     parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=123)
     parser.add_argument("--no_shape_noise", help="scatter halo mass", type=bool, default=False)
+    parser.add_argument("--no_shear", help="scatter halo mass", type=bool, default=False)
     parser.add_argument("--ideal_case", help="testing the ideal case", type=bool, default=False)
     parser.add_argument("--rot90", help="testing the ideal case", type=bool, default=False)
     parser.add_argument("--logmstelmin", help="log stellar mass minimum", type=float, default=11.0)
@@ -215,11 +216,18 @@ if __name__ == "__main__":
         outputfilename = outputfilename + '_with_shape_noise'
         if args.rot90:
             outputfilename = outputfilename + '_with_90_rotation'
+
+    if args.no_shear:
+        outputfilename = outputfilename + '_no_shear'
+            
     #picking up the lens data
     lensargs = config['lens']
     lid, lra, ldec, lzred, logmstel, logmh   = lens_select(lensargs)
+
+
+    np.random.seed(123)
+
     if args.ideal_case:
-        np.random.seed(123)
         logmstel = np.mean(logmstel) + np.random.normal(0,0.1, size=len(lra))
         logmh = np.mean(logmh) + 0.0*logmh
         outputfilename = outputfilename + '_ideal_case'
@@ -255,21 +263,23 @@ if __name__ == "__main__":
         sdec    = (90.0 - np.arccos(cdec)*180/np.pi)
         sra     = lra[ii] + np.random.uniform(-thetamax, thetamax, numbsrc)
 
-        np.random.seed(lid[ii])  # setting the seed to be the lens id
+        #np.random.seed(lid[ii])  # setting the seed to be the lens id
         szred = interp_szred(np.random.uniform(size=numbsrc))
         # intrinsic shapes
         if args.no_shape_noise:
             se1 = 0.0*sra
             se2 = 0.0*sra
         else:
-            se = np.random.normal(0.0, 0.27, int(2*len(sra))).reshape((-1,2))
-            se1 = se[:,0]
-            se2 = se[:,1]
+            se1 = np.random.normal(0.0, 0.27, int(len(sra)))
+            se2 = np.random.normal(0.0, 0.27, int(len(sra)))
             if args.rot90:
                 se1*=-1
                 se2*=-1
 
         s1, s2, etan, proj_sep, sflag = ss.shear_src(lra[ii], ldec[ii], lzred[ii], logmstel[ii], logmh[ii], sra, sdec, szred, se1, se2)
+        if args.no_shear:
+            s1 = se1
+            s2 = se2
         et, ex = get_et_ex(lra[ii], ldec[ii], sra, sdec, s1, s2)
 
         for jj in range(len(sra)):

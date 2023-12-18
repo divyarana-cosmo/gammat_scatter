@@ -20,6 +20,8 @@ if __name__ == "__main__":
     parser.add_argument("--Rmin", help="minimum projected separation", type=float, default=0.01)
     parser.add_argument("--Rmax", help="maximum projected separation", type=float, default=0.8)
     parser.add_argument("--Rbins", help="number of radial bins", type=int, default=6)
+    parser.add_argument("--no_shear", help="scatter halo mass", type=bool, default=False)
+
 
     args = parser.parse_args()
 
@@ -45,12 +47,17 @@ if __name__ == "__main__":
         outputfilename = outputfilename + '_with_shape_noise'
         if args.rot90:
             outputfilename = outputfilename + '_with_90_rotation'
+
+    if args.no_shear:
+        outputfilename = outputfilename + '_no_shear'
+ 
+
     #picking up the lens data
     lensargs = config['lens']
     outputfilename = outputfilename + '_proc_*'
     etan_obs    = np.array([])
+    ex_obs    = np.array([])
     sep         = np.array([])
-    etan        = np.array([])
     lid         = np.array([])
     
     # variables for the model predictions at the avg parameters
@@ -61,10 +68,11 @@ if __name__ == "__main__":
 
     flist = glob(outputfilename)
     #collecting the data
-    for fil in flist[:1]:
+    for fil in flist:
         df = pd.read_csv(fil, delim_whitespace=1)
         df = df[(df['proj_sep']>args.Rmin) & ( df['proj_sep']<args.Rmax)]
         etan_obs    =   np.append(etan_obs, df['etan_obs'])
+        ex_obs    =   np.append(ex_obs, df['ex_obs'])
         sep         =   np.append(sep, df['proj_sep'])
         lid         =   np.append(lid, df['lid'])
         #etan        =   np.append(etan, df['etan'])
@@ -77,8 +85,8 @@ if __name__ == "__main__":
 
     np.random.seed(123)
     ulid, indx = np.unique(lid, return_index=True)
-    logmstel=   np.mean(logmstel[indx])
-    logmh   =   np.mean(logmh[indx])
+    logmstel =  logmstel[indx]
+    logmh   =   logmh[indx]
     lzred   =   np.mean(lzred[indx])
     szred   /=  (len(etan_obs))
 
@@ -89,35 +97,89 @@ if __name__ == "__main__":
 
   
     rbins = np.logspace(np.log10(args.Rmin), np.log10(args.Rmax), args.Rbins + 1)
-    yy = np.zeros((args.Njacks, args.Rbins))
+    yy = np.zeros((args.Njacks , args.Rbins))
+    yyx = np.zeros((args.Njacks , args.Rbins))
+    sigyy = np.zeros((args.Njacks , args.Rbins))
+    sigxyy = np.zeros((args.Njacks , args.Rbins))
     #yyerr = np.zeros((len(rbins[:-1]), args.Njacks))
     
     for ii in range(args.Njacks):
         for rr in range(args.Rbins):
             idx = (xjkreg !=ii) & (sep>rbins[rr]) & (sep<rbins[rr+1])
-            yy[ii, rr] = np.mean(etan_obs[idx])
+            yy[ii] [rr]  = np.mean(etan_obs[idx])
+            yyx[ii][rr] = np.mean(ex_obs[idx])
+
+            idx = (xjkreg !=ii) & (sep>rbins[0]) & (sep<(rbins[rr] + rbins[rr+1])*0.5)
+            #idx = (xjkreg !=ii) & (sep>rbins[0]) & (sep<rbins[rr+1])
+            sigyy[ii] [rr]  = np.std(etan_obs[idx])
+            sigxyy[ii] [rr] = np.std(ex_obs[idx])
 
     yyerr = np.sqrt(args.Njacks -1) * np.std(yy, axis=0)   #correcting for the jackknife method check norberg et al 2009
+    yyxerr = np.sqrt(args.Njacks -1) * np.std(yyx, axis=0)   #correcting for the jackknife method check norberg et al 2009
+
+    sigyyerr = np.sqrt(args.Njacks -1) * np.std(sigyy, axis=0)
+    sigxyyerr = np.sqrt(args.Njacks -1) * np.std(sigxyy, axis=0)
+
     yy = np.mean(yy, axis=0)
+    yyx = np.mean(yyx, axis=0)
+    sigyy = np.mean(sigyy, axis=0)
+    sigxyy = np.mean(sigxyy, axis=0)
     print(yyerr/yy)
     rbins = np.array((rbins[:-1] + rbins[1:])*0.5)
-    tgamma_s, tgamma_d, tkappa_s, tkappa_d = ss._get_g(logmstel , logmh, lzred, szred, rbins)
+    print(rbins)
+    #tgamma_s, tgamma_d, tkappa_s, tkappa_d = ss._get_g(logmstel , logmh, lzred, szred, rbins)
     
 
-    ax = plt.subplot(2,2,1)
-    ax.errorbar(rbins, yy, yerr=yyerr, fmt='.', capsize=3)
-    ax.plot(rbins, tgamma_s, '--', label=r'Stellar, $\log M_{\rm stel} = %2.2f$'%logmstel)
-    ax.plot(rbins, tgamma_d, '--', label=r'Dark matter, $\log M_{\rm h} = %2.2f $'%(logmh))
-    ax.plot(rbins, tgamma_s + tgamma_d, '-k', label='total')
+    #plt.subplot(2,2,1)
+    #plt.errorbar(rbins, yy, yerr=yyerr, fmt='.', capsize=3)
+    #plt.plot(rbins, tgamma_s, '--', label=r'Stellar, $\log[M_{\rm stel}/h^{-1}M_\odot] = %2.2f$'%logmstel)
+    #plt.plot(rbins, tgamma_d, '--', label=r'Dark matter, $\log[M_{\rm h}/h^{-1}M_\odot] = %2.2f $'%(logmh))
+    #plt.plot(rbins, tgamma_s + tgamma_d, '-k', label='total')
  
-    plt.ylabel(r'$\gamma_t$')
-    plt.xlabel(r'$R[{\rm h^{-1} Mpc}]$')
+    #plt.ylabel(r'$\gamma_t$')
+    #plt.xlabel(r'$R[{\rm h^{-1} Mpc}]$')
     #plt.ylim(1e-3, 1)
+    #
+    #plt.xscale('log')
+    #plt.yscale('log')
+    #plt.legend()
+
+    #plt.subplot(2,2,3)
+    #plt.plot(rbins, (yy - tgamma_s + tgamma_d)/yyerr, '-k', label='total')
+ 
+    #plt.ylabel(r'$\frac{\gamma^{\rm meas}_t - \gamma^{\rm mod}_t}{\sigma_{\gamma_{t}}}$')
+    #plt.xlabel(r'$R[{\rm h^{-1} Mpc}]$')
+    #plt.xscale('log')
+    #plt.legend()
+
+
+    plt.subplot(2,2,2)
+    plt.errorbar(rbins, sigyy, yerr=sigyyerr, fmt='.', capsize=3, label=r'$\gamma_{\rm t}$')
+    plt.errorbar(rbins, sigxyy, yerr=sigxyyerr, fmt='.', capsize=3, label=r'$\gamma_{\rm \times}$')
+ 
+    plt.axhline(0.27, ls='--', color='grey')
+    plt.ylabel(r'$\sigma (< R)$')
+    plt.xlabel(r'$R[{\rm h^{-1} Mpc}]$')
+    plt.ylim(0.24, 0.34)
     
     plt.xscale('log')
-    plt.yscale('log')
+    #plt.yscale('log')
     plt.legend()
-    
+
+    #plt.subplot(2,2,4)
+    #plt.errorbar(rbins,yyx, yerr=yyxerr, fmt='.', capsize=3)
+    #plt.axhline(0.0, ls='--', color='grey')
+    #plt.ylabel(r'$\gamma_\times$')
+    #plt.xlabel(r'$R[{\rm h^{-1} Mpc}]$')
+    #plt.xscale('log')
+
+
+
+
+
+
+    plt.tight_layout()
+   
     plt.savefig(outputfilename.split('_proc_*')[0] + '.png', dpi=300)
 
 
