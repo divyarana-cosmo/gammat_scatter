@@ -34,8 +34,8 @@ class halo(constants):
         sig = 0.0*r
         sig = self.avg_sigma_nfw(r) - self.sigma_nfw(r)
 
-        idx = r<5e-3
-        sig[idx]= 0.0
+        #idx = r<5e-3
+        #sig[idx]= 0.0
         return sig
 
 
@@ -66,8 +66,8 @@ class halo(constants):
         """analytical projection of NFW"""
         if np.isscalar(r):
             r = np.array([r])
-        idx = r<5e-3#cut at the 5h-1kpc
-        r[idx]=5e-3
+        #idx = r<5e-3#cut at the 5h-1kpc
+        #r[idx]=5e-3
 
         r_s = self.r_200/self.c
         k = 2*r_s*self.rho_0

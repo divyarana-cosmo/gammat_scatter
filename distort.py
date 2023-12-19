@@ -41,6 +41,14 @@ class simshear():
 
         print("fixing cosmology \n")
 
+    def get_xyz(self, ra,dec):
+        theta = (90-dec)*np.pi/180
+        phi = ra*np.pi/180
+        z = np.cos(theta)
+        y = np.sin(phi)*np.sin(theta)
+        x = np.cos(phi)*np.sin(theta)
+        return x,y,z  
+
     def get_sigma_crit_inv(self, lzred, szred):
         "evaluates the lensing efficency geometrical factor"
         sigm_crit_inv = 0.0*szred
@@ -78,40 +86,38 @@ class simshear():
     #def get_g(self, sra, sdec, lzred, szred):
     def get_g(self, lra, ldec, lzred, logmstel, logmh, sra, sdec, szred):
         "computes the g1 and g2 components for the reduced shear"
-        # we are using diemer19 cocentration-mass relation
-        #self.conc = concentration.concentration(10**logmh, '200m', lzred, model = 'diemer19')
-        #self.hp         = halo(logmh, self.conc, omg_m=self.omg_m)
-        #self.stel       = stellar(logmstel)
+        lx, ly, lz = self.get_xyz(lra, ldec) 
+        sx, sy, sz = self.get_xyz(sra, sdec) 
 
-        # need to supply the angles in radians
+        #projected separation on the lense plane
+        proj_sep = self.cc.comoving_distance(lzred).value * np.sqrt((sx-lx)**2 + (sy-ly)**2 + (sz-lz)**2) # in h-1 Mpc
+
+        #considering only tangential shear and adding both contributions
+        gamma_s, gamma_dm, kappa_s, kappa_dm = self._get_g(logmstel, logmh, lzred, szred, proj_sep)
+        gamma = gamma_s + gamma_dm
+        kappa = kappa_s + kappa_dm
+
+        g = gamma/(1.0 - kappa) # reduced shear
+
+        # phi to get the compute the tangential shear
+
         lra  = lra*np.pi/180
         ldec = ldec*np.pi/180
         sra  = sra*np.pi/180
         sdec = sdec*np.pi/180
 
-        c_theta = np.clip(np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec), -1, 1)
+        c_theta = np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec)
+        if sum(c_theta>1)>0 or sum(c_theta<-1)>0:
+            print('trigon screwed')
+            print(c_theta)
+            exit()
         s_theta = np.sqrt(1-c_theta**2)
 
-        #projected separation on the lense plane
-        proj_sep = self.cc.comoving_distance(lzred).value * s_theta/c_theta # in h-1 Mpc
-
-        #considering only tangential shear and adding both contributions
-        #gamma = (self.hp.esd_nfw(proj_sep) + self.stel.esd_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
-        #kappa = (self.hp.sigma_nfw(proj_sep) + self.stel.sigma_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
-        gamma_s, gamma_dm, kappa_s, kappa_dm = self._get_g(logmstel, logmh, lzred, szred, proj_sep)
-        gamma = gamma_s + gamma_dm
-        kappa = kappa_s + kappa_dm
-
-        g = gamma/(1.0 - kappa)
-
         sflag = (s_theta!=0) & (np.abs(kappa)<0.5)   #weak lensing flag and proximity flag
-        #sflag = (s_theta!=0) & (np.abs(kappa)<1.0)   #strong lensing flag and proximity flag
 
-        # phi to get the compute the tangential shear
-        c_phi   = np.clip( np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta, -1, 1 )
-        s_phi   = np.clip((-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta, -1, 1)
-
-
+        c_phi   =  np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta
+        s_phi   = (-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta
+        
         # tangential shear
         g_1     = - g*(2*c_phi**2 - 1)
         g_2     = - g*(2*c_phi * s_phi)
@@ -123,15 +129,13 @@ class simshear():
     def shear_src(self, lra, ldec, lzred, logmstel, logmh, sra, sdec, szred, se1, se2):
         "apply shear on to the source galaxies with given intrinsic shapes"
         g_1, g_2, etan, c_phi, s_phi, proj_sep, sflag = self.get_g(lra, ldec, lzred, logmstel, logmh, sra, sdec, szred)
-        #g_1, g_2, etan, c_phi, s_phi, proj_sep, sflag = self.get_g(sra, sdec, lzred, szred)
         g   = g_1 + 1j* g_2
         es  = se1 + 1j* se2  # intrinsic sizes
         #print(len(g_1), len(se1), len(szred))
         e   = 0.0*es # sheared shapes
         #using the seitz and schnider 1995 formalism to shear the galaxy
         idx = np.abs(g)<1
-        e[idx] = (es[idx] + g[idx])#/(1.0 + np.conj(g[idx])*es[idx])
-        #e[idx] = (es[idx] + g[idx])/(1.0 + np.conj(g[idx])*es[idx])
+        e[idx] = (es[idx] + g[idx])/(1.0 + np.conj(g[idx])*es[idx])
         e[~idx] = (1 + g[~idx]*np.conj(es[~idx]))/(np.conj(es[~idx]) + np.conj(g[~idx])) # mod(g)>1
         return np.real(e), np.imag(e), etan, proj_sep, sflag
 
@@ -146,15 +150,15 @@ def get_et_ex(lra, ldec, sra, sdec, se1, se2):
     sra  = sra*np.pi/180
     sdec = sdec*np.pi/180
 
-    c_theta = np.clip(np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec), -1, 1)
+    c_theta = np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec)
     s_theta = np.sqrt(1-c_theta**2)
 
-    # phi to get the compute the tangential shear
-    c_phi   = np.clip(np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta, -1, 1)
-    s_phi   = np.clip((-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta, -1, 1)
+    c_phi   =  np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta
+    s_phi   = (-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta
+
     # tangential shear
     e_t     = - se1*(2*c_phi**2 -1) - se2*(2*c_phi * s_phi)
-    e_x     = - se1*(2*c_phi * s_phi) + se2*(2*c_phi**2 -1)
+    e_x     =  se1*(2*c_phi * s_phi) - se2*(2*c_phi**2 -1)
 
     return e_t, e_x
 
@@ -223,10 +227,12 @@ if __name__ == "__main__":
             
     #picking up the lens data
     lensargs = config['lens']
+    sourceargs = config['source']
+
     lid, lra, ldec, lzred, logmstel, logmh   = lens_select(lensargs)
 
 
-    np.random.seed(123)
+    np.random.seed(111)
 
     if args.ideal_case:
         logmstel = np.mean(logmstel) + np.random.normal(0,0.1, size=len(lra))
@@ -254,8 +260,8 @@ if __name__ == "__main__":
 
         # fixing the simulation aperture
         cc      = FlatLambdaCDM(H0=100, Om0 = config['Om0'])
-        thetamax = config['lens']['Rmax']/cc.comoving_distance(lzred[ii]).value * 180/np.pi
-        numbsrc = round(config['source']['nsrc'] * thetamax**2*60**2)      # area of square in deg^2 --> arcmin^2
+        thetamax = lensargs['Rmax']/cc.comoving_distance(lzred[ii]).value * 180/np.pi
+        numbsrc = round(sourceargs['nsrc'] * thetamax**2*60**2)      # area of square in deg^2 --> arcmin^2
         print('number of sources: ', numbsrc)
 
         if numbsrc==0:
@@ -263,29 +269,50 @@ if __name__ == "__main__":
         cdec    = np.random.uniform(np.cos((90 - (ldec[ii] - thetamax))*np.pi/180), np.cos((90 - (ldec[ii] + thetamax))*np.pi/180), numbsrc) # uniform over the sphere
         sdec    = (90.0 - np.arccos(cdec)*180/np.pi)
         sra     = lra[ii] + np.random.uniform(-thetamax, thetamax, numbsrc)
-
-        #np.random.seed(lid[ii])  # setting the seed to be the lens id
+        # setting the seed to be the lens id and selecting cleaner background
         szred = interp_szred(np.random.uniform(size=numbsrc))
+        sra   = sra[  (szred>(lzred[ii] + sourceargs['zdiff']))]  
+        sdec  = sdec[ (szred>(lzred[ii] + sourceargs['zdiff']))]
+        szred = szred[(szred>(lzred[ii] + sourceargs['zdiff']))]
+
         # intrinsic shapes
         if args.no_shape_noise:
             se1 = 0.0*sra
             se2 = 0.0*sra
         else:
-            se1 = np.random.normal(0.0, 0.27, int(len(sra)))
-            se2 = np.random.normal(0.0, 0.27, int(len(sra)))
+            se1 = np.random.normal(0.0, sourceargs['sige'], int(len(sra)))
+            se2 = np.random.normal(0.0, sourceargs['sige'], int(len(sra)))
             if args.rot90:
                 se1*=-1
                 se2*=-1
+
+        ## this section is only for testing purposes
+        #lra[ii] = 130
+        #ldec[ii] = 0.0
+
+        #se1 = 0.0*sra
+        #se2 = 0.0*sra
+        #sra = 0.0*sra + lra[ii]+ thetamax
+        #sdec = 0.0*sra +ldec[ii] 
+        #
+        ##.........................................#
+                
 
         s1, s2, etan, proj_sep, sflag = ss.shear_src(lra[ii], ldec[ii], lzred[ii], logmstel[ii], logmh[ii], sra, sdec, szred, se1, se2)
         if args.no_shear:
             s1 = se1
             s2 = se2
         et, ex = get_et_ex(lra[ii], ldec[ii], sra, sdec, s1, s2)
+        #print(etan)
+        #print(et)
+        #print(s1)
+        #print(ex)
+        #print(s2)
+        #exit()
 
         for jj in range(len(sra)):
         #weeding out to the strong lensing systems and foreground sources configuration
-            if (sflag[jj]!=1.0) or (szred[jj]<lzred[ii]):
+            if (sflag[jj]!=1.0) & (proj_sep[jj]<lensargs['Rmin']) & (proj_sep[jj]>lensargs['Rmax']):
                 continue
             fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lid[ii], lra[ii], ldec[ii], lzred[ii], logmstel[ii], logmh[ii], ss.conc, sra[jj], sdec[jj], szred[jj], s1[jj], s2[jj], etan[jj], et[jj], ex[jj], proj_sep[jj]))
 

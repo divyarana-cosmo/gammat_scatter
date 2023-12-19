@@ -19,8 +19,8 @@ class stellar(constants):
         if np.isscalar(r):
             r = np.array([r])
         val = self.avg_sigma_pointmass(r) - self.sigma_pointmass(r)
-        idx =  r<5e-3
-        val[idx] = 0.0
+        #idx =  r<5e-3
+        #val[idx] = 0.0
         return val
 
     def sigma_pointmass(self,r):
@@ -28,19 +28,19 @@ class stellar(constants):
         if np.isscalar(r):
             r = np.array([r])
         val = 0.0 * r
-        idx = r>0
-        if sum(idx)!=0:
-            val[idx]=0
+        #idx = r>0
+        #if sum(idx)!=0:
+        #    val[idx]=0
 
-        val[~idx] = np.inf
+        #val[~idx] = np.inf
         return val
 
     def avg_sigma_pointmass(self,r):
         """analytical average projected of pointmass profile"""
         if np.isscalar(r):
             r = np.array([r])
-        idx = r<5e-3
-        r[idx] = 5e-3
+        #idx = r<5e-3
+        #r[idx] = 5e-3
         return 10**self.log_mstel*1.0/(np.pi*r**2)
 
 if __name__ == "__main__":
