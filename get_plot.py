@@ -72,7 +72,7 @@ if __name__ == "__main__":
         df = pd.read_csv(fil, delim_whitespace=1)
         df = df[(df['proj_sep']>args.Rmin) & ( df['proj_sep']<args.Rmax)]
         etan_obs    =   np.append(etan_obs, df['etan_obs'])
-        ex_obs    =   np.append(ex_obs, df['ex_obs'])
+        ex_obs      =   np.append(ex_obs, df['ex_obs'])
         sep         =   np.append(sep, df['proj_sep'])
         lid         =   np.append(lid, df['lid'])
         #etan        =   np.append(etan, df['etan'])
@@ -85,9 +85,15 @@ if __name__ == "__main__":
 
     np.random.seed(123)
     ulid, indx = np.unique(lid, return_index=True)
-    logmstel =  logmstel[indx]
-    logmh   =   logmh[indx]
-    lzred   =   np.mean(lzred[indx])
+    logmstel   =  logmstel[indx]
+    logmh      =   logmh[indx]
+    lzred      =   lzred[indx]
+    ipik = np.random.choice(len(logmstel), size=100)
+    logmstel= logmstel[ipik] 
+    logmh   = logmh[ipik]    
+    lzred   = lzred[ipik]    
+
+
     szred   /=  (len(etan_obs))
 
     # assigning the jackknife indices
@@ -96,20 +102,25 @@ if __name__ == "__main__":
     xjkreg = jkreg[indices]
 
   
-    rbins = np.logspace(np.log10(args.Rmin), np.log10(args.Rmax), args.Rbins + 1)
-    yy = np.zeros((args.Njacks , args.Rbins))
-    yyx = np.zeros((args.Njacks , args.Rbins))
-    sigyy = np.zeros((args.Njacks , args.Rbins))
-    sigxyy = np.zeros((args.Njacks , args.Rbins))
+    rbins   = np.logspace(np.log10(args.Rmin), np.log10(args.Rmax), args.Rbins + 1)
+    yy      = np.zeros((args.Njacks , args.Rbins))
+    yyx     = np.zeros((args.Njacks , args.Rbins))
+    sigyy   = np.zeros((args.Njacks , args.Rbins))
+    sigxyy  = np.zeros((args.Njacks , args.Rbins))
     #yyerr = np.zeros((len(rbins[:-1]), args.Njacks))
     
     for ii in range(args.Njacks):
         for rr in range(args.Rbins):
             idx = (xjkreg !=ii) & (sep>rbins[rr]) & (sep<rbins[rr+1])
+            if sum(idx)==0:
+                print('yikes')
             yy[ii] [rr]  = np.mean(etan_obs[idx])
             yyx[ii][rr] = np.mean(ex_obs[idx])
 
             idx = (xjkreg !=ii) & (sep>rbins[0]) & (sep<(rbins[rr] + rbins[rr+1])*0.5)
+            if sum(idx)==0:
+                print('yikes')
+
             #idx = (xjkreg !=ii) & (sep>rbins[0]) & (sep<rbins[rr+1])
             sigyy[ii] [rr]  = np.std(etan_obs[idx])
             sigxyy[ii] [rr] = np.std(ex_obs[idx])
@@ -119,7 +130,7 @@ if __name__ == "__main__":
 
     sigyyerr = np.sqrt(args.Njacks -1) * np.std(sigyy, axis=0)
     sigxyyerr = np.sqrt(args.Njacks -1) * np.std(sigxyy, axis=0)
-
+    
     yy = np.mean(yy, axis=0)
     yyx = np.mean(yyx, axis=0)
     sigyy = np.mean(sigyy, axis=0)
@@ -127,51 +138,76 @@ if __name__ == "__main__":
     print(yyerr/yy)
     rbins = np.array((rbins[:-1] + rbins[1:])*0.5)
     print(rbins)
-    #tgamma_s, tgamma_d, tkappa_s, tkappa_d = ss._get_g(logmstel , logmh, lzred, szred, rbins)
+    tgamma_s = 0*rbins; tgamma_d = 0*rbins; tkappa_s = 0*rbins; tkappa_d = 0*rbins
+    for ll in range(100):
+        gamma_s, gamma_d, kappa_s, kappa_d = ss._get_g(logmstel[ll] , logmh[ll], lzred[ll], szred, rbins)
+
+        tgamma_s +=gamma_s
+        tgamma_d +=gamma_d
+        tkappa_s +=kappa_s
+        tkappa_d +=kappa_d
+
+    tgamma_s /=100
+    tgamma_d /=100
+    tkappa_s /=100
+    tkappa_d /=100  
+    print(tgamma_s, tgamma_d)
+
+   
+
     
 
-    #plt.subplot(2,2,1)
-    #plt.errorbar(rbins, yy, yerr=yyerr, fmt='.', capsize=3)
-    #plt.plot(rbins, tgamma_s, '--', label=r'Stellar, $\log[M_{\rm stel}/h^{-1}M_\odot] = %2.2f$'%logmstel)
-    #plt.plot(rbins, tgamma_d, '--', label=r'Dark matter, $\log[M_{\rm h}/h^{-1}M_\odot] = %2.2f $'%(logmh))
-    #plt.plot(rbins, tgamma_s + tgamma_d, '-k', label='total')
+    plt.subplot(2,2,1)
+    plt.errorbar(rbins, yy, yerr=yyerr, fmt='.', capsize=3)
+    if not args.no_shear:
+        plt.plot(rbins, tgamma_s, '--', label=r'Stellar')
+        plt.plot(rbins, tgamma_d, '--', label=r'Dark matter')
+        plt.plot(rbins, tgamma_s + tgamma_d, '-k', label='total')
  
-    #plt.ylabel(r'$\gamma_t$')
-    #plt.xlabel(r'$R[{\rm h^{-1} Mpc}]$')
-    #plt.ylim(1e-3, 1)
-    #
-    #plt.xscale('log')
-    #plt.yscale('log')
-    #plt.legend()
-
-    #plt.subplot(2,2,3)
-    #plt.plot(rbins, (yy - tgamma_s + tgamma_d)/yyerr, '-k', label='total')
+        plt.ylim(1e-3, 1)
+        plt.yscale('log')
+    plt.ylabel(r'$\gamma_t$')
+    plt.xlabel(r'$R[{\rm h^{-1} Mpc}]$')
+    
+    plt.xscale('log')
+    plt.legend()
+    
+    plt.subplot(2,2,3)
+    if args.no_shear:
+        plt.plot(rbins, yy/yyerr, '-k', label='total')
+    else:
+        plt.plot(rbins, (yy - (tgamma_s + tgamma_d))/yyerr, '-k', label='total')
  
-    #plt.ylabel(r'$\frac{\gamma^{\rm meas}_t - \gamma^{\rm mod}_t}{\sigma_{\gamma_{t}}}$')
-    #plt.xlabel(r'$R[{\rm h^{-1} Mpc}]$')
-    #plt.xscale('log')
-    #plt.legend()
+    plt.ylabel(r'$\frac{\gamma^{\rm meas}_t - \gamma^{\rm mod}_t}{\sigma_{\gamma_{t}}}$')
+    plt.xlabel(r'$R[{\rm h^{-1} Mpc}]$')
+    plt.xscale('log')
+    plt.legend()
 
+
+
+
+    
 
     plt.subplot(2,2,2)
     plt.errorbar(rbins, sigyy, yerr=sigyyerr, fmt='.', capsize=3, label=r'$\gamma_{\rm t}$')
     plt.errorbar(rbins, sigxyy, yerr=sigxyyerr, fmt='.', capsize=3, label=r'$\gamma_{\rm \times}$')
- 
-    plt.axhline(0.27, ls='--', color='grey')
+    if not args.no_shape_noise:
+        plt.ylim(0.24, 0.34)
+        plt.axhline(0.27, ls='--', color='grey')
+
     plt.ylabel(r'$\sigma (< R)$')
     plt.xlabel(r'$R[{\rm h^{-1} Mpc}]$')
-    plt.ylim(0.24, 0.34)
     
     plt.xscale('log')
     #plt.yscale('log')
     plt.legend()
 
-    #plt.subplot(2,2,4)
-    #plt.errorbar(rbins,yyx, yerr=yyxerr, fmt='.', capsize=3)
-    #plt.axhline(0.0, ls='--', color='grey')
-    #plt.ylabel(r'$\gamma_\times$')
-    #plt.xlabel(r'$R[{\rm h^{-1} Mpc}]$')
-    #plt.xscale('log')
+    plt.subplot(2,2,4)
+    plt.errorbar(rbins,yyx, yerr=yyxerr, fmt='.', capsize=3)
+    plt.axhline(0.0, ls='--', color='grey')
+    plt.ylabel(r'$\gamma_\times$')
+    plt.xlabel(r'$R[{\rm h^{-1} Mpc}]$')
+    plt.xscale('log')
 
 
 
@@ -181,6 +217,7 @@ if __name__ == "__main__":
     plt.tight_layout()
    
     plt.savefig(outputfilename.split('_proc_*')[0] + '.png', dpi=300)
+
 
 
 #def getzred(zred):
