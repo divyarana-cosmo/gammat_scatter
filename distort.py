@@ -25,6 +25,7 @@ import argparse
 import yaml
 from mpi4py import MPI
 from subprocess import  call
+import fitsio 
 #exit()
 class simshear():
     "simulated the shear for a given configuration of dark matter and stellar profiles"
@@ -130,7 +131,8 @@ class simshear():
         e   = 0.0*es # sheared shapes
         #using the seitz and schnider 1995 formalism to shear the galaxy
         idx = np.abs(g)<1
-        e[idx] = (es[idx] + g[idx])/(1.0 + np.conj(g[idx])*es[idx])
+        e[idx] = (es[idx] + g[idx])#/(1.0 + np.conj(g[idx])*es[idx])
+        #e[idx] = (es[idx] + g[idx])/(1.0 + np.conj(g[idx])*es[idx])
         e[~idx] = (1 + g[~idx]*np.conj(es[~idx]))/(np.conj(es[~idx]) + np.conj(g[~idx])) # mod(g)>1
         return np.real(e), np.imag(e), etan, proj_sep, sflag
 
@@ -222,11 +224,10 @@ if __name__ == "__main__":
             
     #picking up the lens data
     lensargs = config['lens']
-    lid, lra, ldec, lzred, logmstel, logmh   = lens_select(lensargs)
-
-
+    #lid, lra, ldec, lzred, logmstel, logmh   = lens_select(lensargs)
+    fname = './DataStore/micecatv2/15412.fits'
+    df = fitsio.FITS(fname)
     np.random.seed(123)
-
     if args.ideal_case:
         logmstel = np.mean(logmstel) + np.random.normal(0,0.1, size=len(lra))
         logmh = np.mean(logmh) + 0.0*logmh
@@ -235,10 +236,22 @@ if __name__ == "__main__":
     # putting the interpolation for source redshift assignment
     interp_szred = getszred()
 
-
+    nrows = df[1].get_nrows()
     comm = MPI.COMM_WORLD
     rank = comm.rank
     size = comm.size
+
+    x0 = int(rank*nrows/size)
+    x1 = int((rank + 1)*nrows/size)
+    df = df[1][df[1].where('flag_central == 0 && lmstellar > %2.2f && lmstellar < %2.2f && z_cgal_v > %2.2f && z_cgal_v < %2.2f'%(lensargs['logmstelmin'], lensargs['logmstelmax'], lensargs['zmin'], lensargs['zmax']), firstrow=x0, lastrow=x1)]
+
+    lid       =   df['unique_gal_id']
+    lra       =   df['ra_gal']
+    ldec      =   df['dec_gal'] 
+    lzred     =   df['z_cgal_v'] 
+    logmstel  =   df['lmstellar'] 
+    logmh     =   df['lmhalo']
+
     outputfilename = outputfilename + '_proc_%d'%rank
 
     #creating class instance
@@ -248,8 +261,8 @@ if __name__ == "__main__":
     fdata.write('lid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\n')
 
     for ii in tqdm(range(len(lra))):
-        if ii%size != rank :
-             continue
+        #if ii%size != rank :
+        #     continue
 
         # fixing the simulation aperture
         cc      = FlatLambdaCDM(H0=100, Om0 = config['Om0'])
