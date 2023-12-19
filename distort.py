@@ -130,7 +130,7 @@ def get_et_ex(lra, ldec, sra, sdec, se1, se2):
     s_phi   = np.clip((-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta, -1, 1)
     # tangential shear
     e_t     = - se1*(2*c_phi**2 -1) - se2*(2*c_phi * s_phi)
-    e_x     = - se1*(2*c_phi * s_phi) + se2*(2*c_phi**2 -1)
+    e_x     =  se1*(2*c_phi * s_phi) - se2*(2*c_phi**2 -1)
 
     return e_t, e_x
 
