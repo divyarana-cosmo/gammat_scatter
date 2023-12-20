@@ -220,6 +220,10 @@ if __name__ == "__main__":
     lensargs = config['lens']
     sourceargs = config['source']
 
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+
     lid, lra, ldec, lzred, logmstel, logmh, xjkreg   = lens_select(lensargs, Njacks=args.Njacks)
 
 
@@ -233,6 +237,8 @@ if __name__ == "__main__":
     # putting the interpolation for source redshift assignment
     interp_szred = getszred()
 
+    outputfilename = outputfilename + '_proc_%d'%rank
+
 
 
     #creating class instance
@@ -242,6 +248,8 @@ if __name__ == "__main__":
     fdata.write('lid\txjkreg\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\n')
 
     for ii in tqdm(range(len(lra))):
+        if ii%size != rank :
+             continue
 
         np.random.seed(666 + lid[ii])
         # fixing the simulation aperture
@@ -290,5 +298,5 @@ if __name__ == "__main__":
             fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lid[ii], xjkreg[ii], lra[ii], ldec[ii], lzred[ii], logmstel[ii], logmh[ii], ss.conc, sra[jj], sdec[jj], szred[jj], s1[jj], s2[jj], etan[jj], et[jj], ex[jj], proj_sep[jj]))
 
     fdata.close()
-
+    comm.Barrier()
 
