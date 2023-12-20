@@ -121,8 +121,8 @@ class simshear():
         # tangential shear
         g_1     = - g*(2*c_phi**2 - 1)
         g_2     = - g*(2*c_phi * s_phi)
-
-
+        
+        #return g_1[sflag==1], g_2[sflag==1], g[sflag==1], c_phi[sflag==1], s_phi[sflag==1], proj_sep[sflag==1]
         return g_1, g_2, g, c_phi, s_phi, proj_sep, sflag
 
 
@@ -189,12 +189,12 @@ if __name__ == "__main__":
     parser.add_argument("--outdir", help="Output filename with pairs information", default="debug")
     #parser.add_argument("--logmh", help="dark matter halo mass", type=float, default=12.0)
     parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=123)
-    parser.add_argument("--no_shape_noise", help="scatter halo mass", type=bool, default=False)
-    parser.add_argument("--no_shear", help="scatter halo mass", type=bool, default=False)
+    parser.add_argument("--no_shape_noise", help="for removing shape noise-testing purpose", type=bool, default=False)
+    parser.add_argument("--no_shear", help="for removing shear-testing purpose", type=bool, default=False)
     parser.add_argument("--ideal_case", help="testing the ideal case", type=bool, default=False)
-    parser.add_argument("--rot90", help="testing the ideal case", type=bool, default=False)
-    parser.add_argument("--logmstelmin", help="log stellar mass minimum", type=float, default=11.0)
-    parser.add_argument("--logmstelmax", help="log stellar mass maximum", type=float, default=13.0)
+    parser.add_argument("--rot90", help="rotating intrinsic shapes by 90 degrees", type=bool, default=False)
+    parser.add_argument("--logmstelmin", help="log stellar mass minimum-lense selection", type=float, default=11.0)
+    parser.add_argument("--logmstelmax", help="log stellar mass maximum-lense selection", type=float, default=13.0)
 
     args = parser.parse_args()
 
@@ -232,7 +232,7 @@ if __name__ == "__main__":
     lid, lra, ldec, lzred, logmstel, logmh   = lens_select(lensargs)
 
 
-    np.random.seed(111)
+    np.random.seed(666)
 
     if args.ideal_case:
         logmstel = np.mean(logmstel) + np.random.normal(0,0.1, size=len(lra))
@@ -261,7 +261,7 @@ if __name__ == "__main__":
         # fixing the simulation aperture
         cc      = FlatLambdaCDM(H0=100, Om0 = config['Om0'])
         thetamax = lensargs['Rmax']/cc.comoving_distance(lzred[ii]).value * 180/np.pi
-        numbsrc = round(sourceargs['nsrc'] * thetamax**2*60**2)      # area of square in deg^2 --> arcmin^2
+        numbsrc = round(sourceargs['nsrc'] * (2*thetamax)**2*60**2)      # area of square in deg^2 --> arcmin^2
         print('number of sources: ', numbsrc)
 
         if numbsrc==0:
@@ -269,7 +269,7 @@ if __name__ == "__main__":
         cdec    = np.random.uniform(np.cos((90 - (ldec[ii] - thetamax))*np.pi/180), np.cos((90 - (ldec[ii] + thetamax))*np.pi/180), numbsrc) # uniform over the sphere
         sdec    = (90.0 - np.arccos(cdec)*180/np.pi)
         sra     = lra[ii] + np.random.uniform(-thetamax, thetamax, numbsrc)
-        # setting the seed to be the lens id and selecting cleaner background
+        # selecting cleaner background
         szred = interp_szred(np.random.uniform(size=numbsrc))
         sra   = sra[  (szred>(lzred[ii] + sourceargs['zdiff']))]  
         sdec  = sdec[ (szred>(lzred[ii] + sourceargs['zdiff']))]
@@ -299,6 +299,10 @@ if __name__ == "__main__":
                 
 
         s1, s2, etan, proj_sep, sflag = ss.shear_src(lra[ii], ldec[ii], lzred[ii], logmstel[ii], logmh[ii], sra, sdec, szred, se1, se2)
+
+        if len(s1)==0:
+            continue
+
         if args.no_shear:
             s1 = se1
             s2 = se2
@@ -310,9 +314,9 @@ if __name__ == "__main__":
         #print(s2)
         #exit()
 
+        #fdata.write('lid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\n')
         for jj in range(len(sra)):
-        #weeding out to the strong lensing systems and foreground sources configuration
-            if (sflag[jj]!=1.0) & (proj_sep[jj]<lensargs['Rmin']) & (proj_sep[jj]>lensargs['Rmax']):
+            if (sflag[jj]!=0) & (proj_sep[jj]<lensargs['Rmin']) & (proj_sep[jj]>lensargs['Rmax']):
                 continue
             fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lid[ii], lra[ii], ldec[ii], lzred[ii], logmstel[ii], logmh[ii], ss.conc, sra[jj], sdec[jj], szred[jj], s1[jj], s2[jj], etan[jj], et[jj], ex[jj], proj_sep[jj]))
 

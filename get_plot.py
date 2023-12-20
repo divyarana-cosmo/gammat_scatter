@@ -85,6 +85,7 @@ if __name__ == "__main__":
 
     np.random.seed(123)
     ulid, indx = np.unique(lid, return_index=True)
+    print('number of lenses:', len(ulid))
     logmstel   =  logmstel[indx]
     logmh      =   logmh[indx]
     lzred      =   lzred[indx]
