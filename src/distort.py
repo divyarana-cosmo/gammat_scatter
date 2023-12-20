@@ -243,7 +243,7 @@ if __name__ == "__main__":
 
     for ii in tqdm(range(len(lra))):
 
-        np.random.seed(666 + lid[ii])
+        #np.random.seed(666 + lid[ii])
         # fixing the simulation aperture
         cc      = FlatLambdaCDM(H0=100, Om0 = config['Om0'])
         thetamax = lensargs['Rmax']/cc.comoving_distance(lzred[ii]).value * 180/np.pi
