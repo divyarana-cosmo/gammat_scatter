@@ -17,9 +17,9 @@ if __name__ == "__main__":
     parser.add_argument("--logmstelmin", help="log stellar mass minimum", type=float, default=11.0)
     parser.add_argument("--logmstelmax", help="log stellar mass maximum", type=float, default=13.0)
     parser.add_argument("--Njacks", help="number of jackknife samples", type=int, default=20)
-    parser.add_argument("--Rmin", help="minimum projected separation", type=float, default=0.02)
-    parser.add_argument("--Rmax", help="maximum projected separation", type=float, default=1.0)
-    parser.add_argument("--Rbins", help="number of radial bins", type=int, default=9)
+    parser.add_argument("--Rmin", help="minimum projected separation", type=float, default=0.01)
+    parser.add_argument("--Rmax", help="maximum projected separation", type=float, default=0.8)
+    parser.add_argument("--Rbins", help="number of radial bins", type=int, default=10)
     parser.add_argument("--no_shear", help="scatter halo mass", type=bool, default=False)
 
 
@@ -54,22 +54,15 @@ if __name__ == "__main__":
 
     #picking up the lens data
     lensargs = config['lens']
-    #outputfilename = outputfilename + '_proc_*'
-
+    outputfilename = outputfilename + '_proc_*'
 
     rbins   = np.logspace(np.log10(args.Rmin), np.log10(args.Rmax), args.Rbins + 1)
-
     sumd_etan_obs_num           = np.zeros(args.Rbins)
     sumd_ex_obs_num             = np.zeros(args.Rbins)
     sumd_wls                    = np.zeros(args.Rbins)     
-
     sumd_etan_obs_num_leq_r     = np.zeros(args.Rbins)
     sumd_ex_obs_num_leq_r       = np.zeros(args.Rbins)
     sumd_wls_leq_r              = np.zeros(args.Rbins)     
- 
-
-
-    
     # variables for the model predictions at the avg parameters
     logmstel    =   np.array([])
     logmh       =   np.array([])
@@ -78,7 +71,7 @@ if __name__ == "__main__":
 
     flist = glob(outputfilename)
     print(flist)
-    #computing the stack
+    #computing the stack averaged
     for fil in flist:
         df = pd.read_csv(fil, delim_whitespace=1)
         df = df[(df['proj_sep']>args.Rmin) & ( df['proj_sep']<args.Rmax)]
@@ -88,55 +81,36 @@ if __name__ == "__main__":
 
         for rr in range(args.Rbins):
             idx = (df['proj_sep']>rbins[rr]) & ( df['proj_sep']<rbins[rr+1])
-            sumd_etan_obs_num[rr]       = np.mean(df['etan_obs'][idx])
-            sumd_ex_obs_num[rr]         = np.mean(df['ex_obs'][idx])
-            sumd_wls[rr]                = sum(idx)
+            sumd_etan_obs_num[rr]       += sum(df['etan_obs'][idx])
+            sumd_ex_obs_num[rr]         += sum(df['ex_obs'][idx])
+            sumd_wls[rr]                += sum(idx)
 
-            #idx = (df['proj_sep']>rbins[0]) & ( df['proj_sep']<rbins[rr+1])
-            #sumd_etan_obs_num_leq_r[rr]       += sum(df['etan_obs'][idx])
-            #sumd_ex_obs_num_leq_r[rr]         += sum(df['ex_obs'][idx])
-            #sumd_wls_leq_r[rr]                += sum(idx)
+            idx = (df['proj_sep']>rbins[0]) & ( df['proj_sep']<(rbins[rr] + rbins[rr+1])*0.5)
+            sumd_etan_obs_num_leq_r[rr]       += sum(df['etan_obs'][idx])
+            sumd_ex_obs_num_leq_r[rr]         += sum(df['ex_obs'][idx])
+            sumd_wls_leq_r[rr]                += sum(idx)
  
 
     
-    etan = sumd_etan_obs_num #/sumd_wls
-    ex   = sumd_ex_obs_num#/sumd_wls
-    #etan = sumd_etan_obs_num/sumd_wls
-    #ex   = sumd_ex_obs_num/sumd_wls
-
-
-
+    etan = sumd_etan_obs_num /sumd_wls
+    ex   = sumd_ex_obs_num/sumd_wls
+    etan_leq_r = sumd_etan_obs_num_leq_r /sumd_wls_leq_r
+    ex_leq_r  = sumd_ex_obs_num_leq_r/sumd_wls_leq_r
+ 
     sumd_etan_obs_rms_num       = np.zeros(args.Rbins)
     sumd_ex_obs_rms_num         = np.zeros(args.Rbins)
 
     for fil in flist:
         df = pd.read_csv(fil, delim_whitespace=1)
         df = df[(df['proj_sep']>args.Rmin) & ( df['proj_sep']<args.Rmax)]
-
         for rr in range(args.Rbins):
-            idx = (df['proj_sep']>rbins[0]) & ( df['proj_sep']<rbins[rr+1])
+            idx = (df['proj_sep']>rbins[0]) & ( df['proj_sep']<(rbins[rr] + rbins[rr+1])*0.5)
+            sumd_etan_obs_rms_num[rr]   += sum((df['etan_obs'][idx] -  etan_leq_r[rr])**2)
+            sumd_ex_obs_rms_num[rr]     += sum((df['ex_obs'][idx]   -  ex_leq_r[rr])**2)
 
-            print(rbins[rr+1])
-            #sumd_etan_obs_rms_num[rr]   += sum((df['etan_obs'][idx] - np.mean( df['etan_obs'][idx]) )**2)
-            #sumd_ex_obs_rms_num[rr]     += sum((df['ex_obs'][idx] -   np.mean( df['ex_obs'][idx])   )**2)
+    sig_etan    = (sumd_etan_obs_rms_num/sumd_wls_leq_r)**0.5
+    sig_ex      = (sumd_ex_obs_rms_num/sumd_wls_leq_r)**0.5  
 
-            sumd_etan_obs_rms_num[rr]   = np.std(df['etan_obs'][idx])
-            sumd_ex_obs_rms_num[rr]     = np.std(df['ex_obs'][idx]) 
- 
-
-
-
-
-
-    sig_etan    = sumd_etan_obs_rms_num#[(sumd_etan_obs_rms_num/np.cumsum(sumd_wls))**0.5
-    sig_ex      = sumd_ex_obs_rms_num#r(sumd_ex_obs_rms_num/np.cumsum(sumd_wls))**0.5  
-
-    print(sig_etan)
-    print(np.std(df['etan_obs'][idx]))
-    print(sig_ex)
-
-    idx = (df['proj_sep']>rbins[0]) & ( df['proj_sep']<rbins[1])
-    print(np.std(df['ex_obs'][idx]))
    
     plt.subplot(2,2,1)
     plt.plot((rbins[:-1]+rbins[1:])*0.5, etan)

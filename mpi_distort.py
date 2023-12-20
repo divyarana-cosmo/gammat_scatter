@@ -2,6 +2,8 @@
 # the psf of Euclid part -- airy disk or check the preparation paper
 
 
+#needs updates
+
 import numpy as np
 import matplotlib.pyplot as plt
 #import galsim
