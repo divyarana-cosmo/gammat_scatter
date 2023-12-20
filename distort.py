@@ -1,13 +1,6 @@
-# check all the input equations to be sure of the computations
-# Please be cautions of all the units used in angles, distances and masses
-# start with only circular source galaxies with all same sizes
-# put in the intrinsic galaxy shapes -- need some galsim gimicks
-# make it config based
+# have to add the responsivity part
 # the psf of Euclid part -- airy disk or check the preparation paper
-# have to implement smhm properly with a scatter
-# put the argsparse in it
 
-# remember to clip the sin and cos to -1,1
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -131,7 +124,6 @@ class simshear():
         g_1, g_2, etan, c_phi, s_phi, proj_sep, sflag = self.get_g(lra, ldec, lzred, logmstel, logmh, sra, sdec, szred)
         g   = g_1 + 1j* g_2
         es  = se1 + 1j* se2  # intrinsic sizes
-        #print(len(g_1), len(se1), len(szred))
         e   = 0.0*es # sheared shapes
         #using the seitz and schnider 1995 formalism to shear the galaxy
         idx = np.abs(g)<1
@@ -187,7 +179,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--config", help="Configuration file")
     parser.add_argument("--outdir", help="Output filename with pairs information", default="debug")
-    #parser.add_argument("--logmh", help="dark matter halo mass", type=float, default=12.0)
     parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=123)
     parser.add_argument("--no_shape_noise", help="for removing shape noise-testing purpose", type=bool, default=False)
     parser.add_argument("--no_shear", help="for removing shear-testing purpose", type=bool, default=False)
@@ -243,10 +234,6 @@ if __name__ == "__main__":
     interp_szred = getszred()
 
 
-    comm = MPI.COMM_WORLD
-    rank = comm.rank
-    size = comm.size
-    outputfilename = outputfilename + '_proc_%d'%rank
 
     #creating class instance
     ss = simshear(H0 = config['H0'], Om0 = config['Om0'], Ob0 = config['Ob0'], Tcmb0 = config['Tcmb0'], Neff = config['Neff'], sigma8 = config['sigma8'], ns = config['ns'])
@@ -255,8 +242,6 @@ if __name__ == "__main__":
     fdata.write('lid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\n')
 
     for ii in tqdm(range(len(lra))):
-        if ii%size != rank :
-             continue
 
         # fixing the simulation aperture
         cc      = FlatLambdaCDM(H0=100, Om0 = config['Om0'])
@@ -307,20 +292,12 @@ if __name__ == "__main__":
             s1 = se1
             s2 = se2
         et, ex = get_et_ex(lra[ii], ldec[ii], sra, sdec, s1, s2)
-        #print(etan)
-        #print(et)
-        #print(s1)
-        #print(ex)
-        #print(s2)
-        #exit()
 
-        #fdata.write('lid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\n')
         for jj in range(len(sra)):
             if (sflag[jj]!=0) & (proj_sep[jj]<lensargs['Rmin']) & (proj_sep[jj]>lensargs['Rmax']):
                 continue
             fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lid[ii], lra[ii], ldec[ii], lzred[ii], logmstel[ii], logmh[ii], ss.conc, sra[jj], sdec[jj], szred[jj], s1[jj], s2[jj], etan[jj], et[jj], ex[jj], proj_sep[jj]))
 
     fdata.close()
-    comm.Barrier()
 
 
