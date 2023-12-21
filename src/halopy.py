@@ -10,7 +10,7 @@ class constants:
 
 class halo(constants):
     """Useful functions for weak lensing signal modelling"""
-    def __init__(self,log_mtot, con_par, omg_m=0.3, Rmin=0.005, Rmax=10, Rbins=100):
+    def __init__(self,log_mtot, con_par, omg_m=0.3, Rmin=0.005, Rmax=10, Rbins=80):
         self.m_tot = 10**log_mtot # total mass of the halo
         self.c = con_par # concentration parameter
         self.omg_m = omg_m
