@@ -21,7 +21,7 @@ from subprocess import  call
 
 class simshear():
     "simulated the shear for a given configuration of dark matter and stellar profiles"
-    def __init__(self, H0, Om0, Ob0, Tcmb0, Neff, sigma8, ns ):
+    def __init__(self, H0, Om0, Ob0, Tcmb0, Neff, sigma8, ns, lzredmin=0.0, lzredmax=1.0, szredmax=4.0):
         "initialize the parameters"
         #fixing the cosmology
         self.omg_m = Om0
@@ -31,7 +31,6 @@ class simshear():
         self.sigma8 = sigma8
         self.ns = ns
         self.cosmo_name='my_cosmo'
-
         print("fixing cosmology \n")
 
     def get_xyz(self, ra,dec):
@@ -42,7 +41,7 @@ class simshear():
         x = np.cos(phi)*np.sin(theta)
         return x,y,z  
 
-    def get_sigma_crit_inv(self, lzred, szred):
+    def _get_sigma_crit_inv(self, lzred, szred):
         "evaluates the lensing efficency geometrical factor"
         sigm_crit_inv = 0.0*szred + 0.0*lzred
         idx =  szred>lzred   # if sources are in foreground then lensing is zero
@@ -51,30 +50,38 @@ class simshear():
             szred = np.array([szred])
             idx = np.array([idx])
             sigm_crit_inv = np.array([sigm_crit_inv])
-        if sum(idx)==0:
-            return sigm_crit_inv
-        else:
-            # some important constants for the sigma crit computations
-            gee = 4.301e-9 #km^2 Mpc M_sun^-1 s^-2 gravitational constant
-            cee = 3e5 #km s^-1
-            # sigma_crit_calculations for a given lense-source pair
-            #sigm_crit_inv[idx] = self.Astropy_cosmo.angular_diameter_distance(lzred).value * self.Astropy_cosmo.angular_diameter_distance_z1z2(lzred, szred[idx]).value * (1.0 + lzred)**2 * 1.0/self.Astropy_cosmo.angular_diameter_distance(szred[idx]).value
-            sigm_crit_inv = self.Astropy_cosmo.angular_diameter_distance(lzred).value * self.Astropy_cosmo.angular_diameter_distance_z1z2(lzred, szred).value * (1.0 + lzred)**2 * 1.0/self.Astropy_cosmo.angular_diameter_distance(szred).value
-            sigm_crit_inv[idx]=0.0 
-            sigm_crit_inv = sigm_crit_inv * 4*np.pi*gee*1.0/cee**2
-            return sigm_crit_inv
+
+        # some important constants for the sigma crit computations
+        gee = 4.301e-9 #km^2 Mpc M_sun^-1 s^-2 gravitational constant
+        cee = 3e5 #km s^-1
+        # sigma_crit_calculations for a given lense-source pair
+        #sigm_crit_inv[idx] = self.Astropy_cosmo.angular_diameter_distance(lzred).value * self.Astropy_cosmo.angular_diameter_distance_z1z2(lzred, szred[idx]).value * (1.0 + lzred)**2 * 1.0/self.Astropy_cosmo.angular_diameter_distance(szred[idx]).value
+        sigm_crit_inv = self.Astropy_cosmo.angular_diameter_distance(lzred).value * self.Astropy_cosmo.angular_diameter_distance_z1z2(lzred, szred).value * (1.0 + lzred)**2 * 1.0/self.Astropy_cosmo.angular_diameter_distance(szred).value
+        sigm_crit_inv[~idx]=0.0 
+        sigm_crit_inv = sigm_crit_inv * 4*np.pi*gee*1.0/cee**2
+        return sigm_crit_inv
+
+
+    def _interp_get_sigma_crit_inv(self, lzred):
+        xx = np.linspace(lzred+1e-4,4.0, 150)
+        yy = np.log10(self._get_sigma_crit_inv(lzred, xx))
+        return interp1d(xx, yy, kind='cubic')
 
 
     def _get_g(self,logmstel, logmh, lconc, lzred, szred, proj_sep):
+        self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(lzred)
+
         #colossus_cosmo  = cosmology.fromAstropy(self.Astropy_cosmo, sigma8 = self.sigma8, ns = self.ns, cosmo_name=self.cosmo_name)
         self.conc       = lconc#concentration.concentration(10**logmh, '200m', lzred, model = 'diemer19')
         self.hp         = halo(logmh, self.conc, omg_m=self.omg_m)
         self.stel       = stellar(logmstel)
+        get_sigma_crit_inv =10**self.interp_get_sigma_crit_inv(szred) 
+
         #considering only tangential shear and adding both contributions
-        gamma_s     = (self.stel.esd_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
-        gamma_dm    = (self.hp.esd_nfw(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
-        kappa_s     = (self.stel.sigma_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
-        kappa_dm    = (self.hp.sigma_nfw(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
+        gamma_s     = (self.stel.esd_pointmass(proj_sep))   * get_sigma_crit_inv
+        gamma_dm    = (self.hp.esd_nfw(proj_sep))           * get_sigma_crit_inv
+        kappa_s     = (self.stel.sigma_pointmass(proj_sep)) * get_sigma_crit_inv
+        kappa_dm    = (self.hp.sigma_nfw(proj_sep))         * get_sigma_crit_inv
         return gamma_s, gamma_dm, kappa_s, kappa_dm
 
     def get_g(self, lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred):
@@ -90,7 +97,9 @@ class simshear():
         gamma = gamma_s + gamma_dm
         kappa = kappa_s + kappa_dm
 
-        g = gamma/(1.0 - kappa) # reduced shear
+        g    = gamma/(1.0 - kappa) # reduced shear
+        g_b  = gamma_s/(1.0 - kappa_s) # reduced shear
+        g_dm = gamma_dm/(1.0 - kappa_dm) # reduced shear
 
         # phi to get the compute the tangential shear
 
@@ -115,13 +124,12 @@ class simshear():
         g_1     = - g*(2*c_phi**2 - 1)
         g_2     = - g*(2*c_phi * s_phi)
         
-        #return g_1[sflag==1], g_2[sflag==1], g[sflag==1], c_phi[sflag==1], s_phi[sflag==1], proj_sep[sflag==1]
-        return g_1, g_2, g, c_phi, s_phi, proj_sep, sflag
+        return g_1, g_2, g, c_phi, s_phi, proj_sep, sflag, g_b, g_dm
 
 
     def shear_src(self, lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred, se1, se2):
         "apply shear on to the source galaxies with given intrinsic shapes"
-        g_1, g_2, etan, c_phi, s_phi, proj_sep, sflag = self.get_g(lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred)
+        g_1, g_2, etan, c_phi, s_phi, proj_sep, sflag, g_b, g_dm = self.get_g(lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred)
         g   = g_1 + 1j* g_2
         es  = se1 + 1j* se2 + 0.0*g  # intrinsic sizes
         e   = 0.0*es # sheared shapes
@@ -129,7 +137,7 @@ class simshear():
         idx = np.abs(g)<1
         e[idx] = (es[idx] + g[idx])/(1.0 + np.conj(g[idx])*es[idx])
         e[~idx] = (1 + g[~idx]*np.conj(es[~idx]))/(np.conj(es[~idx]) + np.conj(g[~idx])) # mod(g)>1
-        return np.real(e), np.imag(e), etan, proj_sep, sflag
+        return np.real(e), np.imag(e), etan, proj_sep, sflag, g_b, g_dm
 
 
 

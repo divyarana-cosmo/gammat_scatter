@@ -67,19 +67,33 @@ def get_interp_szred():
     return proj
 
 
+interp_szred = get_interp_szred()
 
-def create_sources(ramin, ramax, thetamin, thetamax, sigell=0.27, size=100000, mask=None): #mask application for future
+def create_sources(ra, dec, dismax, nsrc=30, sigell=0.27, mask=None): #mask application for future
+    "creates source around lens given angles in degrees"
+    ramin = (ra - dismax*180/np.pi )*np.pi/180
+    ramax = (ra + dismax*180/np.pi)*np.pi/180
+    thetamax =(90 - (dec - dismax*180/np.pi))*np.pi/180
+    thetamin =(90 - (dec + dismax*180/np.pi))*np.pi/180
+
+    area    = (ramax - ramin) * (np.cos(thetamin) - np.cos(thetamax))* (180*60/np.pi)**2
+    size    = round(nsrc * area)      # area of square in deg^2 --> arcmin^2
     cdec    = np.random.uniform(np.cos(thetamax), np.cos(thetamin), size=size)     
     sdec    = (90.0 - np.arccos(cdec)*180/np.pi)
     sra     = np.random.uniform(ramin, ramax, size=size)*180/np.pi
+    lx,ly,lz = get_xyz(ra, dec)
+    sx,sy,sz = get_xyz(sra, sdec)
+    #circular aperture
+    idx = ((sx-lx)**2 + (sy-ly)**2 + (sz-lz)**2)**0.5 < dismax
+    sra  = sra[idx]
+    sdec = sdec[idx]
 
     # putting the interpolation for source redshift assignment
-    interp_szred = get_interp_szred()
-    szred   =   interp_szred(np.random.uniform(size=size))
-    se1     =   np.random.normal(0.0, sigell, size) 
-    se2     =   np.random.normal(0.0, sigell, size)
+    szred   =   interp_szred(np.random.uniform(size=len(sra)))
+    se1     =   np.random.normal(0.0, sigell, len(sra)) 
+    se2     =   np.random.normal(0.0, sigell, len(sra))
     wgal    =   sra/sra
-    return np.transpose([sra, sdec, szred, wgal, se1, se2])
+    return sra, sdec, szred, wgal, se1, se2
 
 
 
@@ -96,6 +110,7 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
 
     #setting up cosmology and class instance
     ss = simshear(H0 = 100, Om0 = config['Om0'], Ob0 = config['Ob0'], Tcmb0 = config['Tcmb0'], Neff = config['Neff'], sigma8 = config['sigma8'], ns = config['ns'])
+
     colossus_cosmo  = cosmology.fromAstropy(ss.Astropy_cosmo, sigma8 = ss.sigma8, ns = ss.ns, cosmo_name=ss.cosmo_name)
 
 
@@ -106,142 +121,115 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     rbins  = np.logspace(np.log10(rmin), np.log10(rmax), nbins + 1)
     rdiff  = np.log10(rbins[1]*1.0/rbins[0])
 
+    sumdgammat_num      = np.zeros(nbins)
+    sumdgammat_inp_num  = np.zeros(nbins)
+    sumdgammat_inp_bary_num  = np.zeros(nbins)
+    sumdgammat_inp_dm_num  = np.zeros(nbins)
+    sumdgammatsq_num    = np.zeros(nbins)
+    sumdgammax_num      = np.zeros(nbins) 
+    sumdgammaxsq_num    = np.zeros(nbins)
+    sumwls              = np.zeros(nbins)
+
+
 
     # getting the lenses data
     lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
     lconc = 0.0*lid
-    for kk, mh in enumerate(10**llogmh):
-        lconc[kk]    = concentration.concentration(mh, '200m', lzred[kk], model = 'diemer19')
+    xx = np.linspace(9,16,100)
+    yy = 0.0*xx
+    med_lzred = np.median(lzred)
+
+    for kk, mh in enumerate(10**xx):
+        yy[kk]    = concentration.concentration(mh, '200m', med_lzred, model = 'diemer19')
+    spl_c_mh = interp1d(xx,np.log10(yy))
+
+    lconc = 10**spl_c_mh(llogmh)
+    print("lens data read fully")
+
+    np.random.seed(123)
+    #..................................#
+
+    for ii in tqdm(range(len(lra))):
+        # fixing the simulation aperture
+        dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(lzred[ii]).value 
+        sra, sdec, szred, wgal, se1, se2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell']) 
+        print("number of sources: ", len(sra))
+        # selecting cleaner background
+        scut    = (szred>(lzred[ii] + sourceargs['zdiff']))
+        sra     = sra[scut  ]  
+        sdec    = sdec[scut]
+        szred   = szred[scut]
+        wgal    = wgal[scut]
+        se1     = 0.0*se1[scut]
+        se2     = 0.0*se2[scut]
+
+        # add a section of stellar and dark matter
+        se1, se2, etan, proj_sep, sflag, etan_b, etan_dm = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra, sdec, szred, se1, se2)
+
+        et, ex  = get_et_ex(lra = lra[ii], ldec = ldec[ii], sra = sra, sdec = sdec, se1 = se1,  se2 = se2)
+        sl_sep  = proj_sep
+        w_ls    = lwgt[ii]*wgal
+        #cure the arrays a bin
+        idx = (sl_sep>rmin) & (sl_sep<rmax) & (sflag==1)
+        sl_sep      = sl_sep[idx]
+        w_ls        = w_ls[idx]
+        et          = et[idx]
+        etan        = etan[idx]   
+        etan_b      = etan_b[idx]
+        etan_dm     = etan_dm[idx]
+        ex          = ex[idx]  
+
+        slrbins = np.log10(sl_sep*1.0/rmin)//rdiff
+        for rb in range(nbins):
+            idx = slrbins==rb
+            sumdgammat_num[rb]              +=sum((w_ls * et)[idx])
+            sumdgammat_inp_num[rb]          +=sum((w_ls * etan)[idx])
+            sumdgammat_inp_bary_num[rb]     +=sum((w_ls * etan_b)[idx])
+            sumdgammat_inp_dm_num[rb]       +=sum((w_ls * etan_dm)[idx])
+            sumdgammatsq_num[rb]            +=sum(((w_ls* et)**2)[idx])
+            sumdgammax_num[rb]              +=sum((w_ls * ex)[idx])
+            sumdgammaxsq_num[rb]            +=sum(((w_ls* ex)**2)[idx])
+            sumwls[rb]                      +=sum(w_ls[idx])
 
 
-    # initializing arrays for signal compuations
-    sumdgammat_num      = np.zeros(len(rbins[:-1]))
-    sumdgammat_inp_num  = np.zeros(len(rbins[:-1]))
-    sumdgammatsq_num    = np.zeros(len(rbins[:-1]))
-    sumdgammax_num      = np.zeros(len(rbins[:-1]))
-    sumdgammaxsq_num    = np.zeros(len(rbins[:-1]))
-    sumwls              = np.zeros(len(rbins[:-1]))
 
 
-    # convert lense ra and dec into x,y,z cartesian coordinates
-    lx, ly, lz = get_xyz(lra, ldec)
-
-    # putting kd tree around the lenses
-    lens_tree = cKDTree(np.array([lx, ly, lz]).T)
 
 
-    print('lenses tree is ready\n')
 
-    # setting maximum search radius
-    dcommin = ss.Astropy_cosmo.comoving_distance(np.min(lzred)).value
-    dismax  = (rmax*1.0/(dcommin))
-    print(dismax)
 
-    # remember to provide angles in degrees
-    thetamax = (90 - np.min(ldec))* np.pi/180
-    thetamin = (90 - np.max(ldec))* np.pi/180
-    ramin   = np.min(lra)*np.pi/180
-    ramax   = np.max(lra)*np.pi/180
-    area    = (ramax - ramin) * (np.cos(thetamin) - np.cos(thetamax))* (180*60/np.pi)**2
-    nsrc = sourceargs['nsrc']
-    Ngal    = round(nsrc * area) # area of square in strradians --> arcmin^2
+        #for ll,sep in enumerate(sl_sep):
+        #    if sep<rmin or sep>rmax or sflag[ll]==0:
+        #        continue
+        #    rb = int(np.log10(sep*1.0/rmin)*1/rdiff)
 
-    # Ready to pounce on the source data
-    print("%s like sources created with sources:"%sourceargs['type'], Ngal)
-    # various columns in sources
-    # sra, sdec, szred, wgal, se1, se2
-    # looping over all the galaxies
-    
-    Nchunks = 10000
-    print('chunksize: ', int(Ngal/Nchunks))
-    chkbinedgs = np.linspace(1, Ngal, Nchunks+1, endpoint=True)
-    for cc in range(Nchunks):
-        chunksize = int(chkbinedgs[cc+1]) - int(chkbinedgs[cc])
-        datagal = create_sources(ramin, ramax, thetamin, thetamax, sigell=sourceargs['sigell'], size=chunksize)
-        #print(igal)
-        # first two entries are ra and dec for the sources
-        allragal  = datagal[:,0]
-        alldecgal = datagal[:,1]
-        # ra and dec to x,y,z for sources
-        allsx, allsy, allsz = get_xyz(allragal, alldecgal)
-        # query in a ball around individual sources and collect the lenses ids with a maximum radius
-        slidx = lens_tree.query_ball_point(np.transpose([allsx, allsy, allsz]), dismax)
- 
-        
-        for igal in range(chunksize):
-            ragal    = datagal[igal, 0]
-            decgal   = datagal[igal, 1]
-            zphotgal = datagal[igal, 2]
-            wgal     = datagal[igal, 3]
-            e1gal    = datagal[igal, 4]
-            e2gal    = datagal[igal, 5]
+        #    # get tangantial components given positions and shapes
 
-            lidx = np.array(slidx[igal])
-            # removing sources which doesn't have any lenses around them
-            if len(lidx)==0:
-                continue
+        #    # following equations given in the surhud's lectures
+        #    w_ls    = lwgt[ii] * wgal[ll]
 
-            # selecting a cleaner background
-            zcut = (lzred[lidx] < (zphotgal - zdiff)) #only taking the foreground lenses
-            # again skipping the onces which doesn't satisfy the above criteria
-            if np.sum(zcut)==0.0:
-                continue
-            # collecting the  data of lenses around individual source
-            lidx   = lidx[zcut] # this will catch the array indices for our lenses
-            sra    = ragal
-            sdec   = decgal
-            
-            #lid, lra, ldec, lzred, lwgt, logmstel, logmh, xjkreg 
-            
-            l_id        = lid[lidx]
-            l_ra        = lra[lidx]
-            l_dec       = ldec[lidx]
-            l_zred      = lzred[lidx]
-            l_wgt       = lwgt[lidx]
-            l_logmstel  = llogmstel[lidx]
-            l_logmh     = llogmh[lidx]
-            l_conc      = lconc[lidx]
-            l_xjkreg    = lxjkreg[lidx]
-            
-            e1gal, e2gal, etan, proj_sep, sflag = ss.shear_src(l_ra, l_dec, l_zred, l_logmstel, l_logmh, l_conc, ragal, decgal, zphotgal, e1gal, e2gal)
+        #    # separate numerator and denominator computation
+        #    sumdgammat_num[rb]              += w_ls  * et[ll]
+        #    sumdgammat_inp_num[rb]          += w_ls  * etan[ll]
+        #    sumdgammat_inp_bary_num[rb]     += w_ls  * etan_b[ll]
+        #    sumdgammat_inp_dm_num[rb]       += w_ls  * etan_dm[ll]
+        #    sumdgammatsq_num[rb]            += (w_ls * et[ll])**2
+        #    sumdgammax_num[rb]              += w_ls  * ex[ll]
+        #    sumdgammaxsq_num[rb]            += (w_ls * ex[ll])**2
+        #    sumwls[rb]                      += w_ls
 
-            # getting the radial separations for a lense source pair
-            sl_sep = proj_sep 
-            for ll,sep in enumerate(sl_sep):
-                if sep<rmin or sep>rmax or sflag[ll]==0:
-                    continue
-                rb = int(np.log10(sep*1.0/rmin)*1/rdiff)
 
-                # get tangantial components given positions and shapes
-                e_t, e_x = get_et_ex(lra = l_ra[ll], ldec = l_dec[ll], sra = sra, sdec = sdec, se1 = e1gal[ll],  se2 = e2gal[ll])
-
-                # following equations given in the surhud's lectures
-                w_ls    = l_wgt[ll] * wgal 
-
-                # separate numerator and denominator computation
-                sumdgammat_num[rb]       += w_ls  * e_t
-                sumdgammat_inp_num[rb]   += w_ls  * etan[ll]
-                sumdgammatsq_num[rb]     += (w_ls * e_t)**2
-                sumdgammax_num[rb]       += w_ls  * e_x
-                sumdgammaxsq_num[rb]     += (w_ls * e_x)**2
-                sumwls[rb]               += w_ls
-            
-
-       
-        print('done with chunk no-', cc)
-        #exit()
-    fout = open(outputfile, "w")
-    fout.write("# 0:rmin/2+rmax/2 1:gammat 2:SN_Errgammat 3:gammax 4:SN_Errgammax 5:truegamma\n")
+    fout = open(outputfilename, "w")
+    fout.write("# 0:rmin/2+rmax/2 1:gammat 2:SN_Errgammat 3:gammax 4:SN_Errgammax 5:truegamma 6:gammat_inp 7:gammat_inp_bary 8:gammat_inp_dm  \n")
     for i in range(len(rbins[:-1])):
         rrmin = rbins[i]
         rrmax = rbins[i+1]
        #Resp = sumwls_resp[i]*1.0/sumwls[i]
 
-        fout.write("%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[i]*1.0/sumwls[i], np.sqrt(sumdgammatsq_num[i])*1.0/sumwls[i], sumdgammax_num[i]*1.0/sumwls[i], np.sqrt(sumdgammaxsq_num[i])*1.0/sumwls[i], sumdgammat_inp_num[i]*1.0/sumwls[i]))
-        #fout.write("%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdsig_num[i]*1.0/sumwls[i]/2./Resp, np.sqrt(sumdsigsq_num[i])*1.0/sumwls[i]/2./Resp))
+        fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[i]*1.0/sumwls[i], np.sqrt(sumdgammatsq_num[    i])*1.0/sumwls[i], sumdgammax_num[i]*1.0/sumwls[i], np.sqrt(sumdgammaxsq_num[i])*1.0/sumwls[i], sumdgammat_inp_num[i]*1.0/sumwls[i], sumdgammat_inp_num[i]/sumwls[i], sumdgammat_inp_bary_num[i]/sumwls[i], sumdgammat_inp_dm_num[i]/sumwls[i])    )
+        #fout.write("%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdsig_num[i]*1.0/sumwls[i]/2./Resp, np.sqrt(sumdsigsq_num[i])*1.0/sumw    ls[i]/2./Resp))
     fout.write("#OK")
     fout.close()
-
     return 0
 
 
