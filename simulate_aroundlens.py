@@ -69,7 +69,7 @@ def get_interp_szred():
 
 interp_szred = get_interp_szred()
 
-def create_sources(ra, dec, dismax, nsrc=30, sigell=0.27, mask=None): #mask application for future
+def create_sources(ra, dec, dismin, dismax, nsrc=30, sigell=0.27, mask=None): #mask application for future
     "creates source around lens given angles in degrees"
     ramin = (ra - dismax*180/np.pi )*np.pi/180
     ramax = (ra + dismax*180/np.pi)*np.pi/180
@@ -83,8 +83,9 @@ def create_sources(ra, dec, dismax, nsrc=30, sigell=0.27, mask=None): #mask appl
     sra     = np.random.uniform(ramin, ramax, size=size)*180/np.pi
     lx,ly,lz = get_xyz(ra, dec)
     sx,sy,sz = get_xyz(sra, sdec)
-    #circular aperture
-    idx = ((sx-lx)**2 + (sy-ly)**2 + (sz-lz)**2)**0.5 < dismax
+    #annulus aperture
+    sep =  ((sx-lx)**2 + (sy-ly)**2 + (sz-lz)**2)**0.5
+    idx =  (sep>dismin) & (sep < dismax)
     sra  = sra[idx]
     sdec = sdec[idx]
 
@@ -152,7 +153,8 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     for ii in tqdm(range(len(lra))):
         # fixing the simulation aperture
         dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(lzred[ii]).value 
-        sra, sdec, szred, wgal, se1, se2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell']) 
+        dismin = config['Rmin']/ss.Astropy_cosmo.comoving_distance(lzred[ii]).value 
+        sra, sdec, szred, wgal, se1, se2 = create_sources(lra[ii], ldec[ii], dismin, dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell']) 
         print("number of sources: ", len(sra))
         # selecting cleaner background
         scut    = (szred>(lzred[ii] + sourceargs['zdiff']))
