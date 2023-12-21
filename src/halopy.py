@@ -10,14 +10,20 @@ class constants:
 
 class halo(constants):
     """Useful functions for weak lensing signal modelling"""
-    def __init__(self,log_mtot, con_par, omg_m=0.3):
+    def __init__(self,log_mtot, con_par, omg_m=0.3, Rmin=0.005, Rmax=10, Rbins=100):
         self.m_tot = 10**log_mtot # total mass of the halo
         self.c = con_par # concentration parameter
         self.omg_m = omg_m
         self.rho_crt = 3*self.H0**2/(8*np.pi*self.G) # rho critical
         self.r_200 = (3*self.m_tot/(4*np.pi*200*self.rho_crt*self.omg_m ))**(1./3.) # radius defines size of the halo
         self.rho_0 = con_par**3 *self.m_tot/(4*np.pi*self.r_200**3 *(np.log(1+con_par)-con_par/(1+con_par)))
-        self.init_sigma = False
+
+        self.spl_esd_rmin   = Rmin
+        self.spl_esd_rmax   = Rmax
+        self.spl_esd_rbins  = Rbins
+
+        self.init_spl_esd_nfw = False
+        self.init_spl_sigma_nfw = False
         #print("Intialing NFW parameters\n log_mtot = %s h-1 M_sun\nconc_parm = %s\nrho_0 = %s h-1 M_sun/(h-3 Mpc^3)\n r_s = %s h-1 Mpc"%(log_mtot,con_par,self.rho_0,self.r_200/self.c))
         #print("Intialing NFW parameters\n log_Mh = %s\n conc_parm = %s"%(log_mtot, con_par))
 
@@ -27,7 +33,7 @@ class halo(constants):
         value  = self.rho_0/((r/r_s)*(1+r/r_s)**2)
         return value
 
-    def esd_nfw(self,r):
+    def _esd_nfw(self,r):
         """ESD profile from analytical predictions"""
         if np.isscalar(r):
             r = np.array([r])
@@ -37,6 +43,29 @@ class halo(constants):
         #idx = r<5e-3
         #sig[idx]= 0.0
         return sig
+
+    def _spl_esd_nfw(self):
+        """ESD profile from analytical predictions"""
+        xxarr = np.logspace(np.log10(self.spl_esd_rmin), np.log10(self.spl_esd_rmax), self.spl_esd_rbins) 
+        yyarr = 0.0*xxarr
+        for ii in range(len(yyarr)):
+            yyarr[ii] = self._esd_nfw(xxarr[ii])
+         
+        self.spl_loglog_esd_nfw = interp1d(np.log10(xxarr), np.log10(yyarr), kind='cubic') 
+
+        self.init_spl_esd_nfw = True
+        return 
+
+    def esd_nfw(self,r):
+        """ESD profile from analytical predictions"""
+        if not self.init_spl_esd_nfw:
+            self._spl_esd_nfw()
+
+        if np.isscalar(r):
+            r = np.array([r])
+        sig = 10**self.spl_loglog_esd_nfw(np.log10(r))
+        return sig
+
 
 
     def avg_sigma_nfw(self,r):
@@ -62,7 +91,7 @@ class halo(constants):
         return sig
 
 
-    def sigma_nfw(self,r):
+    def _sigma_nfw(self,r):
         """analytical projection of NFW"""
         if np.isscalar(r):
             r = np.array([r])
@@ -84,6 +113,32 @@ class halo(constants):
             value[idx] = 1./3.
         sig = value*k
         return sig
+
+
+    def _spl_sigma_nfw(self):
+        """analytical projection of NFW"""
+        xxarr = np.logspace(np.log10(self.spl_esd_rmin), np.log10(self.spl_esd_rmax), self.spl_esd_rbins) 
+        yyarr = 0.0*xxarr
+        for ii in range(len(yyarr)):
+            yyarr[ii] = self._sigma_nfw(xxarr[ii])
+         
+        self.spl_loglog_sigma_nfw = interp1d(np.log10(xxarr), np.log10(yyarr), kind='cubic') 
+
+        self.init_spl_sigma_nfw = True
+ 
+        return
+    def sigma_nfw(self,r):
+        """ESD profile from analytical predictions"""
+        if not self.init_spl_sigma_nfw:
+            self._spl_sigma_nfw()
+
+        if np.isscalar(r):
+            r = np.array([r])
+        sig = 10**self.spl_loglog_sigma_nfw(np.log10(r))
+        return sig
+
+
+
 
     def num_sigma(self,Rarr):
         """numerical test to the analytical part"""
