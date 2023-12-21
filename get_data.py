@@ -60,20 +60,26 @@ def get_rands_wgts(rra,rdec,ra,dec):
     return wgt
 
 
-def lens_select(lensargs, Njacks, size=None, rank=None):
+def lens_select(lensargs):
     if lensargs['type'] == "micecatv2" :
-        fname = './DataStore/micecatv2/15407.fits'
-        #fname = './DataStore/micecatv2/15412.fits'
+        #fname = './DataStore/micecatv2/15407.fits'
+        fname = './DataStore/micecatv2/15412.fits'
         df = fitsio.FITS(fname)
         df = df[1][df[1].where('flag_central == 0 && lmstellar > %2.2f && lmstellar < %2.2f && z_cgal_v > %2.2f && z_cgal_v < %2.2f'%(lensargs['logmstelmin'], lensargs['logmstelmax'], lensargs['zmin'], lensargs['zmax']))]
-        sys.stdout.write("Number of lenses: %d \n" % (len(df['ra_gal'])))
+
+        lid         = df['unique_gal_id']
+        lra         = df['ra_gal']  
+        ldec        = df['dec_gal'] 
+        lzred       = df['z_cgal_v']
+        lwgt        = lra/lra 
+        llogmstel   = df['lmstellar']
+        llogmh      = df['lmhalo']
+
         np.random.seed(123)
-
-        return df['unique_gal_id'], df['ra_gal'], df['dec_gal'], df['z_cgal_v'], df['lmstellar'], df['lmhalo'], np.random.randint(Njacks, size=len(df['ra_gal']))
-
-
-
-
+        Njacks = lensargs['Njacks']
+        lxjkreg     = np.random.randint(Njacks, size=len(lra))
+        sys.stdout.write("Number of lenses: %d \n" % (len(df['ra_gal'])))
+        return lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg  
 
 
 
@@ -89,26 +95,6 @@ def lens_select(lensargs, Njacks, size=None, rank=None):
 
 
 
-#        if size is None or rank is None:
-#            df = df[1][df[1].where('flag_central == 0 && lmstellar > %2.2f && lmstellar < %2.2f && z_cgal_v > %2.2f && z_cgal_v < %2.2f'%(lensargs['logmstelmin'], lensargs['logmstelmax'], lensargs['zmin'], lensargs['zmax']))]
-#            sys.stdout.write("Number of lenses: %d \n" % (len(df['ra_gal'])))
-#            np.random.seed(123)
-#            return df['unique_gal_id'], df['ra_gal'], df['dec_gal'], df['z_cgal_v'], df['lmstellar'], df['lmhalo'], np.random.randint(Njacks, size=len(df['ra_gal']))
-#
-#        else:
-#            nrows = df[1].get_nrows()
-#            print(nrows)
-#            exit()
-#            rank = rank
-#            size = size
-#            
-#            r0 = int(rank*nrows/size)
-#            r1 = int((rank + 1)*nrows/size)
-#
-#            df = df[1][df[1].where('flag_central == 0 && lmstellar > %2.2f && lmstellar < %2.2f && z_cgal_v > %2.2f && z_cgal_v < %2.2f'%(lensargs['logmstelmin'], lensargs['logmstelmax'], lensargs['zmin'], lensargs['zmax']), firstrow=r0, lastrow=r1)]
-#            sys.stdout.write("Number of lenses: %d \n" % (len(df['ra_gal'])))
-#            np.random.seed(123+r0)
-#            return df['unique_gal_id'], df['ra_gal'], df['dec_gal'], df['z_cgal_v'], df['lmstellar'], df['lmhalo'], np.random.randint(Njacks, size=len(df['ra_gal']))
 
 
 
