@@ -12,7 +12,7 @@ class stellar(constants):
     """Useful functions for weak lensing signal modelling"""
     def __init__(self, log_mstel):
         self.log_mstel = log_mstel # total mass of the halo
-        print("Intialing point mass parameter\n log_mstel = %s"%(log_mstel))
+        #print("Intialing point mass parameter\n log_mstel = %s"%(log_mstel))
 
     def esd_pointmass(self,r):
         """ESD profile from analytical predictions"""

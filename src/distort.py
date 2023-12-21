@@ -26,8 +26,8 @@ class simshear():
         #fixing the cosmology
         self.omg_m = Om0
         params = dict(H0 = H0, Om0 = Om0, Ob0 = Ob0, Tcmb0 = Tcmb0, Neff = Neff)
-        self.cc = FlatLambdaCDM(**params)
-        colossus_cosmo = cosmology.fromAstropy(self.cc, sigma8 = sigma8, ns = ns, cosmo_name='my_cosmo')
+        self.Astropy_cosmo = FlatLambdaCDM(**params)
+        colossus_cosmo = cosmology.fromAstropy(self.Astropy_cosmo, sigma8 = sigma8, ns = ns, cosmo_name='my_cosmo')
         self.sigma8 = sigma8
         self.ns = ns
         self.cosmo_name='my_cosmo'
@@ -44,7 +44,7 @@ class simshear():
 
     def get_sigma_crit_inv(self, lzred, szred):
         "evaluates the lensing efficency geometrical factor"
-        sigm_crit_inv = 0.0*szred
+        sigm_crit_inv = 0.0*szred + 0.0*lzred
         idx =  szred>lzred   # if sources are in foreground then lensing is zero
         if np.isscalar(idx):
             lzred = np.array([lzred])
@@ -58,14 +58,16 @@ class simshear():
             gee = 4.301e-9 #km^2 Mpc M_sun^-1 s^-2 gravitational constant
             cee = 3e5 #km s^-1
             # sigma_crit_calculations for a given lense-source pair
-            sigm_crit_inv[idx] = self.cc.angular_diameter_distance(lzred).value * self.cc.angular_diameter_distance_z1z2(lzred, szred[idx]).value * (1.0 + lzred)**2 * 1.0/self.cc.angular_diameter_distance(szred[idx]).value
+            #sigm_crit_inv[idx] = self.Astropy_cosmo.angular_diameter_distance(lzred).value * self.Astropy_cosmo.angular_diameter_distance_z1z2(lzred, szred[idx]).value * (1.0 + lzred)**2 * 1.0/self.Astropy_cosmo.angular_diameter_distance(szred[idx]).value
+            sigm_crit_inv = self.Astropy_cosmo.angular_diameter_distance(lzred).value * self.Astropy_cosmo.angular_diameter_distance_z1z2(lzred, szred).value * (1.0 + lzred)**2 * 1.0/self.Astropy_cosmo.angular_diameter_distance(szred).value
+            sigm_crit_inv[idx]=0.0 
             sigm_crit_inv = sigm_crit_inv * 4*np.pi*gee*1.0/cee**2
             return sigm_crit_inv
 
 
-    def _get_g(self,logmstel, logmh, lzred, szred, proj_sep):
-        colossus_cosmo = cosmology.fromAstropy(self.cc, sigma8 = self.sigma8, ns = self.ns, cosmo_name=self.cosmo_name)
-        self.conc = concentration.concentration(10**logmh, '200m', lzred, model = 'diemer19')
+    def _get_g(self,logmstel, logmh, lconc, lzred, szred, proj_sep):
+        #colossus_cosmo  = cosmology.fromAstropy(self.Astropy_cosmo, sigma8 = self.sigma8, ns = self.ns, cosmo_name=self.cosmo_name)
+        self.conc       = lconc#concentration.concentration(10**logmh, '200m', lzred, model = 'diemer19')
         self.hp         = halo(logmh, self.conc, omg_m=self.omg_m)
         self.stel       = stellar(logmstel)
         #considering only tangential shear and adding both contributions
@@ -75,16 +77,16 @@ class simshear():
         kappa_dm    = (self.hp.sigma_nfw(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
         return gamma_s, gamma_dm, kappa_s, kappa_dm
 
-    def get_g(self, lra, ldec, lzred, logmstel, logmh, sra, sdec, szred):
+    def get_g(self, lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred):
         "computes the g1 and g2 components for the reduced shear"
         lx, ly, lz = self.get_xyz(lra, ldec) 
         sx, sy, sz = self.get_xyz(sra, sdec) 
 
         #projected separation on the lense plane
-        proj_sep = self.cc.comoving_distance(lzred).value * np.sqrt((sx-lx)**2 + (sy-ly)**2 + (sz-lz)**2) # in h-1 Mpc
+        proj_sep = self.Astropy_cosmo.comoving_distance(lzred).value * np.sqrt((sx-lx)**2 + (sy-ly)**2 + (sz-lz)**2) # in h-1 Mpc
 
         #considering only tangential shear and adding both contributions
-        gamma_s, gamma_dm, kappa_s, kappa_dm = self._get_g(logmstel, logmh, lzred, szred, proj_sep)
+        gamma_s, gamma_dm, kappa_s, kappa_dm = self._get_g(logmstel, logmh, lconc, lzred, szred, proj_sep)
         gamma = gamma_s + gamma_dm
         kappa = kappa_s + kappa_dm
 
@@ -98,10 +100,10 @@ class simshear():
         sdec = sdec*np.pi/180
 
         c_theta = np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec)
-        if sum(c_theta>1)>0 or sum(c_theta<-1)>0:
-            print('trigon screwed')
-            print(c_theta)
-            exit()
+        #if sum(c_theta>1)>0 or sum(c_theta<-1)>0:
+        #    print('trigon screwed')
+        #    print(c_theta)
+        #    exit()
         s_theta = np.sqrt(1-c_theta**2)
 
         sflag = (s_theta!=0) & (np.abs(kappa)<0.5)   #weak lensing flag and proximity flag
@@ -117,11 +119,11 @@ class simshear():
         return g_1, g_2, g, c_phi, s_phi, proj_sep, sflag
 
 
-    def shear_src(self, lra, ldec, lzred, logmstel, logmh, sra, sdec, szred, se1, se2):
+    def shear_src(self, lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred, se1, se2):
         "apply shear on to the source galaxies with given intrinsic shapes"
-        g_1, g_2, etan, c_phi, s_phi, proj_sep, sflag = self.get_g(lra, ldec, lzred, logmstel, logmh, sra, sdec, szred)
+        g_1, g_2, etan, c_phi, s_phi, proj_sep, sflag = self.get_g(lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred)
         g   = g_1 + 1j* g_2
-        es  = se1 + 1j* se2  # intrinsic sizes
+        es  = se1 + 1j* se2 + 0.0*g  # intrinsic sizes
         e   = 0.0*es # sheared shapes
         #using the seitz and schnider 1995 formalism to shear the galaxy
         idx = np.abs(g)<1
