@@ -119,16 +119,15 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     nbins = nbins #10 radial bins for our case
     rbins  = np.logspace(np.log10(rmin), np.log10(rmax), nbins + 1)
     rdiff  = np.log10(rbins[1]*1.0/rbins[0])
-    
-    Njacks = int(lensargs['Njacks'])
-    sumdgammat_num              = np.zeros(nbins*Njacks)
-    sumdgammat_inp_num          = np.zeros(nbins*Njacks)
-    sumdgammat_inp_bary_num     = np.zeros(nbins*Njacks)
-    sumdgammat_inp_dm_num       = np.zeros(nbins*Njacks)
-    sumdgammatsq_num            = np.zeros(nbins*Njacks)
-    sumdgammax_num              = np.zeros(nbins*Njacks) 
-    sumdgammaxsq_num            = np.zeros(nbins*Njacks)
-    sumdwls                     = np.zeros(nbins*Njacks)
+
+    sumdgammat_num      = np.zeros(nbins)
+    sumdgammat_inp_num  = np.zeros(nbins)
+    sumdgammat_inp_bary_num  = np.zeros(nbins)
+    sumdgammat_inp_dm_num  = np.zeros(nbins)
+    sumdgammatsq_num    = np.zeros(nbins)
+    sumdgammax_num      = np.zeros(nbins) 
+    sumdgammaxsq_num    = np.zeros(nbins)
+    sumdwls              = np.zeros(nbins)
 
 
 
@@ -139,12 +138,11 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     yy = 0.0*xx
     med_lzred = np.median(lzred)
 
-    #for kk, mh in enumerate(10**xx):
-    for kk, mh in enumerate(10**llogmh):
-        lconc[kk]    = concentration.concentration(mh, '200m', lzred[kk], model = 'diemer19')
-    #spl_c_mh = interp1d(xx,np.log10(yy))
+    for kk, mh in enumerate(10**xx):
+        yy[kk]    = concentration.concentration(mh, '200m', med_lzred, model = 'diemer19')
+    spl_c_mh = interp1d(xx,np.log10(yy))
 
-    #lconc = concentration.concentration(10**llogmh, '200m', lzred, model = 'diemer19')#spl_c_mh = interp10**spl_c_mh(llogmh)
+    lconc = 10**spl_c_mh(llogmh)
     print("lens data read fully")
 
     dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(np.min(lzred)).value 
@@ -157,13 +155,6 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     np.random.seed(123)
     weldict = {}
     weldictx = {}
-
-    fpairout = open(outputpairfile, "w")
-    fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\n')
-
-
-
-
     #..................................#
     for ii in tqdm(range(len(lra))):
         # fixing the simulation aperture
@@ -177,8 +168,8 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
         sdec    = sdec[scut]
         szred   = szred[scut]
         wgal    = wgal[scut]
-        se1     = se1[scut]
-        se2     = se2[scut]
+        se1     = 0.0*se1[scut]
+        se2     = 0.0*se2[scut]
 
         # add a section of stellar and dark matter
 
@@ -197,57 +188,58 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
         etan_b      = etan_b[idx]
         etan_dm     = etan_dm[idx]
         ex          = ex[idx]  
-        se1         = se1[idx]
-        se2         = se2[idx]
-        sra         = sra[idx]
-        sdec        = sdec[idx]
-        szred       = szred[idx]
-
-
-        for jj in range(sum(idx)):
-            fpairout.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lxjkreg[ii], lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra[jj], sdec[jj], szred[jj], se1[jj], se2[jj], etan[jj], et[jj], ex[jj], sl_sep[jj], w_ls[jj]))
-
-
-
         #exit()
         slrbins = np.log10(sl_sep*1.0/rmin)//rdiff
-
-        for jk in range(Njacks):
-            if lxjkreg[ii] == jk:
+        for rb in range(nbins):
+            idx = slrbins==rb
+            if sum(idx)==0:
                 continue
-
-            for rb in range(nbins):
-                idx = slrbins==rb
-                if sum(idx)==0:
-                    continue
-                try:
-                    weldict[jk*nbins + rb].add_all(np.array(w_ls * et)[idx])
-                    weldictx[jk*nbins + rb].add_all(np.array(w_ls * ex)[idx])
-                except:
-                    weldict[jk*nbins + rb] = Welford(np.array(w_ls * et)[idx])
-                    weldictx[jk*nbins + rb] = Welford(np.array(w_ls * ex)[idx])
-                    
-                sumdgammat_num[jk*nbins + rb]              +=sum((w_ls * et)[idx])
-                sumdgammat_inp_num[jk*nbins + rb]          +=sum((w_ls * etan)[idx])
-                sumdgammat_inp_bary_num[jk*nbins + rb]     +=sum((w_ls * etan_b)[idx])
-                sumdgammat_inp_dm_num[jk*nbins + rb]       +=sum((w_ls * etan_dm)[idx])
-                sumdgammatsq_num[jk*nbins + rb]            +=sum(((w_ls* et)**2)[idx])
-                sumdgammax_num[jk*nbins + rb]              +=sum((w_ls * ex)[idx])
-                sumdgammaxsq_num[jk*nbins + rb]            +=sum(((w_ls* ex)**2)[idx])
-                sumdwls[jk*nbins + rb]                      +=sum(w_ls[idx])
+            try:
+                weldict[rb].add_all(np.array(w_ls * et)[idx])
+                weldictx[rb].add_all(np.array(w_ls * ex)[idx])
+            except:
+                weldict[rb] = Welford(np.array(w_ls * et)[idx])
+                weldictx[rb] = Welford(np.array(w_ls * ex)[idx])
+                
+            sumdgammat_num[rb]              +=sum((w_ls * et)[idx])
+            sumdgammat_inp_num[rb]          +=sum((w_ls * etan)[idx])
+            sumdgammat_inp_bary_num[rb]     +=sum((w_ls * etan_b)[idx])
+            sumdgammat_inp_dm_num[rb]       +=sum((w_ls * etan_dm)[idx])
+            sumdgammatsq_num[rb]            +=sum(((w_ls* et)**2)[idx])
+            sumdgammax_num[rb]              +=sum((w_ls * ex)[idx])
+            sumdgammaxsq_num[rb]            +=sum(((w_ls* ex)**2)[idx])
+            sumdwls[rb]                      +=sum(w_ls[idx])
 
 
-    fpairout.close()
+        #for ll,sep in enumerate(sl_sep):
+        #    if sep<rmin or sep>rmax or sflag[ll]==0:
+        #        continue
+        #    rb = int(np.log10(sep*1.0/rmin)*1/rdiff)
+
+        #    # get tangantial components given positions and shapes
+
+        #    # following equations given in the surhud's lectures
+        #    w_ls    = lwgt[ii] * wgal[ll]
+
+        #    # separate numerator and denominator computation
+        #    sumdgammat_num[rb]              += w_ls  * et[ll]
+        #    sumdgammat_inp_num[rb]          += w_ls  * etan[ll]
+        #    sumdgammat_inp_bary_num[rb]     += w_ls  * etan_b[ll]
+        #    sumdgammat_inp_dm_num[rb]       += w_ls  * etan_dm[ll]
+        #    sumdgammatsq_num[rb]            += (w_ls * et[ll])**2
+        #    sumdgammax_num[rb]              += w_ls  * ex[ll]
+        #    sumdgammaxsq_num[rb]            += (w_ls * ex[ll])**2
+        #    sumdwls[rb]                      += w_ls
+
 
     fout = open(outputfilename, "w")
-    fout.write("# 0:rmin/2+rmax/2 1:gammat 2:SN_Errgammat 3:gammax 4:SN_Errgammax 5:truegamma 6:gammat_inp 7:gammat_inp_bary 8:gammat_inp_dm 9:sumd_wls 10:welford_gammat_mean 11:welford_gammat_std 12:welford_counts 13:welford_gammax_mean 14:welford_gammax_std 15:Jkid \n")
-    for jk in range(Njacks):
-        for i in range(nbins):
-            rrmin = rbins[i]
-            rrmax = rbins[i+1]
-           #Resp = sumdwls_resp[i]*1.0/sumdwls[i]
+    fout.write("# 0:rmin/2+rmax/2 1:gammat 2:SN_Errgammat 3:gammax 4:SN_Errgammax 5:truegamma 6:gammat_inp 7:gammat_inp_bary 8:gammat_inp_dm 9:sumd_wls 10:welford_gammat_mean 11:welford_gammat_std 12:welford_counts 10:welford_gammax_mean 11:welford_gammax_std \n")
+    for i in range(len(rbins[:-1])):
+        rrmin = rbins[i]
+        rrmax = rbins[i+1]
+       #Resp = sumdwls_resp[i]*1.0/sumdwls[i]
 
-            fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], weldict[jk*nbins + i].mean, weldict[jk*nbins + i].var_p**0.5, weldict[jk*nbins + i].count, weldictx[jk*nbins + i].mean, weldictx[jk*nbins + i].var_p**0.5, jk)    )
+        fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[i]*1.0/sumdwls[i], np.sqrt(sumdgammatsq_num[    i])*1.0/sumdwls[i], sumdgammax_num[i]*1.0/sumdwls[i], np.sqrt(sumdgammaxsq_num[i])*1.0/sumdwls[i], sumdgammat_inp_num[i]*1.0/sumdwls[i], sumdgammat_inp_num[i]/sumdwls[i], sumdgammat_inp_bary_num[i]/sumdwls[i], sumdgammat_inp_dm_num[i]/sumdwls[i], sumdwls[i], weldict[i].mean, weldict[i].var_p**0.5, weldict[i].count, weldictx[i].mean, weldictx[i].var_p**0.5)    )
         #fout.write("%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdsig_num[i]*1.0/sumwls[i]/2./Resp, np.sqrt(sumdsigsq_num[i])*1.0/sumw    ls[i]/2./Resp))
     fout.write("#OK")
     fout.close()
@@ -303,25 +295,6 @@ if __name__ == "__main__":
         outputfilename = outputfilename + '_no_shear'
     
     np.random.seed(args.seed)
-    run_pipe(config, outputfile = outputfilename, outputpairfile = outputfilename + '_pairs')           
 
-        #for ll,sep in enumerate(sl_sep):
-        #    if sep<rmin or sep>rmax or sflag[ll]==0:
-        #        continue
-        #    rb = int(np.log10(sep*1.0/rmin)*1/rdiff)
-
-        #    # get tangantial components given positions and shapes
-
-        #    # following equations given in the surhud's lectures
-        #    w_ls    = lwgt[ii] * wgal[ll]
-
-        #    # separate numerator and denominator computation
-        #    sumdgammat_num[rb]              += w_ls  * et[ll]
-        #    sumdgammat_inp_num[rb]          += w_ls  * etan[ll]
-        #    sumdgammat_inp_bary_num[rb]     += w_ls  * etan_b[ll]
-        #    sumdgammat_inp_dm_num[rb]       += w_ls  * etan_dm[ll]
-        #    sumdgammatsq_num[rb]            += (w_ls * et[ll])**2
-        #    sumdgammax_num[rb]              += w_ls  * ex[ll]
-        #    sumdgammaxsq_num[rb]            += (w_ls * ex[ll])**2
-        #    sumdwls[rb]                      += w_ls
+    run_pipe(config, outputfile = outputfilename)           
 
