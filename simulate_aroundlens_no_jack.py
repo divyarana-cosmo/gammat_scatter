@@ -133,16 +133,21 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
 
     # getting the lenses data
     lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
+    llogmh = 14 + 0.0*llogmh
+    lzred = 0.4 + 0.0*lzred
     lconc = 0.0*lid
     xx = np.linspace(9,16,100)
     yy = 0.0*xx
     med_lzred = np.median(lzred)
 
-    for kk, mh in enumerate(10**xx):
-        yy[kk]    = concentration.concentration(mh, '200m', med_lzred, model = 'diemer19')
-    spl_c_mh = interp1d(xx,np.log10(yy))
+    #for kk, mh in enumerate(10**xx):
+    #    yy[kk]    = concentration.concentration(mh, '200m', med_lzred, model = 'diemer19')
 
-    lconc = 10**spl_c_mh(llogmh)
+    for kk, mh in enumerate(10**llogmh):
+        lconc[kk]    = concentration.concentration(mh, '200m', lzred[kk], model = 'diemer19')
+ 
+    #spl_c_mh = interp1d(xx,np.log10(yy))
+    #lconc = 10**spl_c_mh(llogmh)
     print("lens data read fully")
 
     dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(np.min(lzred)).value 
@@ -160,6 +165,7 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
         # fixing the simulation aperture
         sra, sdec, szred, wgal, se1, se2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell']) 
 
+        szred = 0.8 + 0.0*sra
 
         print("number of sources: ", len(sra))
         # selecting cleaner background

@@ -134,6 +134,9 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
 
     # getting the lenses data
     lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
+    if config['test_case']:
+        llogmh = 14 + 0.0*llogmh
+        lzred = 0.4 + 0.0*lzred
     lconc = 0.0*lid
     xx = np.linspace(9,16,100)
     yy = 0.0*xx
@@ -142,7 +145,7 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     #for kk, mh in enumerate(10**xx):
     for kk, mh in enumerate(10**llogmh):
         lconc[kk]    = concentration.concentration(mh, '200m', lzred[kk], model = 'diemer19')
-    #spl_c_mh = interp1d(xx,np.log10(yy))
+    
 
     #lconc = concentration.concentration(10**llogmh, '200m', lzred, model = 'diemer19')#spl_c_mh = interp10**spl_c_mh(llogmh)
     print("lens data read fully")
@@ -168,6 +171,15 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     for ii in tqdm(range(len(lra))):
         # fixing the simulation aperture
         sra, sdec, szred, wgal, se1, se2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell']) 
+        if config['test_case']:
+            szred = 0.8 + 0.0*sra
+        if sourceargs['rot90']:
+            se1 = -1*se1
+            se2 = -1*se2
+        if sourceargs['no_shape_noise']:
+            se1 = 0.0*se1
+            se2 = 0.0*se2
+            
 
 
         print("number of sources: ", len(sra))
@@ -267,7 +279,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=123)
     parser.add_argument("--no_shape_noise", help="for removing shape noise-testing purpose", type=bool, default=False)
     parser.add_argument("--no_shear", help="for removing shear-testing purpose", type=bool, default=False)
-    parser.add_argument("--ideal_case", help="testing the ideal case", type=bool, default=False)
+    parser.add_argument("--test_case", help="testing the ideal case", type=bool, default=False)
     parser.add_argument("--rot90", help="rotating intrinsic shapes by 90 degrees", type=bool, default=False)
     parser.add_argument("--logmstelmin", help="log stellar mass minimum-lense selection", type=float, default=11.0)
     parser.add_argument("--logmstelmax", help="log stellar mass maximum-lense selection", type=float, default=13.0)
@@ -277,8 +289,6 @@ if __name__ == "__main__":
 
     with open(args.config, 'r') as ymlfile:
         config = yaml.safe_load(ymlfile)
-    print(config)
-
     #make the directory for the output
     from subprocess import call
     call("mkdir -p %s" % (config["outputdir"]), shell=1)
@@ -289,6 +299,11 @@ if __name__ == "__main__":
         config['lens']['logmstelmin'] = args.logmstelmin
     if 'logmstelmax'not in config:
         config['lens']['logmstelmax'] = args.logmstelmax
+    
+    config['source']['rot90'] = args.rot90
+    config['source']['no_shape_noise'] = args.no_shape_noise
+
+    config['test_case'] = args.test_case
 
     outputfilename = outputfilename + '_lmstelmin_%2.2f_lmstelmax_%2.2f'%(args.logmstelmin, args.logmstelmax)
 
@@ -301,8 +316,12 @@ if __name__ == "__main__":
 
     if args.no_shear:
         outputfilename = outputfilename + '_no_shear'
+    if args.test_case:
+        outputfilename = outputfilename + '_test_case'
     
     np.random.seed(args.seed)
+    outputfilename = outputfilename + '_w_jacks'
+    print(config)
     run_pipe(config, outputfile = outputfilename, outputpairfile = outputfilename + '_pairs')           
 
         #for ll,sep in enumerate(sl_sep):
