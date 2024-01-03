@@ -137,6 +137,8 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     if config['test_case']:
         llogmh = 14 + 0.0*llogmh
         lzred = 0.4 + 0.0*lzred
+
+    lzredmax = np.max(lzred)
     lconc = 0.0*lid
     xx = np.linspace(9,16,100)
     yy = 0.0*xx
@@ -184,7 +186,8 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
 
         print("number of sources: ", len(sra))
         # selecting cleaner background
-        scut    = (szred>(lzred[ii] + sourceargs['zdiff']))
+        scut    = (szred>(lzredmax + sourceargs['zdiff'])) # zdiff cut
+
         sra     = sra[scut  ]  
         sdec    = sdec[scut]
         szred   = szred[scut]
@@ -236,16 +239,16 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
                     weldict[jk*nbins + rb].add_all(np.array(w_ls * et)[idx])
                     weldictx[jk*nbins + rb].add_all(np.array(w_ls * ex)[idx])
                 except:
-                    weldict[jk*nbins + rb] = Welford(np.array(w_ls * et)[idx])
+                    weldict[jk*nbins + rb]  = Welford(np.array(w_ls * et)[idx])
                     weldictx[jk*nbins + rb] = Welford(np.array(w_ls * ex)[idx])
                     
-                sumdgammat_num[jk*nbins + rb]              +=sum((w_ls * et)[idx])
-                sumdgammat_inp_num[jk*nbins + rb]          +=sum((w_ls * etan)[idx])
-                sumdgammat_inp_bary_num[jk*nbins + rb]     +=sum((w_ls * etan_b)[idx])
-                sumdgammat_inp_dm_num[jk*nbins + rb]       +=sum((w_ls * etan_dm)[idx])
-                sumdgammatsq_num[jk*nbins + rb]            +=sum(((w_ls* et)**2)[idx])
-                sumdgammax_num[jk*nbins + rb]              +=sum((w_ls * ex)[idx])
-                sumdgammaxsq_num[jk*nbins + rb]            +=sum(((w_ls* ex)**2)[idx])
+                sumdgammat_num[jk*nbins + rb]               +=sum((w_ls * et)[idx])
+                sumdgammat_inp_num[jk*nbins + rb]           +=sum((w_ls * etan)[idx])
+                sumdgammat_inp_bary_num[jk*nbins + rb]      +=sum((w_ls * etan_b)[idx])
+                sumdgammat_inp_dm_num[jk*nbins + rb]        +=sum((w_ls * etan_dm)[idx])
+                sumdgammatsq_num[jk*nbins + rb]             +=sum(((w_ls* et)**2)[idx])
+                sumdgammax_num[jk*nbins + rb]               +=sum((w_ls * ex)[idx])
+                sumdgammaxsq_num[jk*nbins + rb]             +=sum(((w_ls* ex)**2)[idx])
                 sumdwls[jk*nbins + rb]                      +=sum(w_ls[idx])
 
 
