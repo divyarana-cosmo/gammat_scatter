@@ -24,6 +24,9 @@ class halo(constants):
 
         self.init_spl_esd_nfw = False
         self.init_spl_sigma_nfw = False
+
+        #self._spl_esd_nfw()
+        #self._spl_sigma_nfw()
         #print("Intialing NFW parameters\n log_mtot = %s h-1 M_sun\nconc_parm = %s\nrho_0 = %s h-1 M_sun/(h-3 Mpc^3)\n r_s = %s h-1 Mpc"%(log_mtot,con_par,self.rho_0,self.r_200/self.c))
         #print("Intialing NFW parameters\n log_Mh = %s\n conc_parm = %s"%(log_mtot, con_par))
 
@@ -33,7 +36,7 @@ class halo(constants):
         value  = self.rho_0/((r/r_s)*(1+r/r_s)**2)
         return value
 
-    def _esd_nfw(self,r):
+    def esd_nfw(self,r):
         """ESD profile from analytical predictions"""
         if np.isscalar(r):
             r = np.array([r])
@@ -44,27 +47,26 @@ class halo(constants):
         #sig[idx]= 0.0
         return sig
 
-    def _spl_esd_nfw(self):
-        """ESD profile from analytical predictions"""
-        xxarr = np.logspace(np.log10(self.spl_esd_rmin), np.log10(self.spl_esd_rmax), self.spl_esd_rbins) 
-        yyarr = 0.0*xxarr
-        for ii in range(len(yyarr)):
-            yyarr[ii] = self._esd_nfw(xxarr[ii])
-         
-        self.spl_loglog_esd_nfw = interp1d(np.log10(xxarr), np.log10(yyarr), kind='cubic') 
+    #def _spl_esd_nfw(self):
+    #    """ESD profile from analytical predictions"""
+    #    xxarr = np.logspace(np.log10(self.spl_esd_rmin), np.log10(self.spl_esd_rmax), self.spl_esd_rbins) 
+    #    yyarr = 0.0*xxarr
+    #    for ii in range(len(yyarr)):
+    #        yyarr[ii] = self._esd_nfw(xxarr[ii])
+    #     
+    #    self.spl_loglog_esd_nfw = interp1d(np.log10(xxarr), np.log10(yyarr), kind='cubic') 
 
-        self.init_spl_esd_nfw = True
-        return 
+    #    self.init_spl_esd_nfw = True
+    #    return 
 
-    def esd_nfw(self,r):
-        """ESD profile from analytical predictions"""
-        if not self.init_spl_esd_nfw:
-            self._spl_esd_nfw()
-
-        if np.isscalar(r):
-            r = np.array([r])
-        sig = 10**self.spl_loglog_esd_nfw(np.log10(r))
-        return sig
+    #def esd_nfw(self,r):
+    #    """ESD profile from analytical predictions"""
+    #    if not self.init_spl_esd_nfw:
+    #        self._spl_esd_nfw()
+    #    if np.isscalar(r):
+    #        r = np.array([r])
+    #    sig = 10**self.spl_loglog_esd_nfw(np.log10(r))
+    #    return sig
 
 
 
@@ -91,7 +93,7 @@ class halo(constants):
         return sig
 
 
-    def _sigma_nfw(self,r):
+    def sigma_nfw(self,r):
         """analytical projection of NFW"""
         if np.isscalar(r):
             r = np.array([r])
@@ -115,27 +117,27 @@ class halo(constants):
         return sig
 
 
-    def _spl_sigma_nfw(self):
-        """analytical projection of NFW"""
-        xxarr = np.logspace(np.log10(self.spl_esd_rmin), np.log10(self.spl_esd_rmax), self.spl_esd_rbins) 
-        yyarr = 0.0*xxarr
-        for ii in range(len(yyarr)):
-            yyarr[ii] = self._sigma_nfw(xxarr[ii])
-         
-        self.spl_loglog_sigma_nfw = interp1d(np.log10(xxarr), np.log10(yyarr), kind='cubic') 
+    #def _spl_sigma_nfw(self):
+    #    """analytical projection of NFW"""
+    #    xxarr = np.logspace(np.log10(self.spl_esd_rmin), np.log10(self.spl_esd_rmax), self.spl_esd_rbins) 
+    #    yyarr = 0.0*xxarr
+    #    for ii in range(len(yyarr)):
+    #        yyarr[ii] = self._sigma_nfw(xxarr[ii])
+    #     
+    #    self.spl_loglog_sigma_nfw = interp1d(np.log10(xxarr), np.log10(yyarr), kind='cubic') 
 
-        self.init_spl_sigma_nfw = True
+    #    self.init_spl_sigma_nfw = True
  
-        return
-    def sigma_nfw(self,r):
-        """ESD profile from analytical predictions"""
-        if not self.init_spl_sigma_nfw:
-            self._spl_sigma_nfw()
+    #    return
+    #def sigma_nfw(self,r):
+    #    """ESD profile from analytical predictions"""
+    #    if not self.init_spl_sigma_nfw:
+    #        self._spl_sigma_nfw()
 
-        if np.isscalar(r):
-            r = np.array([r])
-        sig = 10**self.spl_loglog_sigma_nfw(np.log10(r))
-        return sig
+    #    if np.isscalar(r):
+    #        r = np.array([r])
+    #    sig = 10**self.spl_loglog_sigma_nfw(np.log10(r))
+    #    return sig
 
 
 

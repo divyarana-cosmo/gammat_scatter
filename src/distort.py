@@ -12,7 +12,7 @@ from colossus.halo import concentration
 from astropy.cosmology import FlatLambdaCDM
 from scipy.integrate import quad
 from scipy.interpolate import interp1d
-from get_data import lens_select
+#from get_data import lens_select
 from tqdm import tqdm
 import argparse
 import yaml
@@ -31,6 +31,7 @@ class simshear():
         self.sigma8 = sigma8
         self.ns = ns
         self.cosmo_name='my_cosmo'
+        self.init_spl_sigma_crit_inv = False
         print("fixing cosmology \n")
 
     def get_xyz(self, ra,dec):
@@ -42,6 +43,7 @@ class simshear():
         return x,y,z  
 
     def _get_sigma_crit_inv(self, lzred, szred):
+    #def get_sigma_crit_inv(self, lzred, szred):
         "evaluates the lensing efficency geometrical factor"
         sigm_crit_inv = 0.0*szred + 0.0*lzred
         idx =  szred>lzred   # if sources are in foreground then lensing is zero
@@ -63,20 +65,29 @@ class simshear():
 
 
     def _interp_get_sigma_crit_inv(self, lzred):
-        xx = np.linspace(lzred+1e-4,4.0, 150)
-        yy = np.log10(self._get_sigma_crit_inv(lzred, xx))
+    #def _interp_get_sigma_crit_inv(self, szred):
+        xx = np.linspace(lzred+1e-4,4.0, 100)
+        #xx = np.linspace(0, szred, 50)
+        #yy = self._get_sigma_crit_inv(xx, szred)
+        yy = self._get_sigma_crit_inv(lzred, xx)
         return interp1d(xx, yy, kind='cubic')
 
 
     def _get_g(self,logmstel, logmh, lconc, lzred, szred, proj_sep):
-        self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(lzred)
 
-        #colossus_cosmo  = cosmology.fromAstropy(self.Astropy_cosmo, sigma8 = self.sigma8, ns = self.ns, cosmo_name=self.cosmo_name)
-        self.conc       = lconc#concentration.concentration(10**logmh, '200m', lzred, model = 'diemer19')
-        self.hp         = halo(logmh, self.conc, omg_m=self.omg_m)
-        self.stel       = stellar(logmstel)
-        get_sigma_crit_inv =10**self.interp_get_sigma_crit_inv(szred) 
+        if not self.init_spl_sigma_crit_inv:
+            self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(lzred)
+            #self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(szred)
+            self.init_spl_sigma_crit_inv = True
+            self.hp         = halo(logmh, lconc, omg_m=self.omg_m)
+            self.stel       = stellar(logmstel)
 
+
+
+
+        #get_sigma_crit_inv =10**self.get_sigma_crit_inv(lzred, szred) 
+        get_sigma_crit_inv = self.interp_get_sigma_crit_inv(szred) 
+        #get_sigma_crit_inv = self.interp_get_sigma_crit_inv(lzred) 
         #considering only tangential shear and adding both contributions
         gamma_s     = (self.stel.esd_pointmass(proj_sep))   * get_sigma_crit_inv
         gamma_dm    = (self.hp.esd_nfw(proj_sep))           * get_sigma_crit_inv
@@ -129,6 +140,17 @@ class simshear():
 
     def shear_src(self, lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred, se1, se2):
         "apply shear on to the source galaxies with given intrinsic shapes"
+        self.conc       = lconc#concentration.concentration(10**logmh, '200m', lzred, model = 'diemer19')
+        self.hp         = halo(logmh, self.conc, omg_m=self.omg_m)
+        self.stel       = stellar(logmstel)
+
+        if not self.init_spl_sigma_crit_inv:
+            self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(lzred)
+            #self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(szred)
+            self.init_spl_sigma_crit_inv = True
+
+
+
         g_1, g_2, etan, c_phi, s_phi, proj_sep, sflag, g_b, g_dm = self.get_g(lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred)
         g   = g_1 + 1j* g_2
         es  = se1 + 1j* se2 + 0.0*g  # intrinsic sizes
