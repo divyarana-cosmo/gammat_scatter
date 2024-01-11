@@ -82,7 +82,7 @@ def create_sources(ra, dec, dismax, nsrc=30, sigell=0.27, mask=None): #mask appl
     area    = (ramax - ramin) * (np.cos(thetamin) - np.cos(thetamax))* (180*60/np.pi)**2
     size    = round(nsrc * area)      # area of square in deg^2 --> arcmin^2
     cdec    = np.random.uniform(np.cos(thetamax), np.cos(thetamin), size=size)     
-    sdec    = 0.0*(90.0 - np.arccos(cdec)*180/np.pi)
+    sdec    = (90.0 - np.arccos(cdec)*180/np.pi)
     sra     = np.random.uniform(ramin, ramax, size=size)*180/np.pi
     lx,ly,lz = get_xyz(ra, dec)
     sx,sy,sz = get_xyz(sra, sdec)
@@ -159,7 +159,6 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     lconc = spl_c_mh(llogmh)
     print("lens data read fully")
 
-    dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(np.min(lzred)).value 
  
     #variables defs for welford approx sigma calculations
     M2 = 0.0
@@ -171,7 +170,7 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     weldictx = {}
 
     fpairout = open(outputpairfile, "w")
-    fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tphi\n')
+    fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tkappa\n')
 
 
 
@@ -204,10 +203,10 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
         intse2      = se2   [scut]
         # add a section of stellar and dark matter
 
-        se1, se2, etan, proj_sep, sflag, etan_b, etan_dm = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra, sdec, szred, intse1, intse2)
+        se1, se2, etan, kappa, proj_sep, sflag, etan_b, etan_dm = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra, sdec, szred, intse1, intse2)
 
         if sourceargs['no_shear']:
-            se1 = intse1; se2 = intse2; sflag = 1.0 + 0.0*sflag
+            se1 = intse1; se2 = intse2#; sflag = 1.0 + 0.0*sflag
  
         et, ex, phi  = get_et_ex(lra = lra[ii], ldec = ldec[ii], sra = sra, sdec = sdec, se1 = se1,  se2 = se2)
 
@@ -215,22 +214,23 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
         w_ls    = lwgt[ii]*wgal
         #cure the arrays a bin
         idx = (sl_sep>rmin) & (sl_sep<rmax) & (sflag==1)
-        sl_sep      = sl_sep[idx]
-        w_ls        = w_ls[idx]
-        et          = et[idx]
-        etan        = etan[idx]   
-        etan_b      = etan_b[idx]
-        etan_dm     = etan_dm[idx]
-        ex          = ex[idx]  
-        se1         = se1[idx]
-        se2         = se2[idx]
-        sra         = sra[idx]
-        sdec        = sdec[idx]
-        szred       = szred[idx]
-        phi         = phi[idx]
+        sl_sep      = sl_sep  [idx]
+        w_ls        = w_ls    [idx]
+        et          = et      [idx]
+        etan        = etan    [idx]   
+        kappa       = kappa   [idx]   
+        etan_b      = etan_b  [idx]
+        etan_dm     = etan_dm [idx]
+        ex          = ex      [idx]  
+        se1         = se1     [idx]
+        se2         = se2     [idx]
+        sra         = sra     [idx]
+        sdec        = sdec    [idx]
+        szred       = szred   [idx]
+        phi         = phi     [idx]
 
         for jj in range(sum(idx)):
-            fpairout.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lxjkreg[ii], lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra[jj], sdec[jj], szred[jj], se1[jj], se2[jj], etan[jj], et[jj], ex[jj], sl_sep[jj], w_ls[jj], phi[jj]))
+            fpairout.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lxjkreg[ii], lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra[jj], sdec[jj], szred[jj], se1[jj], se2[jj], etan[jj], et[jj], ex[jj], sl_sep[jj], w_ls[jj], kappa[jj]))
 
 
 
@@ -258,7 +258,8 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
             sumdgammaxsq_num[rb]            +=sum(((w_ls* ex)**2)[idx])
             sumdwls[rb]                      +=sum(w_ls[idx])
 
-
+    fpairout.write("#OK")
+    fpairout.close()
 
     fpairout.close()
     fout = open(outputfilename, "w")

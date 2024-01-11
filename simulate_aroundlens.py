@@ -139,12 +139,14 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     sumdwls                     = np.zeros(nbins*Njacks)
 
 
-
     # getting the lenses data
     lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
     if config['test_case']:
         llogmh = 14 + 0.0*llogmh
         lzred = 0.4 + 0.0*lzred
+    lra     = 130 + 0.0*lra
+    ldec    = 0.0 + 0.0*ldec
+
 
     lzredmax = np.max(lzred)
     lconc = 0.0*lid
@@ -152,37 +154,34 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     yy = 0.0*xx
     med_lzred = np.median(lzred)
 
-    #for kk, mh in enumerate(10**xx):
-    for kk, mh in enumerate(10**llogmh):
-        lconc[kk]    = concentration.concentration(mh, '200m', lzred[kk], model = 'diemer19')
+    for kk, mh in enumerate(10**xx):
+        yy[kk]    = concentration.concentration(mh, '200m', med_lzred, model = 'diemer19')
     
-
-    #lconc = concentration.concentration(10**llogmh, '200m', lzred, model = 'diemer19')#spl_c_mh = interp10**spl_c_mh(llogmh)
+    spl_c_mh = interp1d(xx,yy)
+    lconc = spl_c_mh(llogmh)
+ 
     print("lens data read fully")
 
-    dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(np.min(lzred)).value 
  
     #variables defs for welford approx sigma calculations
     M2 = 0.0
     mean = 0
     count = 0
     
-    np.random.seed(444)
+#    np.random.seed(444)
     weldict = {}
     weldictx = {}
 
     fpairout = open(outputpairfile, "w")
-    fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\n')
-
-
-
+    fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tkappa\n')
 
     #..................................#
     for ii in tqdm(range(len(lra))):
+        dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(lzred[ii]).value 
         # fixing the simulation aperture
         sra, sdec, szred, wgal, se1, se2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell']) 
         if config['test_case']:
-            szred = 0.8 + 0.0*sra
+            szred = 2.0 + 0.0*sra
         if sourceargs['rot90']:
             se1 = -1*se1
             se2 = -1*se2
@@ -195,17 +194,19 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
         print("number of sources: ", len(sra))
         # selecting cleaner background
         scut    = (szred>(lzredmax + sourceargs['zdiff'])) # zdiff cut
-
-        sra     = sra[scut  ]  
-        sdec    = sdec[scut]
-        szred   = szred[scut]
-        wgal    = wgal[scut]
-        intse1     = se1[scut]
-        intse2     = se2[scut]
+        if sum(scut)==0:
+            continue
+ 
+        sra         = sra[scut  ]  
+        sdec        = sdec[scut]
+        szred       = szred[scut]
+        wgal        = wgal[scut]
+        intse1      = se1[scut]
+        intse2      = se2[scut]
 
         # add a section of stellar and dark matter
 
-        se1, se2, etan, proj_sep, sflag, etan_b, etan_dm = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra, sdec, szred, intse1, intse2)   
+        se1, se2, etan, kappa, proj_sep, sflag, etan_b, etan_dm = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra, sdec, szred, intse1, intse2)
         
         if sourceargs['no_shear']:
             se1 = intse1; se2 = intse2
@@ -221,6 +222,7 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
         w_ls        = w_ls[idx]
         et          = et[idx]
         etan        = etan[idx]   
+        kappa       = kappa[idx]   
         etan_b      = etan_b[idx]
         etan_dm     = etan_dm[idx]
         ex          = ex[idx]  
@@ -232,7 +234,7 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
 
 
         for jj in range(sum(idx)):
-            fpairout.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lxjkreg[ii], lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra[jj], sdec[jj], szred[jj], se1[jj], se2[jj], etan[jj], et[jj], ex[jj], sl_sep[jj], w_ls[jj]))
+            fpairout.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lxjkreg[ii], lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra[jj], sdec[jj], szred[jj], se1[jj], se2[jj], etan[jj], et[jj], ex[jj], sl_sep[jj], w_ls[jj], kappa[jj]))
 
 
 
@@ -254,16 +256,17 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
                     weldict[jk*nbins + rb]  = Welford(np.array(w_ls * et)[idx])
                     weldictx[jk*nbins + rb] = Welford(np.array(w_ls * ex)[idx])
                     
-                sumdgammat_num[jk*nbins + rb]               +=sum((w_ls * et)[idx])
-                sumdgammat_inp_num[jk*nbins + rb]           +=sum((w_ls * etan)[idx])
-                sumdgammat_inp_bary_num[jk*nbins + rb]      +=sum((w_ls * etan_b)[idx])
-                sumdgammat_inp_dm_num[jk*nbins + rb]        +=sum((w_ls * etan_dm)[idx])
-                sumdgammatsq_num[jk*nbins + rb]             +=sum(((w_ls* et)**2)[idx])
-                sumdgammax_num[jk*nbins + rb]               +=sum((w_ls * ex)[idx])
-                sumdgammaxsq_num[jk*nbins + rb]             +=sum(((w_ls* ex)**2)[idx])
-                sumdwls[jk*nbins + rb]                      +=sum(w_ls[idx])
+                sumdgammat_num          [jk*nbins + rb] +=sum((w_ls * et)[idx])
+                sumdgammat_inp_num      [jk*nbins + rb] +=sum((w_ls * etan)[idx])
+                sumdgammat_inp_bary_num [jk*nbins + rb] +=sum((w_ls * etan_b)[idx])
+                sumdgammat_inp_dm_num   [jk*nbins + rb] +=sum((w_ls * etan_dm)[idx])
+                sumdgammatsq_num        [jk*nbins + rb] +=sum(((w_ls* et)**2)[idx])
+                sumdgammax_num          [jk*nbins + rb] +=sum((w_ls * ex)[idx])
+                sumdgammaxsq_num        [jk*nbins + rb] +=sum(((w_ls* ex)**2)[idx])
+                sumdwls                 [jk*nbins + rb] +=sum(w_ls[idx])
 
 
+    fpairout.write("#OK")
     fpairout.close()
 
     fout = open(outputfilename, "w")
@@ -275,7 +278,6 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
            #Resp = sumdwls_resp[i]*1.0/sumdwls[i]
 
             fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], weldict[jk*nbins + i].mean, weldict[jk*nbins + i].var_p**0.5, weldict[jk*nbins + i].count, weldictx[jk*nbins + i].mean, weldictx[jk*nbins + i].var_p**0.5, jk)    )
-        #fout.write("%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdsig_num[i]*1.0/sumwls[i]/2./Resp, np.sqrt(sumdsigsq_num[i])*1.0/sumw    ls[i]/2./Resp))
     fout.write("#OK")
     fout.close()
     return 0
