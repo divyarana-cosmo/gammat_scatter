@@ -38,11 +38,19 @@ def get_et_ex(lra, ldec, sra, sdec, se1, se2):
     sra  = sra*np.pi/180
     sdec = sdec*np.pi/180
 
-    c_theta = np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec)
+    
+    c_sra_lra = np.cos(sra)*np.cos(lra) + np.sin(lra)*np.sin(sra)
+    s_sra_lra = np.sin(sra)*np.cos(lra) - np.cos(sra)*np.sin(lra)
+
+    c_theta = np.cos(ldec)*np.cos(sdec)*c_sra_lra + np.sin(ldec)*np.sin(sdec)
     s_theta = np.sqrt(1-c_theta**2)
 
-    c_phi   =  np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta
-    s_phi   = (-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta
+    c_phi   =  np.cos(ldec)*s_sra_lra*1.0/s_theta
+    s_phi   = (-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*c_sra_lra*np.sin(sdec))*1.0/s_theta
+
+    #phi     = 2*np.pi*np.random.uniform(size=len(sra))
+    #c_phi   = np.cos(phi)
+    #s_phi   = np.sin(phi)
 
     # tangential shear
     e_t     = - se1*(2*c_phi**2 -1) - se2*(2*c_phi * s_phi)
@@ -159,7 +167,7 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     mean = 0
     count = 0
     
-    np.random.seed(123)
+    np.random.seed(444)
     weldict = {}
     weldictx = {}
 
@@ -192,12 +200,16 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
         sdec    = sdec[scut]
         szred   = szred[scut]
         wgal    = wgal[scut]
-        se1     = se1[scut]
-        se2     = se2[scut]
+        intse1     = se1[scut]
+        intse2     = se2[scut]
 
         # add a section of stellar and dark matter
 
-        se1, se2, etan, proj_sep, sflag, etan_b, etan_dm = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra, sdec, szred, se1, se2)
+        se1, se2, etan, proj_sep, sflag, etan_b, etan_dm = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra, sdec, szred, intse1, intse2)   
+        
+        if sourceargs['no_shear']:
+            se1 = intse1; se2 = intse2
+        
 
         et, ex  = get_et_ex(lra = lra[ii], ldec = ldec[ii], sra = sra, sdec = sdec, se1 = se1,  se2 = se2)
 
@@ -305,6 +317,7 @@ if __name__ == "__main__":
     
     config['source']['rot90'] = args.rot90
     config['source']['no_shape_noise'] = args.no_shape_noise
+    config['source']['no_shear'] = args.no_shear
 
     config['test_case'] = args.test_case
 

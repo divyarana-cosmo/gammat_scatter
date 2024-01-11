@@ -38,17 +38,20 @@ def get_et_ex(lra, ldec, sra, sdec, se1, se2):
     sra  = sra*np.pi/180
     sdec = sdec*np.pi/180
 
-    c_theta = np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec)
+    
+    cos_sra_lra = np.cos(sra)*np.cos(lra) + np.sin(sra)*np.sin(lra)
+    sin_sra_lra = np.sin(sra)*np.cos(lra) - np.cos(sra)*np.sin(lra)
+    c_theta = np.cos(ldec)*np.cos(sdec)*cos_sra_lra + np.sin(ldec)*np.sin(sdec)
     s_theta = np.sqrt(1-c_theta**2)
 
-    c_phi   =  np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta
-    s_phi   = (-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta
+    c_phi   =  np.cos(ldec) * sin_sra_lra * 1.0/s_theta
+    s_phi   = (-np.sin(ldec)*np.cos(sdec) + np.cos(ldec) * cos_sra_lra * np.sin(sdec))*1.0/s_theta
 
     # tangential shear
     e_t     = - se1*(2*c_phi**2 -1) - se2*(2*c_phi * s_phi)
     e_x     =  se1*(2*c_phi * s_phi) - se2*(2*c_phi**2 -1)
 
-    return e_t, e_x
+    return e_t, e_x, np.arccos(c_phi)
 
 def get_interp_szred():
     "assigns redshifts respecting the distribution"
@@ -79,7 +82,7 @@ def create_sources(ra, dec, dismax, nsrc=30, sigell=0.27, mask=None): #mask appl
     area    = (ramax - ramin) * (np.cos(thetamin) - np.cos(thetamax))* (180*60/np.pi)**2
     size    = round(nsrc * area)      # area of square in deg^2 --> arcmin^2
     cdec    = np.random.uniform(np.cos(thetamax), np.cos(thetamin), size=size)     
-    sdec    = (90.0 - np.arccos(cdec)*180/np.pi)
+    sdec    = 0.0*(90.0 - np.arccos(cdec)*180/np.pi)
     sra     = np.random.uniform(ramin, ramax, size=size)*180/np.pi
     lx,ly,lz = get_xyz(ra, dec)
     sx,sy,sz = get_xyz(sra, sdec)
@@ -133,21 +136,27 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
 
     # getting the lenses data
     lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
-    llogmh = 14 + 0.0*llogmh
-    lzred = 0.4 + 0.0*lzred
+    if config['test_case']:
+        llogmh  = 13*0.7 + 0.0*llogmh
+        llogmstel  = 11*0.7 + 0.0*llogmh
+        lzred   = 0.2 + 0.0*lzred
+    lra     = 130 + 0.0*lra
+    ldec    = 0.0 + 0.0*ldec
+
+    lzredmax = np.max(lzred)
     lconc = 0.0*lid
     xx = np.linspace(9,16,100)
     yy = 0.0*xx
     med_lzred = np.median(lzred)
 
-    #for kk, mh in enumerate(10**xx):
-    #    yy[kk]    = concentration.concentration(mh, '200m', med_lzred, model = 'diemer19')
+    for kk, mh in enumerate(10**xx):
+        yy[kk]    = concentration.concentration(mh, '200m', med_lzred, model = 'diemer19')
 
-    for kk, mh in enumerate(10**llogmh):
-        lconc[kk]    = concentration.concentration(mh, '200m', lzred[kk], model = 'diemer19')
+    #for kk, mh in enumerate(10**llogmh):
+    #    lconc[kk]    = concentration.concentration(mh, '200m', lzred[kk], model = 'diemer19')
  
-    #spl_c_mh = interp1d(xx,np.log10(yy))
-    #lconc = 10**spl_c_mh(llogmh)
+    spl_c_mh = interp1d(xx,yy)
+    lconc = spl_c_mh(llogmh)
     print("lens data read fully")
 
     dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(np.min(lzred)).value 
@@ -157,31 +166,50 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     mean = 0
     count = 0
     
-    np.random.seed(123)
+    #np.random.seed(444)
     weldict = {}
     weldictx = {}
+
+    fpairout = open(outputpairfile, "w")
+    fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tphi\n')
+
+
+
+
+
     #..................................#
     for ii in tqdm(range(len(lra))):
+        dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(lzred[ii]).value 
         # fixing the simulation aperture
         sra, sdec, szred, wgal, se1, se2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell']) 
-
-        szred = 0.8 + 0.0*sra
+        if config['test_case']:
+            szred = 2.0 + 0.0*sra
+        if sourceargs['rot90']:
+            se1 = -1*se1
+            se2 = -1*se2
+        if sourceargs['no_shape_noise']:
+            se1 = 0.0*se1
+            se2 = 0.0*se2
 
         print("number of sources: ", len(sra))
         # selecting cleaner background
-        scut    = (szred>(lzred[ii] + sourceargs['zdiff']))
-        sra     = sra[scut  ]  
-        sdec    = sdec[scut]
-        szred   = szred[scut]
-        wgal    = wgal[scut]
-        se1     = 0.0*se1[scut]
-        se2     = 0.0*se2[scut]
-
+        scut        = (szred>(lzredmax + sourceargs['zdiff']))
+        if sum(scut)==0:
+            continue
+        sra         = sra   [scut]  
+        sdec        = sdec  [scut]
+        szred       = szred [scut]
+        wgal        = wgal  [scut]
+        intse1      = se1   [scut]
+        intse2      = se2   [scut]
         # add a section of stellar and dark matter
 
-        se1, se2, etan, proj_sep, sflag, etan_b, etan_dm = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra, sdec, szred, se1, se2)
+        se1, se2, etan, proj_sep, sflag, etan_b, etan_dm = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra, sdec, szred, intse1, intse2)
 
-        et, ex  = get_et_ex(lra = lra[ii], ldec = ldec[ii], sra = sra, sdec = sdec, se1 = se1,  se2 = se2)
+        if sourceargs['no_shear']:
+            se1 = intse1; se2 = intse2; sflag = 1.0 + 0.0*sflag
+ 
+        et, ex, phi  = get_et_ex(lra = lra[ii], ldec = ldec[ii], sra = sra, sdec = sdec, se1 = se1,  se2 = se2)
 
         sl_sep  = proj_sep
         w_ls    = lwgt[ii]*wgal
@@ -194,6 +222,20 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
         etan_b      = etan_b[idx]
         etan_dm     = etan_dm[idx]
         ex          = ex[idx]  
+        se1         = se1[idx]
+        se2         = se2[idx]
+        sra         = sra[idx]
+        sdec        = sdec[idx]
+        szred       = szred[idx]
+        phi         = phi[idx]
+
+        for jj in range(sum(idx)):
+            fpairout.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lxjkreg[ii], lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra[jj], sdec[jj], szred[jj], se1[jj], se2[jj], etan[jj], et[jj], ex[jj], sl_sep[jj], w_ls[jj], phi[jj]))
+
+
+
+
+
         #exit()
         slrbins = np.log10(sl_sep*1.0/rmin)//rdiff
         for rb in range(nbins):
@@ -217,27 +259,8 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
             sumdwls[rb]                      +=sum(w_ls[idx])
 
 
-        #for ll,sep in enumerate(sl_sep):
-        #    if sep<rmin or sep>rmax or sflag[ll]==0:
-        #        continue
-        #    rb = int(np.log10(sep*1.0/rmin)*1/rdiff)
 
-        #    # get tangantial components given positions and shapes
-
-        #    # following equations given in the surhud's lectures
-        #    w_ls    = lwgt[ii] * wgal[ll]
-
-        #    # separate numerator and denominator computation
-        #    sumdgammat_num[rb]              += w_ls  * et[ll]
-        #    sumdgammat_inp_num[rb]          += w_ls  * etan[ll]
-        #    sumdgammat_inp_bary_num[rb]     += w_ls  * etan_b[ll]
-        #    sumdgammat_inp_dm_num[rb]       += w_ls  * etan_dm[ll]
-        #    sumdgammatsq_num[rb]            += (w_ls * et[ll])**2
-        #    sumdgammax_num[rb]              += w_ls  * ex[ll]
-        #    sumdgammaxsq_num[rb]            += (w_ls * ex[ll])**2
-        #    sumdwls[rb]                      += w_ls
-
-
+    fpairout.close()
     fout = open(outputfilename, "w")
     fout.write("# 0:rmin/2+rmax/2 1:gammat 2:SN_Errgammat 3:gammax 4:SN_Errgammax 5:truegamma 6:gammat_inp 7:gammat_inp_bary 8:gammat_inp_dm 9:sumd_wls 10:welford_gammat_mean 11:welford_gammat_std 12:welford_counts 10:welford_gammax_mean 11:welford_gammax_std \n")
     for i in range(len(rbins[:-1])):
@@ -265,7 +288,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=123)
     parser.add_argument("--no_shape_noise", help="for removing shape noise-testing purpose", type=bool, default=False)
     parser.add_argument("--no_shear", help="for removing shear-testing purpose", type=bool, default=False)
-    parser.add_argument("--ideal_case", help="testing the ideal case", type=bool, default=False)
+    parser.add_argument("--test_case", help="testing the ideal case", type=bool, default=False)
     parser.add_argument("--rot90", help="rotating intrinsic shapes by 90 degrees", type=bool, default=False)
     parser.add_argument("--logmstelmin", help="log stellar mass minimum-lense selection", type=float, default=11.0)
     parser.add_argument("--logmstelmax", help="log stellar mass maximum-lense selection", type=float, default=13.0)
@@ -288,8 +311,13 @@ if __name__ == "__main__":
     if 'logmstelmax'not in config:
         config['lens']['logmstelmax'] = args.logmstelmax
 
-    outputfilename = outputfilename + '_lmstelmin_%2.2f_lmstelmax_%2.2f'%(args.logmstelmin, args.logmstelmax)
+    config['source']['rot90'] = args.rot90
+    config['source']['no_shape_noise'] = args.no_shape_noise
+    config['source']['no_shear'] = args.no_shear
 
+
+    config['test_case'] = args.test_case
+    outputfilename = outputfilename + '_lmstelmin_%2.2f_lmstelmax_%2.2f'%(args.logmstelmin, args.logmstelmax)
     if args.no_shape_noise:
         outputfilename = outputfilename + '_no_shape_noise'
     else:
@@ -299,8 +327,31 @@ if __name__ == "__main__":
 
     if args.no_shear:
         outputfilename = outputfilename + '_no_shear'
-    
+    if args.test_case:
+        outputfilename = outputfilename + '_test_case'
+ 
+   
     np.random.seed(args.seed)
 
-    run_pipe(config, outputfile = outputfilename)           
+    run_pipe(config, outputfile = outputfilename, outputpairfile = outputfilename+'_pairs')           
+        #for ll,sep in enumerate(sl_sep):
+        #    if sep<rmin or sep>rmax or sflag[ll]==0:
+        #        continue
+        #    rb = int(np.log10(sep*1.0/rmin)*1/rdiff)
+
+        #    # get tangantial components given positions and shapes
+
+        #    # following equations given in the surhud's lectures
+        #    w_ls    = lwgt[ii] * wgal[ll]
+
+        #    # separate numerator and denominator computation
+        #    sumdgammat_num[rb]              += w_ls  * et[ll]
+        #    sumdgammat_inp_num[rb]          += w_ls  * etan[ll]
+        #    sumdgammat_inp_bary_num[rb]     += w_ls  * etan_b[ll]
+        #    sumdgammat_inp_dm_num[rb]       += w_ls  * etan_dm[ll]
+        #    sumdgammatsq_num[rb]            += (w_ls * et[ll])**2
+        #    sumdgammax_num[rb]              += w_ls  * ex[ll]
+        #    sumdgammaxsq_num[rb]            += (w_ls * ex[ll])**2
+        #    sumdwls[rb]                      += w_ls
+
 
