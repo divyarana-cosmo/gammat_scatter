@@ -112,7 +112,8 @@ class simshear():
         g    = gamma/(1.0 - kappa) # reduced shear
         g_b  = gamma_s/(1.0 - kappa_s) # reduced shear
         g_dm = gamma_dm/(1.0 - kappa_dm) # reduced shear
-
+        
+        
         # phi to get the compute the tangential shear
 
         lra  = lra*np.pi/180
@@ -128,7 +129,7 @@ class simshear():
         #c_theta = np.cos(ldec)*np.cos(sdec)*c_sra_lra + np.sin(ldec)*np.sin(sdec)
         s_theta = np.sqrt(1-c_theta**2)
 
-        sflag = (np.abs(s_theta)>np.sin(np.pi/180 * 1/3600)) & (np.abs(kappa)<0.1)   #weak lensing flag and proximity flag
+        sflag = (np.abs(s_theta)>np.sin(np.pi/180 * 1/3600)) & (np.abs(kappa)<0.5)   #weak lensing flag and proximity flag
 
         c_phi   =  np.cos(ldec)*s_sra_lra*1.0/s_theta
         s_phi   = (-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*c_sra_lra*np.sin(sdec))*1.0/s_theta
@@ -136,8 +137,8 @@ class simshear():
         # tangential shear
         g_1     = - g*(2*c_phi**2 - 1)
         g_2     = - g*(2*c_phi * s_phi)
-        
-        return g_1, g_2, g, c_phi, s_phi, proj_sep, sflag, g_b, g_dm
+
+        return g_1, g_2, g, kappa, c_phi, s_phi, proj_sep, sflag, g_b, g_dm
 
 
     def shear_src(self, lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred, se1, se2):
@@ -153,7 +154,7 @@ class simshear():
 
 
 
-        g_1, g_2, etan, c_phi, s_phi, proj_sep, sflag, g_b, g_dm = self.get_g(lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred)
+        g_1, g_2, etan, kappa, c_phi, s_phi, proj_sep, sflag, g_b, g_dm = self.get_g(lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred)
         g   = g_1 + 1j* g_2
         es  = se1 + 1j* se2 + 0.0*g  # intrinsic sizes
         e   = 0.0*es # sheared shapes
@@ -161,7 +162,7 @@ class simshear():
         idx = np.abs(g)<=1
         e[idx] = (es[idx] + g[idx])/(1.0 + np.conj(g[idx])*es[idx])
         e[~idx] = (1 + g[~idx]*np.conj(es[~idx]))/(np.conj(es[~idx]) + np.conj(g[~idx])) # mod(g)>1
-        return np.real(e), np.imag(e), etan, proj_sep, sflag, g_b, g_dm
+        return np.real(e), np.imag(e), etan, kappa, proj_sep, sflag, g_b, g_dm
 
 
 
