@@ -60,11 +60,8 @@ def get_et_ex(lra, ldec, sra, sdec, se1, se2):
 
 def get_interp_szred():
     "assigns redshifts respecting the distribution"
-    n0  = 1.8048
-    a   = 0.417
-    b   = 4.8685
-    c   = 0.7841
-    f = lambda zred: n0*(zred**a + zred**(a*b))/(zred**b + c)
+    z0 = 0.9/(2)**0.5
+    f = lambda zred: (zred/z0)**2 * np.exp(-(zred/z0)**(3/2)) #taken from euclid prep 2020 page 22
     zmin = 0.0
     zmax = 3
     zarr = np.linspace(zmin, zmax, 20)
@@ -73,7 +70,6 @@ def get_interp_szred():
         xx[ii] = quad(f, zmin, zarr[ii])[0]/quad(f, zmin, zmax)[0]
     proj = interp1d(xx,zarr)
     return proj
-
 
 interp_szred = get_interp_szred()
 
@@ -141,9 +137,6 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
 
     # getting the lenses data
     lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
-    if config['test_case']:
-        llogmh = 14 + 0.0*llogmh
-        lzred = 0.4 + 0.0*lzred
     lra     = 130 + 0.0*lra
     ldec    = 0.0 + 0.0*ldec
 
@@ -161,6 +154,11 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     lconc = spl_c_mh(llogmh)
  
     print("lens data read fully")
+    if config['test_case']:
+        llogmh      = 14.0  + 0.0*llogmh
+        lzred       = 0.3   + 0.0*lzred
+        lconc       = 5.5   + 0.0*lzred
+        llogmstel   = 12.0  + 0.0*llogmh
 
  
     #variables defs for welford approx sigma calculations
@@ -181,7 +179,7 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
         # fixing the simulation aperture
         sra, sdec, szred, wgal, se1, se2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell']) 
         if config['test_case']:
-            szred = 2.0 + 0.0*sra
+            szred = 0.8 + 0.0*sra
         if sourceargs['rot90']:
             se1 = -1*se1
             se2 = -1*se2
@@ -197,7 +195,7 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
         if sum(scut)==0:
             continue
  
-        sra         = sra[scut  ]  
+        sra         = sra[scut]  
         sdec        = sdec[scut]
         szred       = szred[scut]
         wgal        = wgal[scut]
@@ -237,7 +235,6 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
             fpairout.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lxjkreg[ii], lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra[jj], sdec[jj], szred[jj], se1[jj], se2[jj], etan[jj], et[jj], ex[jj], sl_sep[jj], w_ls[jj], kappa[jj]))
 
 
-
         #exit()
         slrbins = np.log10(sl_sep*1.0/rmin)//rdiff
 
@@ -270,14 +267,19 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     fpairout.close()
 
     fout = open(outputfilename, "w")
-    fout.write("# 0:rmin/2+rmax/2 1:gammat 2:SN_Errgammat 3:gammax 4:SN_Errgammax 5:truegamma 6:gammat_inp 7:gammat_inp_bary 8:gammat_inp_dm 9:sumd_wls 10:welford_gammat_mean 11:welford_gammat_std 12:welford_counts 13:welford_gammax_mean 14:welford_gammax_std 15:Jkid \n")
+    fout.write("# 0:rmin/2+rmax/2 1:gammat 2:gammatsq 3:SN_Errgammat 4:gammax 5:gammaxsq 6:SN_Errgammax 7:truegamma 8:gammat_inp 9:gammat_inp_bary 10:gammat_inp_dm 11:sumd_wls 12:welford_gammat_mean 13:welford_gammat_std 14:welford_counts 15:welford_gammax_mean 16:welford_gammax_std 17:Jkid \n")
     for jk in range(Njacks):
         for i in range(nbins):
             rrmin = rbins[i]
             rrmax = rbins[i+1]
            #Resp = sumdwls_resp[i]*1.0/sumdwls[i]
+            try:
+                fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], weldict[jk*nbins + i].mean, weldict[jk*nbins + i].var_p**0.5, weldict[jk*nbins + i].count, weldictx[jk*nbins + i].mean, weldictx[jk*nbins + i].var_p**0.5, jk)    )
+            
+            except KeyError:
+                fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], -999, -999, -999, -999, -999, jk))
 
-            fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], weldict[jk*nbins + i].mean, weldict[jk*nbins + i].var_p**0.5, weldict[jk*nbins + i].count, weldictx[jk*nbins + i].mean, weldictx[jk*nbins + i].var_p**0.5, jk)    )
+
     fout.write("#OK")
     fout.close()
     return 0

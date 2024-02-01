@@ -20,8 +20,8 @@ def plt_data(config, outputfilename):
     lensargs    = config["lens"]
     lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
     llogmh = 14 #+ 0.0*llogmh
-    lzred = 0.4 #+ 0.0*lzred
-    lconc = concentration.concentration(1e14, '200m', lzred, model = 'diemer19')
+    lzred = 0.3 #+ 0.0*lzred
+    lconc = 5.5#concentration.concentration(1e14, '200m', lzred, model = 'diemer19')
  
     dat = np.loadtxt(outputfilename)
     rbins   = np.unique(dat[:,0])

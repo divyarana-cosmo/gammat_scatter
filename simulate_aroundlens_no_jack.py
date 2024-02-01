@@ -55,11 +55,8 @@ def get_et_ex(lra, ldec, sra, sdec, se1, se2):
 
 def get_interp_szred():
     "assigns redshifts respecting the distribution"
-    n0  = 1.8048
-    a   = 0.417
-    b   = 4.8685
-    c   = 0.7841
-    f = lambda zred: n0*(zred**a + zred**(a*b))/(zred**b + c)
+    z0 = 0.9/(2)**0.5
+    f = lambda zred: (zred/z0)**2 * np.exp(-(zred/z0)**(3/2)) #taken from euclid prep 2020 page 22
     zmin = 0.0
     zmax = 3
     zarr = np.linspace(zmin, zmax, 20)
@@ -68,6 +65,7 @@ def get_interp_szred():
         xx[ii] = quad(f, zmin, zarr[ii])[0]/quad(f, zmin, zmax)[0]
     proj = interp1d(xx,zarr)
     return proj
+
 
 
 interp_szred = get_interp_szred()
@@ -132,14 +130,8 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     sumdgammaxsq_num    = np.zeros(nbins)
     sumdwls              = np.zeros(nbins)
 
-
-
     # getting the lenses data
     lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
-    if config['test_case']:
-        llogmh  = 13*0.7 + 0.0*llogmh
-        llogmstel  = 11*0.7 + 0.0*llogmh
-        lzred   = 0.2 + 0.0*lzred
     lra     = 130 + 0.0*lra
     ldec    = 0.0 + 0.0*ldec
 
@@ -152,12 +144,13 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     for kk, mh in enumerate(10**xx):
         yy[kk]    = concentration.concentration(mh, '200m', med_lzred, model = 'diemer19')
 
-    #for kk, mh in enumerate(10**llogmh):
-    #    lconc[kk]    = concentration.concentration(mh, '200m', lzred[kk], model = 'diemer19')
- 
     spl_c_mh = interp1d(xx,yy)
     lconc = spl_c_mh(llogmh)
     print("lens data read fully")
+    if config['test_case']:
+        llogmh  = 14.0  + 0.0*llogmh
+        lzred   = 0.3   + 0.0*lzred
+        lconc   = 5.5   + 0.0*lzred
 
  
     #variables defs for welford approx sigma calculations
@@ -182,7 +175,7 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
         # fixing the simulation aperture
         sra, sdec, szred, wgal, se1, se2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell']) 
         if config['test_case']:
-            szred = 2.0 + 0.0*sra
+            szred = 0.8 + 0.0*sra
         if sourceargs['rot90']:
             se1 = -1*se1
             se2 = -1*se2
