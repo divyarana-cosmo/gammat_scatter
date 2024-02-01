@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import quad
 from scipy.interpolate import interp1d
+from scipy.special import gamma
+from scipy.special import gammainc
 
 class constants:
     """Useful constants"""
@@ -11,8 +13,8 @@ class constants:
 class stellar(constants):
     """Useful functions for weak lensing signal modelling"""
     def __init__(self, log_mstel):
-        self.log_mstel = log_mstel # total mass of the halo
-        #print("Intialing point mass parameter\n log_mstel = %s"%(log_mstel))
+        self.log_mstel  = log_mstel # total mass of the halo
+        self.log_re     = 0.774 + 0.977 *(log_mstel - 11.4) #check arxiv:1811.04934
 
     def esd_pointmass(self,r):
         """ESD profile from analytical predictions"""
@@ -43,47 +45,63 @@ class stellar(constants):
         #r[idx] = 5e-3
         return 10**self.log_mstel*1.0/(np.pi*r**2)
 
+
+    def esd_deVaucouleurs(self,r):
+        """ESD profile from analytical predictions"""
+        if np.isscalar(r):
+            r = np.array([r])
+        val = self.avg_sigma_deVaucouleurs(r) - self.sigma_deVaucouleurs(r)
+        return val
+
+    def sigma_deVaucouleurs(self,r):
+        "deVaucouleurs projected profile"
+        if np.isscalar(r):
+            r = np.array([r])
+        
+        b       = 7.669
+        re      = 10**self.log_re
+        sigma0  = 10**self.log_mstel * b**8/(8* np.pi * re**2 * gamma(8))
+
+        val     = sigma0 * np.exp(-b*(r/re)**0.25)
+        return val
+
+    def avg_sigma_deVaucouleurs(self,r):
+        """analytical average projected of deVaucouleurs profile"""
+        if np.isscalar(r):
+            r = np.array([r])
+
+        b       = 7.669
+        re      = 10**self.log_re
+        sigma0  = 10**self.log_mstel * b**8/(8* np.pi * re**2 * gamma(8))
+        
+        t       = (b**4 * r/re)**0.25
+
+        val     = 8*np.pi*sigma0*re**2/b**8 
+        val     = val * gammainc(8.0, t)*gamma(8)
+        return val/(np.pi*r**2)
+
+
+
 if __name__ == "__main__":
     plt.subplot(2,2,1)
     rbin = np.logspace(-2,np.log10(5),10)
-    rbin = rbin[5]
     hp = stellar(10)
     #print hp.r_200
     yy = hp.esd_pointmass(rbin)/(1e12)
     print(yy)
-    plt.plot(rbin, yy, '.')
+    plt.plot(rbin, yy)
+    yy = hp.esd_deVaucouleurs(rbin)/(1e12)
+    print(yy)
+    plt.plot(rbin, yy)
+    yy = hp.avg_sigma_deVaucouleurs(rbin)/(1e12)
+    print(yy)
+    plt.plot(rbin, yy)
+
+
 
     plt.xscale('log')
     plt.yscale('log')
     plt.xlabel(r'$R [{\rm h^{-1}Mpc}]$')
     plt.ylabel(r'$\Delta \Sigma (R) [{\rm h M_\odot pc^{-2}}]$')
     plt.savefig('test.png', dpi=300)
-
-
-
-
-
-
-    #def sigma_pointmass_scalar(self,r):
-    #    "delta function projected profile"
-    #    if r>0:
-    #        return 0
-    #    else:
-    #        return np.inf
-
-    #def avg_sigma_pointmass_scalar(self,r):
-    #    """analytical average projected of pointmass profile"""
-    #    if r<5e-3:
-    #        return 10**self.log_mstel*1.0/(np.pi*(5e-3)**2)
-    #    else:
-    #        return 10**self.log_mstel*1.0/(np.pi*r**2)
-
-    #def esd_pointmass_scalar(self,r):
-    #    """ESD profile from analytical predictions"""
-    #    if r<5e-3:
-    #        return 0.0
-    #    else:
-    #        val = self.avg_sigma_pointmass_scalar(r) - self.sigma_pointmass_scalar(r)
-    #        return val
-
 
