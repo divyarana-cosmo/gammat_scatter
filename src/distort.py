@@ -210,14 +210,18 @@ class simshear():
 if __name__ == "__main__":
     ss = simshear()
 
-    proj_sep = np.logspace(-2,0,4)
-    print(ss._get_g(logmstel=10, logmh=12, lconc=4, lzred=0.5, szred=1.0, proj_sep=proj_sep))
+    proj_sep = np.logspace(-3,0,4)
+    print(ss._get_g(logmstel=11, logmh=13, lconc=4, lzred=0.5, szred=1.0 + 0.0*proj_sep, proj_sep=proj_sep))
 
 
     print( ss._get_sigma_crit_inv(lzred=0.5, szred=1.0))
 
-    print(ss.stel.esd_deVaucouleurs(proj_sep))
-    print(ss.hp.esd_nfw(proj_sep)) 
+    plt.plot(proj_sep, ss.stel.esd_deVaucouleurs(proj_sep))
+    plt.plot(proj_sep, ss.stel.esd_pointmass(proj_sep))
+    plt.plot(proj_sep, ss.hp.esd_nfw(proj_sep)) 
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.savefig('test.png')
 
 
 

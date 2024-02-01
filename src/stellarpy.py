@@ -14,7 +14,11 @@ class stellar(constants):
     """Useful functions for weak lensing signal modelling"""
     def __init__(self, log_mstel):
         self.log_mstel  = log_mstel # total mass of the halo
-        self.log_re     = 0.774 + 0.977 *(log_mstel - 11.4) #check arxiv:1811.04934
+        
+        #self.log_re     = 0.7*(0.774 + 0.977 *(log_mstel - np.log10(0.7) - 11.4)) #check arxiv:1811.04934
+        # correcting for the h-1 factors and also kpc to Mpc
+        self.log_re     = (0.774 + 0.977 *(np.log10(10**log_mstel / 0.7) - 11.4)) #check arxiv:1811.04934
+        self.log_re     = np.log10(10**self.log_re * 0.7/1e3) #h-1 kpc to h-1 Mpc
 
     def esd_pointmass(self,r):
         """ESD profile from analytical predictions"""
@@ -84,8 +88,9 @@ class stellar(constants):
 
 if __name__ == "__main__":
     plt.subplot(2,2,1)
-    rbin = np.logspace(-2,np.log10(5),10)
-    hp = stellar(10)
+    rbin = np.logspace(-4,np.log10(5),10)
+    hp = stellar(11)
+    print(hp.log_re)
     #print hp.r_200
     yy = hp.esd_pointmass(rbin)/(1e12)
     print(yy)
@@ -93,10 +98,12 @@ if __name__ == "__main__":
     yy = hp.esd_deVaucouleurs(rbin)/(1e12)
     print(yy)
     plt.plot(rbin, yy)
-    yy = hp.avg_sigma_deVaucouleurs(rbin)/(1e12)
-    print(yy)
+    
+    from halopy import halo
+    hp = halo(11.5,4)
+    yy = hp.esd_nfw(rbin)/1e12
+ 
     plt.plot(rbin, yy)
-
 
 
     plt.xscale('log')
