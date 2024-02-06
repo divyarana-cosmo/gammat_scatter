@@ -164,7 +164,7 @@ class simshear():
         #c_theta = np.cos(ldec)*np.cos(sdec)*c_sra_lra + np.sin(ldec)*np.sin(sdec)
         s_theta = np.sqrt(1-c_theta**2)
 
-        sflag = sflag & (np.abs(s_theta)>np.sin(np.pi/180 * 1/3600)) & (np.abs(kappa)<0.5)   #weak lensing flag and proximity flag
+        sflag = sflag & (np.abs(s_theta)>np.sin(np.pi/180 * 1/3600)) & (np.abs(kappa)<0.5) & (np.abs(g)<1)  #weak lensing flag and proximity flag
 
         c_phi   =  np.cos(ldec)*s_sra_lra*1.0/s_theta
         s_phi   = (-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*c_sra_lra*np.sin(sdec))*1.0/s_theta
