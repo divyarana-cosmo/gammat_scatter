@@ -53,16 +53,25 @@ class halo(constants):
         x = r/r_s
         value = 0.0*x
         idx =  (x < 1)
-        if sum(idx)!=0:
-            value[idx] = np.arccosh(1/x[idx])/np.sqrt(1-x[idx]**2) + np.log(x[idx]/2.0)
-            value[idx] = value[idx]*2.0/x[idx]**2
+        value[idx] = np.arccosh(1/x[idx])/np.sqrt(1-x[idx]**2) + np.log(x[idx]/2.0)
+        value[idx] = value[idx]*2.0/x[idx]**2
         idx = (x > 1)
-        if sum(idx)!=0:
-            value[idx] = np.arccos(1/x[idx])/np.sqrt(x[idx]**2-1)  + np.log(x[idx]/2.0)
-            value[idx] = value[idx]*2.0/x[idx]**2
+        value[idx] = np.arccos(1/x[idx])/np.sqrt(x[idx]**2-1)  + np.log(x[idx]/2.0)
+        value[idx] = value[idx]*2.0/x[idx]**2
         idx = (x == 1)
-        if sum(idx)!=0:
-            value[idx] = 2*(1-np.log(2))
+        value[idx] = 2*(1-np.log(2))
+
+        #idx =  (x < 1)
+        #if sum(idx)!=0:
+        #    value[idx] = np.arccosh(1/x[idx])/np.sqrt(1-x[idx]**2) + np.log(x[idx]/2.0)
+        #    value[idx] = value[idx]*2.0/x[idx]**2
+        #idx = (x > 1)
+        #if sum(idx)!=0:
+        #    value[idx] = np.arccos(1/x[idx])/np.sqrt(x[idx]**2-1)  + np.log(x[idx]/2.0)
+        #    value[idx] = value[idx]*2.0/x[idx]**2
+        #idx = (x == 1)
+        #if sum(idx)!=0:
+        #    value[idx] = 2*(1-np.log(2))
         sig = value*k
         return sig
 
@@ -77,14 +86,21 @@ class halo(constants):
         value =0.0*r
         x = r/r_s
         idx = x < 1
-        if sum(idx)!=0:
-            value[idx] = (1 - np.arccosh(1/x[idx])/np.sqrt(1-x[idx]**2))/(x[idx]**2-1)
+        value[idx] = (1 - np.arccosh(1/x[idx])/np.sqrt(1-x[idx]**2))/(x[idx]**2-1)
         idx = x > 1
-        if sum(idx)!=0:
-            value[idx] = (1 - np.arccos(1/x[idx])/np.sqrt(x[idx]**2-1))/(x[idx]**2-1)
+        value[idx] = (1 - np.arccos(1/x[idx])/np.sqrt(x[idx]**2-1))/(x[idx]**2-1)
         idx = x == 1
-        if sum(idx)!=0:
-            value[idx] = 1./3.
+        value[idx] = 1./3.
+
+        #idx = x < 1
+        #if sum(idx)!=0:
+        #    value[idx] = (1 - np.arccosh(1/x[idx])/np.sqrt(1-x[idx]**2))/(x[idx]**2-1)
+        #idx = x > 1
+        #if sum(idx)!=0:
+        #    value[idx] = (1 - np.arccos(1/x[idx])/np.sqrt(x[idx]**2-1))/(x[idx]**2-1)
+        #idx = x == 1
+        #if sum(idx)!=0:
+        #    value[idx] = 1./3.
         sig = value*k
         return sig
 
@@ -114,15 +130,18 @@ if __name__ == "__main__":
     mlist =  [12]
     for mm in mlist:
         hp = halo(mm,4)
-        rbin = np.logspace(-2,np.log10(1),10)
+        rbin = np.logspace(-2,np.log10(1), int(1e6))
         yy = 0.0*rbin
+        import time
+        begin = time.time()
         yy = hp.esd_nfw(rbin)
-        yy0 = 0.0*yy
+        print(time.time() - begin)
+        #yy0 = 0.0*yy
         #for ii, rr in enumerate(rbin):
         #    yy0[ii] = hp.esd_scalar(rr)
-        yy0 = hp.num_delta_sigma(rbin)
+        #yy0 = hp.num_delta_sigma(rbin)
         plt.plot(rbin, yy)
-        plt.plot(rbin, yy0,'.')
+        #plt.plot(rbin, yy0,'.')
 
     #print hp.r_200
     #yy = hp.esd_nfw(rbin)/(1e12)
