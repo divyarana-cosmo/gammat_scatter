@@ -65,7 +65,8 @@ def lens_select(lensargs):
         #fname = './DataStore/micecatv2/15407.fits'
         fname = './DataStore/micecatv2/15412.fits'
         df = fitsio.FITS(fname)
-        df = df[1][df[1].where('flag_central == 0 && ra_gal < 30.0 && dec_gal < 30.0 && lmstellar > %2.2f && lmstellar < %2.2f && z_cgal_v > %2.2f && z_cgal_v < %2.2f'%(lensargs['logmstelmin'], lensargs['logmstelmax'], lensargs['zmin'], lensargs['zmax']))]
+        #df = df[1][df[1].where('flag_central == 0 && ra_gal < 30.0 && dec_gal < 30.0 && lmstellar > %2.2f && lmstellar < %2.2f && z_cgal_v > %2.2f && z_cgal_v < %2.2f'%(lensargs['logmstelmin'], lensargs['logmstelmax'], lensargs['zmin'], lensargs['zmax']))]
+        df = df[1][df[1].where('flag_central == 0  && lmstellar > %2.2f && lmstellar < %2.2f && z_cgal_v > %2.2f && z_cgal_v < %2.2f'%(lensargs['logmstelmin'], lensargs['logmstelmax'], lensargs['zmin'], lensargs['zmax']))]
         #idx = np.random.uniform(size=len(df['ra_gal']))<0.1
         #df  = df[idx]
 
