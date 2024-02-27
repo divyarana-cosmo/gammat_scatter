@@ -170,12 +170,14 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     weldict = {}
     weldictx = {}
 
+    dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(np.min(lzred)).value 
+
     fpairout = open(outputpairfile, "w")
     fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tkappa\n')
 
     #..................................#
     for ii in tqdm(range(len(lra))):
-        dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(lzred[ii]).value 
+        #dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(lzred[ii]).value 
         # fixing the simulation aperture
         sra, sdec, szred, wgal, se1, se2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell']) 
         if config['test_case']:
@@ -216,6 +218,8 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
         w_ls    = lwgt[ii]*wgal
         #cure the arrays a bin
         idx = (sl_sep>rmin) & (sl_sep<rmax) & (sflag==1)
+        if sum(idx)==0.0:
+            continue
         sl_sep      = sl_sep[idx]
         w_ls        = w_ls[idx]
         et          = et[idx]
@@ -272,6 +276,9 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
         for i in range(nbins):
             rrmin = rbins[i]
             rrmax = rbins[i+1]
+            if np.isnan(sumdwls[jk*nbins + i]):
+                print('error', jk, i, sumdwls[jk*nbins + i])
+                exit()
            #Resp = sumdwls_resp[i]*1.0/sumdwls[i]
             try:
                 fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], weldict[jk*nbins + i].mean, weldict[jk*nbins + i].var_p**0.5, weldict[jk*nbins + i].count, weldictx[jk*nbins + i].mean, weldictx[jk*nbins + i].var_p**0.5, jk)    )
@@ -302,12 +309,22 @@ if __name__ == "__main__":
     parser.add_argument("--rot90", help="rotating intrinsic shapes by 90 degrees", type=bool, default=False)
     parser.add_argument("--logmstelmin", help="log stellar mass minimum-lense selection", type=float, default=11.0)
     parser.add_argument("--logmstelmax", help="log stellar mass maximum-lense selection", type=float, default=13.0)
+    parser.add_argument("--ten_percent", help="using ten percent of the lense sample", type=bool, default=False)
 
 
     args = parser.parse_args()
 
     with open(args.config, 'r') as ymlfile:
         config = yaml.safe_load(ymlfile)
+
+
+    config['lens']['ten_percent'] = args.ten_percent
+    
+    if args.ten_percent:
+        config["outputdir"] = config["outputdir"] + "_ten_percent"
+
+
+
     #make the directory for the output
     from subprocess import call
     call("mkdir -p %s" % (config["outputdir"]), shell=1)
@@ -318,7 +335,7 @@ if __name__ == "__main__":
         config['lens']['logmstelmin'] = args.logmstelmin
     if 'logmstelmax'not in config:
         config['lens']['logmstelmax'] = args.logmstelmax
-    
+        
     config['source']['rot90'] = args.rot90
     config['source']['no_shape_noise'] = args.no_shape_noise
     config['source']['no_shear'] = args.no_shear
