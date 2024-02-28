@@ -137,6 +137,18 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
 
     # getting the lenses data
     lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
+    if sum(np.isnan(lwgt))>0:
+        idx = np.isnan(lwgt)
+        print(lra[idx], lwgt[idx])
+        print(lwgt) 
+        print("lense data is screwed!!")
+
+        exit()
+
+
+
+
+
     lra     = 130 + 0.0*lra
     ldec    = 0.0 + 0.0*ldec
 
@@ -170,7 +182,8 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
     weldict = {}
     weldictx = {}
 
-    dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(np.min(lzred)).value 
+    dismax = config['Rmax']/ss.Astropy_cosmo.angular_diameter_distance(np.min(lzred)).value 
+    #dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(np.min(lzred)).value 
 
     fpairout = open(outputpairfile, "w")
     fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tkappa\n')
@@ -180,6 +193,13 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
         #dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(lzred[ii]).value 
         # fixing the simulation aperture
         sra, sdec, szred, wgal, se1, se2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell']) 
+
+        if sum(np.isnan(wgal))>0:
+            print(wgal)
+            print("source data is screwed!!")
+            exit()
+
+
         if config['test_case']:
             szred = 0.8 + 0.0*sra
         if sourceargs['rot90']:
