@@ -171,7 +171,8 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
 
     #..................................#
     for ii in tqdm(range(len(lra))):
-        dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(lzred[ii]).value 
+        dismax = config['Rmax']/ss.Astropy_cosmo.angular_diameter_distance(lzred[ii]).value 
+        #dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(lzred[ii]).value 
         # fixing the simulation aperture
         sra, sdec, szred, wgal, se1, se2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell']) 
         if config['test_case']:
