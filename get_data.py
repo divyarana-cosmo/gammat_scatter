@@ -67,17 +67,22 @@ def lens_select(lensargs):
         df = fitsio.FITS(fname)
         #df = df[1][df[1].where('flag_central == 0 && ra_gal < 30.0 && dec_gal < 30.0 && lmstellar > %2.2f && lmstellar < %2.2f && z_cgal_v > %2.2f && z_cgal_v < %2.2f'%(lensargs['logmstelmin'], lensargs['logmstelmax'], lensargs['zmin'], lensargs['zmax']))]
         df = df[1][df[1].where('flag_central == 0  && lmstellar > %2.2f && lmstellar < %2.2f && z_cgal_v > %2.2f && z_cgal_v < %2.2f'%(lensargs['logmstelmin'], lensargs['logmstelmax'], lensargs['zmin'], lensargs['zmax']))]
-        #idx = np.random.uniform(size=len(df['ra_gal']))<0.1
-        #df  = df[idx]
+        if lensargs["ten_percent"]:
+            idx = (np.random.uniform(size=len(df['ra_gal']))<0.1)
+        df  = df[idx]
+        idx = (np.isfinite(df['unique_gal_id'])) & (np.isfinite(df['ra_gal'])) & (np.isfinite(df['dec_gal'])) & (df['lmstellar']>0) & (df['lmhalo']>0)#check if something is nan here
+
+
+        df  = df[idx]
 
         lid         = df['unique_gal_id'][:]
         lra         = df['ra_gal'][:]  
         ldec        = df['dec_gal'][:] 
         lzred       = df['z_cgal_v'][:]
-        lwgt        = lra/lra 
         llogmstel   = df['lmstellar'][:]
         llogmh      = df['lmhalo'][:]
 
+        lwgt        = 1.0 + 0.0*lra
 
 
         np.random.seed(123)
