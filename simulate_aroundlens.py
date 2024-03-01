@@ -101,7 +101,7 @@ def create_sources(ra, dec, dismax, nsrc=30, sigell=0.27, mask=None): #mask appl
     return sra, sdec, szred, wgal, se1, se2
 
 
-def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
+def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
     rmin    = config['Rmin'] 
     rmax    = config['Rmax'] 
     nbins   = config['Nbins']
@@ -184,9 +184,10 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
 
     dismax = config['Rmax']/ss.Astropy_cosmo.angular_diameter_distance(np.min(lzred)).value 
     #dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(np.min(lzred)).value 
-
-    fpairout = open(outputpairfile, "w")
-    fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tkappa\n')
+    
+    if outputpairfile != None:
+        fpairout = open(outputpairfile, "w")
+        fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tkappa\n')
 
     #..................................#
     for ii in tqdm(range(len(lra))):
@@ -255,8 +256,9 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
         szred       = szred[idx]
 
 
-        for jj in range(sum(idx)):
-            fpairout.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lxjkreg[ii], lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra[jj], sdec[jj], szred[jj], se1[jj], se2[jj], etan[jj], et[jj], ex[jj], sl_sep[jj], w_ls[jj], kappa[jj]))
+        if outputpairfile != None:
+            for jj in range(sum(idx)):
+                fpairout.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lxjkreg[ii], lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra[jj], sdec[jj], szred[jj], se1[jj], se2[jj], etan[jj], et[jj], ex[jj], sl_sep[jj], w_ls[jj], kappa[jj]))
 
 
         #exit()
@@ -286,9 +288,11 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
                 sumdgammaxsq_num        [jk*nbins + rb] +=sum(((w_ls* ex)**2)[idx])
                 sumdwls                 [jk*nbins + rb] +=sum(w_ls[idx])
 
+    
 
-    fpairout.write("#OK")
-    fpairout.close()
+    if outputpairfile != None:
+        fpairout.write("#OK")
+        fpairout.close()
 
     fout = open(outputfilename, "w")
     fout.write("# 0:rmin/2+rmax/2 1:gammat 2:gammatsq 3:SN_Errgammat 4:gammax 5:gammaxsq 6:SN_Errgammax 7:truegamma 8:gammat_inp 9:gammat_inp_bary 10:gammat_inp_dm 11:sumd_wls 12:welford_gammat_mean 13:welford_gammat_std 14:welford_counts 15:welford_gammax_mean 16:welford_gammax_std 17:Jkid \n")
@@ -379,7 +383,8 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
     outputfilename = outputfilename + '_w_jacks'
     print(config)
-    run_pipe(config, outputfile = outputfilename, outputpairfile = outputfilename + '_pairs')           
+    #run_pipe(config, outputfile = outputfilename, outputpairfile = outputfilename + '_pairs')           
+    run_pipe(config, outputfilename = outputfilename)           
 
         #for ll,sep in enumerate(sl_sep):
         #    if sep<rmin or sep>rmax or sflag[ll]==0:
