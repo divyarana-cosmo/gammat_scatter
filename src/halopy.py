@@ -127,25 +127,27 @@ class halo(constants):
 
 if __name__ == "__main__":
     plt.subplot(2,2,1)
-    mlist =  [12]
-    for mm in mlist:
-        hp = halo(mm,4)
-        rbin = np.logspace(-2,np.log10(1), int(1e6))
-        yy = 0.0*rbin
-        import time
-        begin = time.time()
-        yy = hp.esd_nfw(rbin)
-        print(time.time() - begin)
-        #yy0 = 0.0*yy
-        #for ii, rr in enumerate(rbin):
-        #    yy0[ii] = hp.esd_scalar(rr)
-        #yy0 = hp.num_delta_sigma(rbin)
-        plt.plot(rbin, yy)
-        #plt.plot(rbin, yy0,'.')
+    #mlist =  [12]
+    #for mm in mlist:
+    #    hp = halo(mm,4)
+    #    rbin = np.logspace(-2,np.log10(1), int(1e6))
+    #    yy = 0.0*rbin
+    #    import time
+    #    begin = time.time()
+    #    yy = hp.esd_nfw(rbin)
+    #    print(time.time() - begin)
+    #    #yy0 = 0.0*yy
+    #    #for ii, rr in enumerate(rbin):
+    #    #    yy0[ii] = hp.esd_scalar(rr)
+    #    #yy0 = hp.num_delta_sigma(rbin)
+    #    plt.plot(rbin, yy)
+    #    #plt.plot(rbin, yy0,'.')
 
-    #print hp.r_200
-    #yy = hp.esd_nfw(rbin)/(1e12)
-    #plt.plot(rbin, yy, '-')
+    rbin = np.logspace(-2,np.log10(1), int(1e6))
+    hp = halo(13,4)
+    print(hp.r_200)
+    yy = hp.esd_nfw(rbin)/(1e12)
+    plt.plot(rbin, yy, '-')
     #plt.plot(rbin, hp.num_delta_sigma(rbin)/(1e12), '.', lw=0.0)
     plt.xscale('log')
     plt.yscale('log')

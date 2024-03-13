@@ -35,7 +35,7 @@ class simshear():
         self.init_spl_sigma_crit_inv = False
         self.spl_Rmin = 0.001
         self.spl_Rmax = 10
-        self.spl_Rbin = 100
+        self.spl_Rbin = 80
         self.spl_Rarr = np.logspace(np.log10(self.spl_Rmin), np.log10(self.spl_Rmax), self.spl_Rbin)
         print("fixing cosmology \n")
 
@@ -93,21 +93,29 @@ class simshear():
         self.spl_esd_dm     = interp1d(np.log10(self.spl_Rarr), np.log10(_esd_dm),      kind='cubic')  
         self.spl_sigma_s    = interp1d(np.log10(self.spl_Rarr), np.log10(_sigma_s),     kind='cubic')  
         self.spl_sigma_dm   = interp1d(np.log10(self.spl_Rarr), np.log10(_sigma_dm),    kind='cubic')
+
         return
 
 
     def _get_esd(self, logmstel, logmh, lconc, proj_sep):
         self._spl_get_esd(logmstel, logmh, lconc)
-        gamma_s     =  -999 + 0.0*proj_sep      
-        gamma_dm    =  -999 + 0.0*proj_sep
-        kappa_s     =  -999 + 0.0*proj_sep
-        kappa_dm    =  -999 + 0.0*proj_sep
+        print('ESD spline ready')
+        esd_s       =  -999 + 0.0*proj_sep      
+        esd_dm      =  -999 + 0.0*proj_sep
+        sigma_s     =  -999 + 0.0*proj_sep
+        sigma_dm    =  -999 + 0.0*proj_sep
         idx =   (proj_sep > self.spl_Rmin) & (proj_sep < self.spl_Rmax)
-        gamma_s [idx]    = 10**self.spl_esd_s   (np.log10(proj_sep[idx]))  
-        gamma_dm[idx]    = 10**self.spl_esd_dm  (np.log10(proj_sep[idx]))  
-        kappa_s [idx]    = 10**self.spl_sigma_s (np.log10(proj_sep[idx]))
-        kappa_dm[idx]    = 10**self.spl_sigma_dm(np.log10(proj_sep[idx]))         
-        return gamma_s, gamma_dm, kappa_s, kappa_dm 
+        esd_s [idx]         = 10**self.spl_esd_s   (np.log10(proj_sep[idx]))  
+        esd_dm[idx]         = 10**self.spl_esd_dm  (np.log10(proj_sep[idx]))  
+        sigma_s [idx]       = 10**self.spl_sigma_s (np.log10(proj_sep[idx]))
+        sigma_dm[idx]       = 10**self.spl_sigma_dm(np.log10(proj_sep[idx]))         
+
+        #esd_s       = 10**self.spl_esd_s   (np.log10(proj_sep))  
+        #esd_dm      = 10**self.spl_esd_dm  (np.log10(proj_sep))  
+        #sigma_s     = 10**self.spl_sigma_s (np.log10(proj_sep))
+        #sigma_dm    = 10**self.spl_sigma_dm(np.log10(proj_sep))         
+
+        return esd_s, esd_dm, sigma_s, sigma_dm 
 
 
 
@@ -121,13 +129,23 @@ class simshear():
             get_sigma_crit_inv = self.interp_get_sigma_crit_inv(szred) 
 
         get_sigma_crit_inv = self.interp_get_sigma_crit_inv(szred) 
-        gamma_s, gamma_dm, kappa_s, kappa_dm =  self._get_esd(logmstel, logmh, lconc, proj_sep)
-        idx = (gamma_s != -999) & (gamma_dm != -999) & (kappa_s != -999) & (kappa_dm != -999)
+        esd_s, esd_dm, sigma_s, sigma_dm =  self._get_esd(logmstel, logmh, lconc, proj_sep)
+        gamma_s     =  -999 + 0.0*esd_s    
+        gamma_dm    =  -999 + 0.0*esd_dm   
+        kappa_s     =  -999 + 0.0*sigma_s  
+        kappa_dm    =  -999 + 0.0*sigma_dm 
+
+        idx = (esd_s != -999) & (esd_dm != -999) & (sigma_s != -999) & (sigma_dm != -999)
         #considering only tangential shear and adding both contributions
-        gamma_s [idx]    =   gamma_s [idx]  * get_sigma_crit_inv[idx] 
-        gamma_dm[idx]    =   gamma_dm[idx]  * get_sigma_crit_inv[idx]
-        kappa_s [idx]    =   kappa_s [idx]  * get_sigma_crit_inv[idx]
-        kappa_dm[idx]    =   kappa_dm[idx]  * get_sigma_crit_inv[idx]
+        gamma_s [idx]    =   esd_s [idx]    * get_sigma_crit_inv[idx] 
+        gamma_dm[idx]    =   esd_dm[idx]    * get_sigma_crit_inv[idx]
+        kappa_s [idx]    =   sigma_s [idx]  * get_sigma_crit_inv[idx]
+        kappa_dm[idx]    =   sigma_dm[idx]  * get_sigma_crit_inv[idx]
+
+        #gamma_s     =   esd_s       * get_sigma_crit_inv 
+        #gamma_dm    =   esd_dm      * get_sigma_crit_inv
+        #kappa_s     =   sigma_s     * get_sigma_crit_inv
+        #kappa_dm    =   sigma_dm    * get_sigma_crit_inv
         return gamma_s, gamma_dm, kappa_s, kappa_dm
 
     def get_g(self, lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred):
@@ -144,8 +162,8 @@ class simshear():
         #considering only tangential shear and adding both contributions
         gamma_s, gamma_dm, kappa_s, kappa_dm = self._get_g(logmstel, logmh, lconc, lzred, szred, proj_sep)
         sflag = (gamma_s != -999) & (gamma_dm != -999) & (kappa_s != -999) & (kappa_dm != -999)
-        if np.any(np.isnan(kappa_s))>0:
-            kappa_s[np.isnan(kappa_s)] = 0.0
+        #if np.any(np.isnan(kappa_s))>0:
+        #    kappa_s[np.isnan(kappa_s)] = 0.0
 
         gamma = gamma_s + gamma_dm
         kappa = kappa_s + kappa_dm
@@ -170,7 +188,9 @@ class simshear():
         #c_theta = np.cos(ldec)*np.cos(sdec)*c_sra_lra + np.sin(ldec)*np.sin(sdec)
         s_theta = np.sqrt(1-c_theta**2)
 
-        sflag = sflag & (np.abs(s_theta)>np.sin(np.pi/180 * 1/3600)) & (np.abs(kappa)<0.5) & (np.abs(g)<1)  #weak lensing flag and proximity flag
+        #sflag = (np.abs(kappa)<0.5) & (np.abs(g)<1)  #weak lensing flag 
+        sflag = sflag & (np.abs(kappa)<0.5) & (np.abs(g)<1)  #weak lensing flag 
+        #sflag = sflag & (np.abs(s_theta)>np.sin(np.pi/180 * 1/3600)) & (np.abs(kappa)<0.5) & (np.abs(g)<1)  #weak lensing flag and proximity flag
 
         c_phi   =  np.cos(ldec)*s_sra_lra*1.0/s_theta
         s_phi   = (-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*c_sra_lra*np.sin(sdec))*1.0/s_theta
@@ -202,31 +222,59 @@ class simshear():
         #using the seitz and schnider 1995 formalism to shear the galaxy
         idx = np.abs(g)<=1
         e[idx] = (es[idx] + g[idx])/(1.0 + np.conj(g[idx])*es[idx])
+        #e[idx] = (es[idx] + g[idx])/(1.0 + np.conj(g[idx])*es[idx])
         e[~idx] = (1 + g[~idx]*np.conj(es[~idx]))/(np.conj(es[~idx]) + np.conj(g[~idx])) # mod(g)>1
         return np.real(e), np.imag(e), etan, kappa, proj_sep, sflag, g_b, g_dm
-
-
-
-
-
-
-
 
 
 if __name__ == "__main__":
     ss = simshear()
 
-    proj_sep = np.logspace(-3,0,4)
-    print(ss._get_g(logmstel=11, logmh=13, lconc=4, lzred=0.5, szred=1.0 + 0.0*proj_sep, proj_sep=proj_sep))
+    proj_sep = np.logspace(7e-3,0,10)
+    
+    from time import time
+    begin = time()
+
+    #gamma_s, gamma_dm, kappa_s, kappa_dm = ss._get_esd(logmstel=11, logmh=13, lconc=4, proj_sep=proj_sep)
+
+
+    gamma_s, gamma_dm, kappa_s, kappa_dm = ss._get_g(logmstel=11, logmh=13, lconc=4, lzred=0.5, szred=1.0 + 0.0*proj_sep, proj_sep=proj_sep)
+    
 
 
     print( ss._get_sigma_crit_inv(lzred=0.5, szred=1.0))
+    sigcrit_inv = ss._get_sigma_crit_inv(lzred=0.5, szred=1.0)
+   
+    plt.subplot(2,2,1)
+    #esd     = ss.stel.esd_deVaucouleurs(proj_sep) + ss.hp.esd_nfw(proj_sep)
+    #sigma   = ss.stel.sigma_deVaucouleurs(proj_sep) + ss.hp.sigma_nfw(proj_sep)
 
-    plt.plot(proj_sep, ss.stel.esd_deVaucouleurs(proj_sep))
-    plt.plot(proj_sep, ss.stel.esd_pointmass(proj_sep))
-    plt.plot(proj_sep, ss.hp.esd_nfw(proj_sep)) 
+    #gamma = esd*sigcrit_inv
+    #kappa = sigma*sigcrit_inv
+
+    #print((gamma_s+gamma_dm)/(1- (kappa_s+kappa_dm)))
+    #print(gamma*(1+kappa))
+    #print(esd)
+    #print(sigma)
+    #print(kappa)
+
+
+    #plt.plot(proj_sep*1e3/0.7, ss.stel.esd_deVaucouleurs(proj_sep), label='dev')
+    #plt.plot(proj_sep*1e3/0.7, ss.stel.esd_pointmass(proj_sep), label='point')
+    plt.plot(proj_sep, ss.hp.esd_nfw(proj_sep)/1e12, label='nfw') 
+    plt.xscale('log')
+    #plt.yscale('log')
+    plt.legend()
+
+
+    plt.subplot(2,2,2)
+    plt.plot(proj_sep*1e3/0.7, ss.stel.sigma_deVaucouleurs(proj_sep), label='dev')
+    plt.plot(proj_sep*1e3/0.7, ss.stel.sigma_pointmass(proj_sep), label='point')
+    plt.plot(proj_sep*1e3/0.7, ss.hp.sigma_nfw(proj_sep), label='nfw') 
     plt.xscale('log')
     plt.yscale('log')
+    plt.legend()
+
     plt.savefig('test.png')
 
 

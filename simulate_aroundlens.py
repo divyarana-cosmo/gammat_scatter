@@ -137,25 +137,15 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
 
     # getting the lenses data
     lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
-    if sum(np.isnan(lwgt))>0:
-        idx = np.isnan(lwgt)
-        print(lra[idx], lwgt[idx])
-        print(lwgt) 
-        print("lense data is screwed!!")
 
-        exit()
-
-
-
-
-
+    #fixed position 
     lra     = 130 + 0.0*lra
     ldec    = 0.0 + 0.0*ldec
 
 
     lzredmax = np.max(lzred)
     lconc = 0.0*lid
-    xx = np.linspace(9,16,100)
+    xx = np.linspace(9,16,50)
     yy = 0.0*xx
     med_lzred = np.median(lzred)
 
@@ -169,7 +159,7 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
     if config['test_case']:
         llogmh      = 14.0  + 0.0*llogmh
         lzred       = 0.3   + 0.0*lzred
-        lconc       = 5.5   + 0.0*lzred
+        lconc       = concentration.concentration(10**14, '200m', 0.3, model = 'diemer19') + 0.0*lzred
         llogmstel   = 12.0  + 0.0*llogmh
 
  
@@ -295,7 +285,7 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
         fpairout.close()
 
     fout = open(outputfilename, "w")
-    fout.write("# 0:rmin/2+rmax/2 1:gammat 2:gammatsq 3:SN_Errgammat 4:gammax 5:gammaxsq 6:SN_Errgammax 7:truegamma 8:gammat_inp 9:gammat_inp_bary 10:gammat_inp_dm 11:sumd_wls 12:welford_gammat_mean 13:welford_gammat_std 14:welford_counts 15:welford_gammax_mean 16:welford_gammax_std 17:Jkid \n")
+    fout.write("# 0:rmin/2+rmax/2 1:gammat 2:gammatsq 3:sigma_gammat 4:SN_Errgammat 5:gammax 6:gammaxsq 7:sigma_gammax 8:SN_Errgammax 9:truegamma 10:gammat_inp 11:gammat_inp_bary 12:gammat_inp_dm 13:sumd_wls 14:welford_gammat_mean 15:welford_gammat_std 16:welford_counts 17:welford_gammax_mean 18:welford_gammax_std 19:Jkid \n")
     for jk in range(Njacks):
         for i in range(nbins):
             rrmin = rbins[i]
@@ -305,10 +295,10 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
                 exit()
            #Resp = sumdwls_resp[i]*1.0/sumdwls[i]
             try:
-                fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], weldict[jk*nbins + i].mean, weldict[jk*nbins + i].var_p**0.5, weldict[jk*nbins + i].count, weldictx[jk*nbins + i].mean, weldictx[jk*nbins + i].var_p**0.5, jk)    )
+                fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], weldict[jk*nbins + i].mean, weldict[jk*nbins + i].var_p**0.5, weldict[jk*nbins + i].count, weldictx[jk*nbins + i].mean, weldictx[jk*nbins + i].var_p**0.5, jk)    )
             
             except KeyError:
-                fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], -999, -999, -999, -999, -999, jk))
+                fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], -999, -999, -999, -999, -999, jk))
 
 
     fout.write("#OK")
@@ -333,7 +323,8 @@ if __name__ == "__main__":
     parser.add_argument("--rot90", help="rotating intrinsic shapes by 90 degrees", type=bool, default=False)
     parser.add_argument("--logmstelmin", help="log stellar mass minimum-lense selection", type=float, default=11.0)
     parser.add_argument("--logmstelmax", help="log stellar mass maximum-lense selection", type=float, default=13.0)
-    parser.add_argument("--ten_percent", help="using ten percent of the lense sample", type=bool, default=False)
+    parser.add_argument("--two_percent", help="using two percent of the lense sample", type=bool, default=False)
+    #parser.add_argument("--ten_percent", help="using ten percent of the lense sample", type=bool, default=False)
 
 
     args = parser.parse_args()
@@ -342,10 +333,13 @@ if __name__ == "__main__":
         config = yaml.safe_load(ymlfile)
 
 
-    config['lens']['ten_percent'] = args.ten_percent
+    config['lens']['two_percent'] = args.two_percent
+    #config['lens']['ten_percent'] = args.ten_percent
     
-    if args.ten_percent:
-        config["outputdir"] = config["outputdir"] + "_ten_percent"
+    #if args.ten_percent:
+    if args.two_percent:
+        #config["outputdir"] = config["outputdir"] + "_ten_percent"
+        config["outputdir"] = config["outputdir"] + "_two_percent"
 
 
 
@@ -383,8 +377,8 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
     outputfilename = outputfilename + '_w_jacks'
     print(config)
-    #run_pipe(config, outputfile = outputfilename, outputpairfile = outputfilename + '_pairs')           
-    run_pipe(config, outputfilename = outputfilename)           
+    run_pipe(config, outputfilename = outputfilename, outputpairfile = outputfilename + '_pairs')           
+    #run_pipe(config, outputfilename = outputfilename)           
 
         #for ll,sep in enumerate(sl_sep):
         #    if sep<rmin or sep>rmax or sflag[ll]==0:
