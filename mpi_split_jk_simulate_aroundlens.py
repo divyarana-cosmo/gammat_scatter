@@ -137,7 +137,7 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None, jksamp=N
 
     # getting the lenses data
     lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
-    idx = (lxjkreg !=jksamp)
+    idx = (lxjkreg ==jksamp)
     
     lid         =    lid       [idx]       
     lra         =    lra       [idx]
@@ -329,8 +329,9 @@ if __name__ == "__main__":
     parser.add_argument("--rot90", help="rotating intrinsic shapes by 90 degrees", type=bool, default=False)
     parser.add_argument("--logmstelmin", help="log stellar mass minimum-lense selection", type=float, default=11.0)
     parser.add_argument("--logmstelmax", help="log stellar mass maximum-lense selection", type=float, default=13.0)
-    parser.add_argument("--ten_percent", help="using ten percent of the lense sample", type=bool, default=False)
+    #parser.add_argument("--ten_percent", help="using ten percent of the lense sample", type=bool, default=False)
 
+    parser.add_argument("--two_percent", help="using two percent of the lense sample", type=bool, default=False)
 
     args = parser.parse_args()
 
@@ -338,12 +339,15 @@ if __name__ == "__main__":
         config = yaml.safe_load(ymlfile)
 
 
-    config['lens']['ten_percent'] = args.ten_percent
+    config['lens']['two_percent'] = args.two_percent
+    #config['lens']['ten_percent'] = args.ten_percent
     
-    if args.ten_percent:
-        config["outputdir"] = config["outputdir"] + "_ten_percent"
+    #if args.ten_percent:
+    if args.two_percent:
+        #config["outputdir"] = config["outputdir"] + "_ten_percent"
+        config["outputdir"] = config["outputdir"] + "_two_percent"
 
-
+    config["outputdir"] = config["outputdir"] + "/only_jackknifes" 
 
     #make the directory for the output
     from subprocess import call
@@ -388,7 +392,7 @@ if __name__ == "__main__":
     for jk in range(config['lens']['Njacks']):
         if jk%size !=rank:
             continue
-        output_filename = outputfilename + '_jk_%d'%jk
+        output_filename = outputfilename + '_only_jkreg_%d'%jk
         run_pipe(config, outputfilename = output_filename, jksamp=jk)           
 
     comm.Barrier()

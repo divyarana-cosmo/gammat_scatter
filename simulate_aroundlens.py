@@ -1,11 +1,11 @@
 # have to add the responsivity part
 # the psf of Euclid part -- airy disk or check the preparation paper
-
+# integrate 90 rotation in the code itself
 import sys
 sys.path.append('./src/')
 from distort import simshear
 import numpy as np
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from astropy.cosmology import FlatLambdaCDM
 from scipy.integrate import quad
 from scipy.interpolate import interp1d
@@ -14,12 +14,12 @@ from get_data import lens_select
 from tqdm import tqdm
 import argparse
 import yaml
-from mpi4py import MPI
 from subprocess import  call
 from scipy import stats
 from colossus.cosmology import cosmology
 from colossus.halo import concentration
 from welford import Welford
+
 
 
 def get_xyz(ra, dec):
@@ -31,32 +31,6 @@ def get_xyz(ra, dec):
     return x, y, z
 
 
-def get_et_ex(lra, ldec, sra, sdec, se1, se2):
-    "measures the etan and ecross for a given  lens-source pair"
-    lra  = lra*np.pi/180
-    ldec = ldec*np.pi/180
-    sra  = sra*np.pi/180
-    sdec = sdec*np.pi/180
-
-    
-    c_sra_lra = np.cos(sra)*np.cos(lra) + np.sin(lra)*np.sin(sra)
-    s_sra_lra = np.sin(sra)*np.cos(lra) - np.cos(sra)*np.sin(lra)
-
-    c_theta = np.cos(ldec)*np.cos(sdec)*c_sra_lra + np.sin(ldec)*np.sin(sdec)
-    s_theta = np.sqrt(1-c_theta**2)
-
-    c_phi   =  np.cos(ldec)*s_sra_lra*1.0/s_theta
-    s_phi   = (-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*c_sra_lra*np.sin(sdec))*1.0/s_theta
-
-    #phi     = 2*np.pi*np.random.uniform(size=len(sra))
-    #c_phi   = np.cos(phi)
-    #s_phi   = np.sin(phi)
-
-    # tangential shear
-    e_t     = - se1*(2*c_phi**2 -1) - se2*(2*c_phi * s_phi)
-    e_x     =  se1*(2*c_phi * s_phi) - se2*(2*c_phi**2 -1)
-
-    return e_t, e_x
 
 def get_interp_szred():
     "assigns redshifts respecting the distribution"
@@ -116,7 +90,6 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
 
     colossus_cosmo  = cosmology.fromAstropy(ss.Astropy_cosmo, sigma8 = ss.sigma8, ns = ss.ns, cosmo_name=ss.cosmo_name)
 
-
     # set the projected radial binning
     rmin  =  rmin
     rmax  =  rmax
@@ -134,6 +107,11 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
     sumdgammaxsq_num            = np.zeros(nbins*Njacks)
     sumdwls                     = np.zeros(nbins*Njacks)
 
+    r90sumdgammat_num           = np.zeros(nbins*Njacks)
+    r90sumdgammatsq_num         = np.zeros(nbins*Njacks)
+    r90sumdgammax_num           = np.zeros(nbins*Njacks) 
+    r90sumdgammaxsq_num         = np.zeros(nbins*Njacks)
+ 
 
     # getting the lenses data
     lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
@@ -161,46 +139,42 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
         lzred       = 0.3   + 0.0*lzred
         lconc       = concentration.concentration(10**14, '200m', 0.3, model = 'diemer19') + 0.0*lzred
         llogmstel   = 12.0  + 0.0*llogmh
-
  
     #variables defs for welford approx sigma calculations
-    M2 = 0.0
-    mean = 0
-    count = 0
-    
-#    np.random.seed(444)
     weldict = {}
     weldictx = {}
 
     dismax = config['Rmax']/ss.Astropy_cosmo.angular_diameter_distance(np.min(lzred)).value 
     #dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(np.min(lzred)).value 
     
+    if sourceargs['use_shear']:
+        print("using shear not reduced shear for the sims")
+        outputpairfile = outputpairfile + '_using_shear'
+        outputfilename = outputfilename + '_using_shear'
+
     if outputpairfile != None:
         fpairout = open(outputpairfile, "w")
-        fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tkappa\n')
+        fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tkappa\tintse1\tintse2\tr90se1\tr90se2\tr90et\tr90ex\tr90intse1\tr90intse2\n')
 
     #..................................#
     for ii in tqdm(range(len(lra))):
-        #dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(lzred[ii]).value 
-        # fixing the simulation aperture
-        sra, sdec, szred, wgal, se1, se2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell']) 
-
-        if sum(np.isnan(wgal))>0:
-            print(wgal)
-            print("source data is screwed!!")
-            exit()
-
+        #setting random seed for each lens
+        np.random.seed(config["seed"] + ii)
+        # simulating the sources
+        sra, sdec, szred, wgal, intse1, intse2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell']) 
+       
+        #after 90 rotation
+        r90intse1 = -intse1
+        r90intse2 = -intse2 
 
         if config['test_case']:
             szred = 0.8 + 0.0*sra
-        if sourceargs['rot90']:
-            se1 = -1*se1
-            se2 = -1*se2
         if sourceargs['no_shape_noise']:
-            se1 = 0.0*se1
-            se2 = 0.0*se2
-            
-
+            print("no shape noise")
+            intse1 = 0.0*intse1
+            intse2 = 0.0*intse2
+            r90intse1 = 0.0*r90intse1
+            r90intse2 = 0.0*r90intse2
 
         print("number of sources: ", len(sra))
         # selecting cleaner background
@@ -208,23 +182,24 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
         if sum(scut)==0:
             continue
  
-        sra         = sra[scut]  
-        sdec        = sdec[scut]
-        szred       = szred[scut]
-        wgal        = wgal[scut]
-        intse1      = se1[scut]
-        intse2      = se2[scut]
+        sra         =   sra[scut]  
+        sdec        =   sdec[scut]
+        szred       =   szred[scut]
+        wgal        =   wgal[scut]
+        intse1      =   intse1[scut]
+        intse2      =   intse2[scut]
+        r90intse1   =   r90intse1[scut]
+        r90intse2   =   r90intse2[scut]
 
-        # add a section of stellar and dark matter
-
-        se1, se2, etan, kappa, proj_sep, sflag, etan_b, etan_dm = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra, sdec, szred, intse1, intse2)
+        # shearing the sources
+        se1, se2, etan, kappa, proj_sep, sflag, etan_b, etan_dm, et_obs, ex_obs = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra, sdec, szred, intse1, intse2, use_shear=sourceargs["use_shear"], no_shear=sourceargs["no_shear"])
+        r90se1, r90se2, r90etan, kappa, proj_sep, sflag, etan_b, etan_dm, r90et_obs, r90ex_obs = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra, sdec, szred, r90intse1, r90intse2, use_shear=sourceargs["use_shear"], no_shear=sourceargs["no_shear"])
         
+       
         if sourceargs['no_shear']:
             se1 = intse1; se2 = intse2
+            r90se1 = r90intse1; r90se2 = r90intse2
         
-
-        et, ex  = get_et_ex(lra = lra[ii], ldec = ldec[ii], sra = sra, sdec = sdec, se1 = se1,  se2 = se2)
-
         sl_sep  = proj_sep
         w_ls    = lwgt[ii]*wgal
         #cure the arrays a bin
@@ -233,14 +208,21 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
             continue
         sl_sep      = sl_sep[idx]
         w_ls        = w_ls[idx]
-        et          = et[idx]
+        et_obs      = et_obs[idx]
+        r90et_obs   = r90et_obs[idx]
+
         etan        = etan[idx]   
         kappa       = kappa[idx]   
         etan_b      = etan_b[idx]
         etan_dm     = etan_dm[idx]
-        ex          = ex[idx]  
+
+        ex_obs      = ex_obs[idx]  
+        r90ex_obs   = r90ex_obs[idx]  
+
         se1         = se1[idx]
         se2         = se2[idx]
+        r90se1      = r90se1[idx]
+        r90se2      = r90se2[idx]
         sra         = sra[idx]
         sdec        = sdec[idx]
         szred       = szred[idx]
@@ -248,7 +230,7 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
 
         if outputpairfile != None:
             for jj in range(sum(idx)):
-                fpairout.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lxjkreg[ii], lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra[jj], sdec[jj], szred[jj], se1[jj], se2[jj], etan[jj], et[jj], ex[jj], sl_sep[jj], w_ls[jj], kappa[jj]))
+                fpairout.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lxjkreg[ii], lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra[jj], sdec[jj], szred[jj], se1[jj], se2[jj], etan[jj], et_obs[jj], ex_obs[jj], sl_sep[jj], w_ls[jj], kappa[jj], intse1[jj], intse2[jj], r90se1[jj], r90se2[jj], r90et_obs[jj], r90ex_obs[jj], r90intse1[jj], r90intse2[jj]))
 
 
         #exit()
@@ -263,29 +245,36 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
                 if sum(idx)==0:
                     continue
                 try:
-                    weldict[jk*nbins + rb].add_all(np.array(w_ls * et)[idx])
-                    weldictx[jk*nbins + rb].add_all(np.array(w_ls * ex)[idx])
+                    weldict[jk*nbins + rb].add_all(np.array(w_ls * et_obs)[idx])
+                    weldictx[jk*nbins + rb].add_all(np.array(w_ls * ex_obs)[idx])
                 except:
-                    weldict[jk*nbins + rb]  = Welford(np.array(w_ls * et)[idx])
-                    weldictx[jk*nbins + rb] = Welford(np.array(w_ls * ex)[idx])
-                    
-                sumdgammat_num          [jk*nbins + rb] +=sum((w_ls * et)[idx])
+                    weldict[jk*nbins + rb]  = Welford(np.array(w_ls * et_obs)[idx])
+                    weldictx[jk*nbins + rb] = Welford(np.array(w_ls * ex_obs)[idx])
+
+
                 sumdgammat_inp_num      [jk*nbins + rb] +=sum((w_ls * etan)[idx])
                 sumdgammat_inp_bary_num [jk*nbins + rb] +=sum((w_ls * etan_b)[idx])
                 sumdgammat_inp_dm_num   [jk*nbins + rb] +=sum((w_ls * etan_dm)[idx])
-                sumdgammatsq_num        [jk*nbins + rb] +=sum(((w_ls* et)**2)[idx])
-                sumdgammax_num          [jk*nbins + rb] +=sum((w_ls * ex)[idx])
-                sumdgammaxsq_num        [jk*nbins + rb] +=sum(((w_ls* ex)**2)[idx])
+
+                    
+                sumdgammat_num          [jk*nbins + rb] +=sum((w_ls * et_obs)[idx])
+                sumdgammatsq_num        [jk*nbins + rb] +=sum(((w_ls* et_obs)**2)[idx])
+                sumdgammax_num          [jk*nbins + rb] +=sum((w_ls * ex_obs)[idx])
+                sumdgammaxsq_num        [jk*nbins + rb] +=sum(((w_ls* ex_obs)**2)[idx])
                 sumdwls                 [jk*nbins + rb] +=sum(w_ls[idx])
 
-    
+
+                r90sumdgammat_num       [jk*nbins + rb] +=sum((w_ls * r90et_obs)[idx])
+                r90sumdgammatsq_num     [jk*nbins + rb] +=sum(((w_ls* r90et_obs)**2)[idx])
+                r90sumdgammax_num       [jk*nbins + rb] +=sum((w_ls * r90ex_obs)[idx])
+                r90sumdgammaxsq_num     [jk*nbins + rb] +=sum(((w_ls* r90ex_obs)**2)[idx])
 
     if outputpairfile != None:
         fpairout.write("#OK")
         fpairout.close()
 
     fout = open(outputfilename, "w")
-    fout.write("# 0:rmin/2+rmax/2 1:gammat 2:gammatsq 3:sigma_gammat 4:SN_Errgammat 5:gammax 6:gammaxsq 7:sigma_gammax 8:SN_Errgammax 9:truegamma 10:gammat_inp 11:gammat_inp_bary 12:gammat_inp_dm 13:sumd_wls 14:welford_gammat_mean 15:welford_gammat_std 16:welford_counts 17:welford_gammax_mean 18:welford_gammax_std 19:Jkid \n")
+    fout.write("# 0:rmin/2+rmax/2 1:gammat 2:gammatsq 3:sigma_gammat 4:SN_Errgammat 5:gammax 6:gammaxsq 7:sigma_gammax 8:SN_Errgammax 9:truegamma 10:gammat_inp 11:gammat_inp_bary 12:gammat_inp_dm 13:sumd_wls 14:welford_gammat_mean 15:welford_gammat_std 16:welford_counts 17:welford_gammax_mean 18:welford_gammax_std 19:r90gammat 20:r90gammatsq 21:r90sigma_gammat 22:r90SN_Errgammat 23:r90gammax 24:r90gammaxsq 25:r90sigma_gammax 26:r90SN_Errgammax 27:Jkid\n")
     for jk in range(Njacks):
         for i in range(nbins):
             rrmin = rbins[i]
@@ -295,10 +284,10 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
                 exit()
            #Resp = sumdwls_resp[i]*1.0/sumdwls[i]
             try:
-                fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], weldict[jk*nbins + i].mean, weldict[jk*nbins + i].var_p**0.5, weldict[jk*nbins + i].count, weldictx[jk*nbins + i].mean, weldictx[jk*nbins + i].var_p**0.5, jk)    )
+                fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], weldict[jk*nbins + i].mean, weldict[jk*nbins + i].var_p**0.5, weldict[jk*nbins + i].count, weldictx[jk*nbins + i].mean, weldictx[jk*nbins + i].var_p**0.5, r90sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], r90sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(r90sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (r90sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(r90sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], r90sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], r90sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(r90sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (r90sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(r90sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], jk))
             
             except KeyError:
-                fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], -999, -999, -999, -999, -999, jk))
+                fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], -999, -999, -999, -999, -999, -999, -999, -999, -999, -999, -999, -999, -999, jk))
 
 
     fout.write("#OK")
@@ -320,61 +309,51 @@ if __name__ == "__main__":
     parser.add_argument("--no_shape_noise", help="for removing shape noise-testing purpose", type=bool, default=False)
     parser.add_argument("--no_shear", help="for removing shear-testing purpose", type=bool, default=False)
     parser.add_argument("--test_case", help="testing the ideal case", type=bool, default=False)
-    parser.add_argument("--rot90", help="rotating intrinsic shapes by 90 degrees", type=bool, default=False)
+    parser.add_argument("--use_shear", help="use shear or reduced shear for simulations", type=bool, default=False)
+    parser.add_argument("--two_percent", help="using two percent of the lense sample", type=bool, default=False)
     parser.add_argument("--logmstelmin", help="log stellar mass minimum-lense selection", type=float, default=11.0)
     parser.add_argument("--logmstelmax", help="log stellar mass maximum-lense selection", type=float, default=13.0)
-    parser.add_argument("--two_percent", help="using two percent of the lense sample", type=bool, default=False)
-    #parser.add_argument("--ten_percent", help="using ten percent of the lense sample", type=bool, default=False)
-
-
+ 
     args = parser.parse_args()
 
     with open(args.config, 'r') as ymlfile:
         config = yaml.safe_load(ymlfile)
 
+    config['test_case']                 = args.test_case
+    config['seed']                      = args.seed
+    config['lens']['two_percent']       = args.two_percent
+    config['source']['use_shear']       = args.use_shear
+    config['source']['no_shape_noise']  = args.no_shape_noise
+    config['source']['no_shear']        = args.no_shear
 
-    config['lens']['two_percent'] = args.two_percent
-    #config['lens']['ten_percent'] = args.ten_percent
+    if 'logmstelmin'not in config:
+        config['lens']['logmstelmin'] = args.logmstelmin
+    if 'logmstelmax'not in config:
+        config['lens']['logmstelmax'] = args.logmstelmax
     
-    #if args.ten_percent:
     if args.two_percent:
-        #config["outputdir"] = config["outputdir"] + "_ten_percent"
         config["outputdir"] = config["outputdir"] + "_two_percent"
-
-
 
     #make the directory for the output
     from subprocess import call
     call("mkdir -p %s" % (config["outputdir"]), shell=1)
 
     outputfilename = '%s/simed_sources.dat'%(config['outputdir'])
-
-    if 'logmstelmin'not in config:
-        config['lens']['logmstelmin'] = args.logmstelmin
-    if 'logmstelmax'not in config:
-        config['lens']['logmstelmax'] = args.logmstelmax
-        
-    config['source']['rot90'] = args.rot90
-    config['source']['no_shape_noise'] = args.no_shape_noise
-    config['source']['no_shear'] = args.no_shear
-
-    config['test_case'] = args.test_case
-
     outputfilename = outputfilename + '_lmstelmin_%2.2f_lmstelmax_%2.2f'%(args.logmstelmin, args.logmstelmax)
 
     if args.no_shape_noise:
         outputfilename = outputfilename + '_no_shape_noise'
     else:
         outputfilename = outputfilename + '_with_shape_noise'
-        if args.rot90:
-            outputfilename = outputfilename + '_with_90_rotation'
 
     if args.no_shear:
+        print("working with no shear")
         outputfilename = outputfilename + '_no_shear'
     if args.test_case:
-        outputfilename = outputfilename + '_test_case'
+        print("using test case for sims")
+        outputfilename = outputfilename + '_test_case_seed_%d'%int(args.seed)
     
-    np.random.seed(args.seed)
+   
     outputfilename = outputfilename + '_w_jacks'
     print(config)
     run_pipe(config, outputfilename = outputfilename, outputpairfile = outputfilename + '_pairs')           

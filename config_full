@@ -6,13 +6,14 @@ Neff: 3.046
 sigma8: 0.8 
 ns: 0.95
 
-outputdir: /net/dobbe/data2/debug_z_0.1_0.5
-#outputdir: /data2/debug_full_z_0.1_0.5
+#outputdir: /net/dobbe/data2/debug_z_0.1_0.5
+outputdir: /net/dobbe/data2/debug_full_z_0.1_0.5
 #outputdir: debug
 Rmin: 0.007
-Rmax: 0.05
+Rmax: 0.2
 #Rmax: 0.25
-Nbins: 15 
+#Nbins: 5
+Nbins: 15
 
 # Whether to output lens source pair information
 # Lens configuration (to be used in splashback_select.py:lens_select)

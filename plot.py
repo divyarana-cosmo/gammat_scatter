@@ -18,11 +18,12 @@ def plt_data(config, outputfilename):
     colossus_cosmo  = cosmology.fromAstropy(ss.Astropy_cosmo, sigma8 = ss.sigma8, ns = ss.ns, cosmo_name=ss.cosmo_name)
 
     lensargs    = config["lens"]
-    lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
+    #lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
     llogmh = 14 #+ 0.0*llogmh
     lzred = 0.3 #+ 0.0*lzred
     lconc = 5.5#concentration.concentration(1e14, '200m', lzred, model = 'diemer19')
- 
+    llogmstel   = 12.0  
+
     dat = np.loadtxt(outputfilename)
     rbins   = np.unique(dat[:,0])
     xx      = rbins
@@ -33,28 +34,29 @@ def plt_data(config, outputfilename):
  
     for i in range(len(rbins)):
         idx = dat[:,0]==rbins[i]
+        print(dat[idx,1])
         yy[i]       = np.mean(dat[idx,1])
         yyerr[i]    = (sum(idx) - 1)**0.5 * np.std(dat[idx,1])
 
-        yyx[i]       = np.mean(dat[idx,3])
-        yyerrx[i]    = (sum(idx) - 1)**0.5 * np.std(dat[idx,3])
+        yyx[i]       = np.mean(dat[idx,5])
+        yyerrx[i]    = (sum(idx) - 1)**0.5 * np.std(dat[idx,5])
 
         
     #plt.figure(figsize=(8,8))
-    
     plt.subplot(2,2,1)
     plt.errorbar(xx, yy, yerr=yyerr, fmt='.', capsize=3)
     #plt.plot(dat[:,0], dat[:,1], '.', lw=0.0)
 
     rbins   = np.unique(dat[:,0])
-    szred   = 0.8
+    szred   = 0.8 + 0.0*rbins
     print(llogmh,lconc)
-    gamma_s, gamma_dm, kappa_s, kappa_dm    = ss._get_g(np.log10(np.mean(10**llogmstel)),llogmh, lconc, lzred, szred, rbins)
+    gamma_s, gamma_dm, kappa_s, kappa_dm    = ss._get_g(llogmstel,llogmh, lconc, lzred, szred, rbins)
+    #gamma_s, gamma_dm, kappa_s, kappa_dm    = ss._get_g(np.log10(np.mean(10**llogmstel)),llogmh, lconc, lzred, szred, rbins)
 
     #plt.plot(rbins, kappa_dm, '--', color='C1')
-    plt.plot(rbins, gamma_s, '--', color='C1', label='baryon')
+    plt.plot(rbins, gamma_s/(1-kappa_s), '--', color='C1', label='baryon')
     plt.plot(rbins, gamma_dm/(1-kappa_dm), '--', color='C2', label='dark matter')
-    plt.plot(rbins, (gamma_s + gamma_dm)/(1-kappa_dm), '-k', label='total')
+    plt.plot(rbins, (gamma_s + gamma_dm)/(1-(kappa_dm + kappa_s)), '-k', label='total')
 
     plt.xscale('log')
     plt.yscale('log')
@@ -65,14 +67,18 @@ def plt_data(config, outputfilename):
     plt.legend(fontsize='small')
 
     plt.subplot(2,2,3)
-    res = (yy - (gamma_s + gamma_dm)/(1-kappa_dm))/yyerr
+    res = (yy - (gamma_s + gamma_dm)/(1-(kappa_dm + kappa_s)))/yyerr
     plt.plot(xx, res)
-    plt.ylim(-2.5,2.5)
+    plt.ylim(-4,4)
     plt.axhline(0.0, ls='--', color='grey')
     plt.xscale('log')
     plt.ylabel(r'$ (g_{\rm t, meas} - g_{\rm t, mod})/\sigma$')
     plt.xlabel(r'${\rm R [h^{-1}Mpc]}$')
  
+    plt.subplot(2,2,4)
+    plt.plot(yy, (gamma_s + gamma_dm)/(1-(kappa_dm + kappa_s)), '.')
+             
+
     plt.subplot(2,2,2)
     plt.errorbar(xx,xx*yyx, yerr=xx*yyerrx, fmt='.', capsize=3)
     plt.axhline(0.0, ls='--', color='grey')

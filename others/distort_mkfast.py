@@ -1,6 +1,13 @@
-# have to add the responsivity part
+# check all the input equations to be sure of the computations
+# Please be cautions of all the units used in angles, distances and masses
+# start with only circular source galaxies with all same sizes
+# put in the intrinsic galaxy shapes -- need some galsim gimicks
+# make it config based
 # the psf of Euclid part -- airy disk or check the preparation paper
+# have to implement smhm properly with a scatter
+# put the argsparse in it
 
+# remember to clip the sin and cos to -1,1
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,7 +25,8 @@ import argparse
 import yaml
 from mpi4py import MPI
 from subprocess import  call
-
+import fitsio
+#exit()
 class simshear():
     "simulated the shear for a given configuration of dark matter and stellar profiles"
     def __init__(self, H0, Om0, Ob0, Tcmb0, Neff, sigma8, ns ):
@@ -33,14 +41,6 @@ class simshear():
         self.cosmo_name='my_cosmo'
 
         print("fixing cosmology \n")
-
-    def get_xyz(self, ra,dec):
-        theta = (90-dec)*np.pi/180
-        phi = ra*np.pi/180
-        z = np.cos(theta)
-        y = np.sin(phi)*np.sin(theta)
-        x = np.cos(phi)*np.sin(theta)
-        return x,y,z  
 
     def get_sigma_crit_inv(self, lzred, szred):
         "evaluates the lensing efficency geometrical factor"
@@ -69,59 +69,65 @@ class simshear():
         self.hp         = halo(logmh, self.conc, omg_m=self.omg_m)
         self.stel       = stellar(logmstel)
         #considering only tangential shear and adding both contributions
+        #print(len(self.stel.esd_pointmass(proj_sep)), len(self.get_sigma_crit_inv(lzred, szred)), self.get_sigma_crit_inv(lzred, szred))
         gamma_s     = (self.stel.esd_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
         gamma_dm    = (self.hp.esd_nfw(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
         kappa_s     = (self.stel.sigma_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
         kappa_dm    = (self.hp.sigma_nfw(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
         return gamma_s, gamma_dm, kappa_s, kappa_dm
 
+    #def get_g(self, sra, sdec, lzred, szred):
     def get_g(self, lra, ldec, lzred, logmstel, logmh, sra, sdec, szred):
         "computes the g1 and g2 components for the reduced shear"
-        lx, ly, lz = self.get_xyz(lra, ldec) 
-        sx, sy, sz = self.get_xyz(sra, sdec) 
+        # we are using diemer19 cocentration-mass relation
+        #self.conc = concentration.concentration(10**logmh, '200m', lzred, model = 'diemer19')
+        #self.hp         = halo(logmh, self.conc, omg_m=self.omg_m)
+        #self.stel       = stellar(logmstel)
 
-        #projected separation on the lense plane
-        proj_sep = self.cc.comoving_distance(lzred).value * np.sqrt((sx-lx)**2 + (sy-ly)**2 + (sz-lz)**2) # in h-1 Mpc
-
-        #considering only tangential shear and adding both contributions
-        gamma_s, gamma_dm, kappa_s, kappa_dm = self._get_g(logmstel, logmh, lzred, szred, proj_sep)
-        gamma = gamma_s + gamma_dm
-        kappa = kappa_s + kappa_dm
-
-        g = gamma/(1.0 - kappa) # reduced shear
-
-        # phi to get the compute the tangential shear
-
+        # need to supply the angles in radians
         lra  = lra*np.pi/180
         ldec = ldec*np.pi/180
         sra  = sra*np.pi/180
         sdec = sdec*np.pi/180
 
-        c_theta = np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec)
-        if sum(c_theta>1)>0 or sum(c_theta<-1)>0:
-            print('trigon screwed')
-            print(c_theta)
-            exit()
+        c_theta = np.clip(np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec), -1, 1)
         s_theta = np.sqrt(1-c_theta**2)
 
-        sflag = (s_theta!=0) & (np.abs(kappa)<0.5)   #weak lensing flag and proximity flag
+        #projected separation on the lense plane
+        proj_sep = self.cc.comoving_distance(lzred).value * s_theta/c_theta # in h-1 Mpc
 
-        c_phi   =  np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta
-        s_phi   = (-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta
-        
+        #considering only tangential shear and adding both contributions
+        #gamma = (self.hp.esd_nfw(proj_sep) + self.stel.esd_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
+        #kappa = (self.hp.sigma_nfw(proj_sep) + self.stel.sigma_pointmass(proj_sep))*self.get_sigma_crit_inv(lzred, szred)
+        gamma_s, gamma_dm, kappa_s, kappa_dm = self._get_g(logmstel, logmh, lzred, szred, proj_sep)
+        gamma = gamma_s + gamma_dm
+        kappa = kappa_s + kappa_dm
+
+        g = gamma/(1.0 - kappa)
+
+        sflag = (s_theta!=0) & (np.abs(kappa)<0.5)   #weak lensing flag and proximity flag
+        #sflag = (s_theta!=0) & (np.abs(kappa)<1.0)   #strong lensing flag and proximity flag
+
+        # phi to get the compute the tangential shear
+        c_phi   = np.clip( np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta, -1, 1 )
+        s_phi   = np.clip((-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta, -1, 1)
+
+
         # tangential shear
         g_1     = - g*(2*c_phi**2 - 1)
         g_2     = - g*(2*c_phi * s_phi)
-        
-        #return g_1[sflag==1], g_2[sflag==1], g[sflag==1], c_phi[sflag==1], s_phi[sflag==1], proj_sep[sflag==1]
+
+
         return g_1, g_2, g, c_phi, s_phi, proj_sep, sflag
 
 
     def shear_src(self, lra, ldec, lzred, logmstel, logmh, sra, sdec, szred, se1, se2):
         "apply shear on to the source galaxies with given intrinsic shapes"
         g_1, g_2, etan, c_phi, s_phi, proj_sep, sflag = self.get_g(lra, ldec, lzred, logmstel, logmh, sra, sdec, szred)
+        #g_1, g_2, etan, c_phi, s_phi, proj_sep, sflag = self.get_g(sra, sdec, lzred, szred)
         g   = g_1 + 1j* g_2
         es  = se1 + 1j* se2  # intrinsic sizes
+        #print(len(g_1), len(se1), len(szred))
         e   = 0.0*es # sheared shapes
         #using the seitz and schnider 1995 formalism to shear the galaxy
         idx = np.abs(g)<1
@@ -140,15 +146,15 @@ def get_et_ex(lra, ldec, sra, sdec, se1, se2):
     sra  = sra*np.pi/180
     sdec = sdec*np.pi/180
 
-    c_theta = np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec)
+    c_theta = np.clip(np.cos(ldec)*np.cos(sdec)*np.cos(lra - sra) + np.sin(ldec)*np.sin(sdec), -1, 1)
     s_theta = np.sqrt(1-c_theta**2)
 
-    c_phi   =  np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta
-    s_phi   = (-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta
-
+    # phi to get the compute the tangential shear
+    c_phi   = np.clip(np.cos(ldec)*np.sin(sra - lra)*1.0/s_theta, -1, 1)
+    s_phi   = np.clip((-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*np.cos(sra - lra)*np.sin(sdec))*1.0/s_theta, -1, 1)
     # tangential shear
     e_t     = - se1*(2*c_phi**2 -1) - se2*(2*c_phi * s_phi)
-    e_x     =  se1*(2*c_phi * s_phi) - se2*(2*c_phi**2 -1)
+    e_x     = - se1*(2*c_phi * s_phi) + se2*(2*c_phi**2 -1)
 
     return e_t, e_x
 
@@ -177,15 +183,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--config", help="Configuration file")
     parser.add_argument("--outdir", help="Output filename with pairs information", default="debug")
+    #parser.add_argument("--logmh", help="dark matter halo mass", type=float, default=12.0)
     parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=123)
-    parser.add_argument("--no_shape_noise", help="for removing shape noise-testing purpose", type=bool, default=False)
-    parser.add_argument("--no_shear", help="for removing shear-testing purpose", type=bool, default=False)
+    parser.add_argument("--no_shape_noise", help="scatter halo mass", type=bool, default=False)
+    parser.add_argument("--no_shear", help="scatter halo mass", type=bool, default=False)
     parser.add_argument("--ideal_case", help="testing the ideal case", type=bool, default=False)
-    parser.add_argument("--rot90", help="rotating intrinsic shapes by 90 degrees", type=bool, default=False)
-    parser.add_argument("--logmstelmin", help="log stellar mass minimum-lense selection", type=float, default=11.0)
-    parser.add_argument("--logmstelmax", help="log stellar mass maximum-lense selection", type=float, default=13.0)
-    parser.add_argument("--Njacks", help="number of jackknifes", type=int, default=30)
-
+    parser.add_argument("--rot90", help="testing the ideal case", type=bool, default=False)
+    parser.add_argument("--logmstelmin", help="log stellar mass minimum", type=float, default=11.0)
+    parser.add_argument("--logmstelmax", help="log stellar mass maximum", type=float, default=13.0)
 
     args = parser.parse_args()
 
@@ -216,14 +221,8 @@ if __name__ == "__main__":
     if args.no_shear:
         outputfilename = outputfilename + '_no_shear'
             
-    #picking up the lens data
-    lensargs = config['lens']
-    sourceargs = config['source']
 
-    lid, lra, ldec, lzred, logmstel, logmh, xjkreg   = lens_select(lensargs, Njacks=args.Njacks)
-
-
-    np.random.seed(666)
+    np.random.seed(123)
 
     if args.ideal_case:
         logmstel = np.mean(logmstel) + np.random.normal(0,0.1, size=len(lra))
@@ -235,60 +234,69 @@ if __name__ == "__main__":
 
 
 
+    comm = MPI.COMM_WORLD
+    rank = comm.rank
+    size = comm.size
+    outputfilename = outputfilename + '_proc_%d'%rank
+
     #creating class instance
     ss = simshear(H0 = config['H0'], Om0 = config['Om0'], Ob0 = config['Ob0'], Tcmb0 = config['Tcmb0'], Neff = config['Neff'], sigma8 = config['sigma8'], ns = config['ns'])
 
+
+    #picking up the lens data
+    lensargs = config['lens']
+
+    fname = './DataStore/micecatv2/15412.fits'
+    fits = fitsio.FITS(fname,iter_row_buffer=1000000)
+
     fdata = open(outputfilename,'w')
-    fdata.write('lid\txjkreg\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\n')
+    fdata.write('lid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\n')
 
-    for ii in tqdm(range(len(lra))):
+    for ii,row in tqdm(enumerate(fits[1])):
+        if ii%size != rank :
+             continue
 
-        #np.random.seed(666 + lid[ii])
+        if not (row['flag_central'] == 0) & (row['lmstellar'] > lensargs['logmstelmin']) & (row['lmstellar'] < lensargs['logmstelmax']) & (row['z_cgal_v'] > lensargs['zmin']) & (row['z_cgal_v'] < lensargs['zmax']):
+            continue
+
         # fixing the simulation aperture
         cc      = FlatLambdaCDM(H0=100, Om0 = config['Om0'])
-        thetamax = lensargs['Rmax']/cc.comoving_distance(lzred[ii]).value * 180/np.pi
-        numbsrc = round(sourceargs['nsrc'] * (2*thetamax)**2*60**2)      # area of square in deg^2 --> arcmin^2
+        thetamax = config['lens']['Rmax']/cc.comoving_distance(row['z_cgal_v']).value * 180/np.pi
+        numbsrc = round(config['source']['nsrc'] * thetamax**2*60**2)      # area of square in deg^2 --> arcmin^2
         print('number of sources: ', numbsrc)
+
 
         if numbsrc==0:
             continue
-        cdec    = np.random.uniform(np.cos((90 - (ldec[ii] - thetamax))*np.pi/180), np.cos((90 - (ldec[ii] + thetamax))*np.pi/180), numbsrc) # uniform over the sphere
+        cdec    = np.random.uniform(np.cos((90 - (row['dec_gal'] - thetamax))*np.pi/180), np.cos((90 - (row['dec_gal'] + thetamax))*np.pi/180), numbsrc) # uniform over the sphere
         sdec    = (90.0 - np.arccos(cdec)*180/np.pi)
-        sra     = lra[ii] + np.random.uniform(-thetamax, thetamax, numbsrc)
-        # selecting cleaner background
-        szred = interp_szred(np.random.uniform(size=numbsrc))
-        sra   = sra[  (szred>(lzred[ii] + sourceargs['zdiff']))]  
-        sdec  = sdec[ (szred>(lzred[ii] + sourceargs['zdiff']))]
-        szred = szred[(szred>(lzred[ii] + sourceargs['zdiff']))]
+        sra     =  row['ra_gal'] + np.random.uniform(-thetamax, thetamax, numbsrc)
 
+        #np.random.seed(lid[ii])  # setting the seed to be the lens id
+        szred = interp_szred(np.random.uniform(size=numbsrc))
         # intrinsic shapes
         if args.no_shape_noise:
             se1 = 0.0*sra
             se2 = 0.0*sra
         else:
-            se1 = np.random.normal(0.0, sourceargs['sige'], int(len(sra)))
-            se2 = np.random.normal(0.0, sourceargs['sige'], int(len(sra)))
+            se1 = np.random.normal(0.0, 0.27, int(len(sra)))
+            se2 = np.random.normal(0.0, 0.27, int(len(sra)))
             if args.rot90:
                 se1*=-1
                 se2*=-1
-
-               
-
-        s1, s2, etan, proj_sep, sflag = ss.shear_src(lra[ii], ldec[ii], lzred[ii], logmstel[ii], logmh[ii], sra, sdec, szred, se1, se2)
-
-        if len(s1)==0:
-            continue
-
+        s1, s2, etan, proj_sep, sflag = ss.shear_src(row['ra_gal'], row['dec_gal'], row['z_cgal_v'], row['lmstellar'], row['lmhalo'], sra, sdec, szred, se1, se2)
         if args.no_shear:
             s1 = se1
             s2 = se2
-        et, ex = get_et_ex(lra[ii], ldec[ii], sra, sdec, s1, s2)
+        et, ex = get_et_ex(row['ra_gal'], row['dec_gal'], sra, sdec, s1, s2)
 
         for jj in range(len(sra)):
-            if (sflag[jj]!=0) & (proj_sep[jj]<lensargs['Rmin']) & (proj_sep[jj]>lensargs['Rmax']):
+        #weeding out to the strong lensing systems and foreground sources configuration
+            if (sflag[jj]!=1.0) | (etan[jj]==0.0):
                 continue
-            fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lid[ii], xjkreg[ii], lra[ii], ldec[ii], lzred[ii], logmstel[ii], logmh[ii], ss.conc, sra[jj], sdec[jj], szred[jj], s1[jj], s2[jj], etan[jj], et[jj], ex[jj], proj_sep[jj]))
+            fdata.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(row['unique_gal_id'], row['ra_gal'], row['dec_gal'], row['z_cgal_v'], row['lmstellar'], row['lmhalo'], ss.conc, sra[jj], sdec[jj], szred[jj], s1[jj], s2[jj], etan[jj], et[jj], ex[jj], proj_sep[jj]))
 
     fdata.close()
+    comm.Barrier()
 
 

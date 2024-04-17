@@ -62,14 +62,15 @@ def get_rands_wgts(rra,rdec,ra,dec):
 
 def lens_select(lensargs):
     if lensargs['type'] == "micecatv2" :
-        #fname = './DataStore/micecatv2/15407.fits'
-        fname = './DataStore/micecatv2/15412.fits'
+        #fname = './DataStore/micecatv2/15407.fits' # one eigth of the sample
+        fname = './DataStore/micecatv2/15412.fits_mstelcut_10_centrals'
         df = fitsio.FITS(fname)
         #df = df[1][df[1].where('flag_central == 0 && ra_gal < 30.0 && dec_gal < 30.0 && lmstellar > %2.2f && lmstellar < %2.2f && z_cgal_v > %2.2f && z_cgal_v < %2.2f'%(lensargs['logmstelmin'], lensargs['logmstelmax'], lensargs['zmin'], lensargs['zmax']))]
         df = df[1][df[1].where('flag_central == 0  && lmstellar > %2.2f && lmstellar < %2.2f && z_cgal_v > %2.2f && z_cgal_v < %2.2f'%(lensargs['logmstelmin'], lensargs['logmstelmax'], lensargs['zmin'], lensargs['zmax']))]
-        if lensargs["ten_percent"]:
-            idx = (np.random.uniform(size=len(df['ra_gal']))<0.1)
-        df  = df[idx]
+        #if lensargs["ten_percent"]:
+        if lensargs["two_percent"]:
+            idx = (np.random.uniform(size=len(df['ra_gal']))<0.02)
+            df  = df[idx]
         idx = (np.isfinite(df['unique_gal_id'])) & (np.isfinite(df['ra_gal'])) & (np.isfinite(df['dec_gal'])) & (df['lmstellar']>0) & (df['lmhalo']>0)#check if something is nan here
 
 

@@ -148,7 +148,7 @@ class simshear():
         #kappa_dm    =   sigma_dm    * get_sigma_crit_inv
         return gamma_s, gamma_dm, kappa_s, kappa_dm
 
-    def get_g(self, lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred):
+    def get_g(self, lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred, use_shear=False, no_shear=False):
         "computes the g1 and g2 components for the reduced shear"
         lx, ly, lz = self.get_xyz(lra, ldec) 
         sx, sy, sz = self.get_xyz(sra, sdec) 
@@ -167,10 +167,15 @@ class simshear():
 
         gamma = gamma_s + gamma_dm
         kappa = kappa_s + kappa_dm
-
-        g    = gamma/(1.0 - kappa) # reduced shear
-        g_b  = gamma_s/(1.0 - kappa_s) # reduced shear
-        g_dm = gamma_dm/(1.0 - kappa_dm) # reduced shear
+        
+        if use_shear:
+            g    = gamma        # shear
+            g_b  = gamma_s      # shear
+            g_dm = gamma_dm     # shear
+        else:
+            g    = gamma/(1.0 - kappa) # reduced shear
+            g_b  = gamma_s/(1.0 - kappa_s) # reduced shear
+            g_dm = gamma_dm/(1.0 - kappa_dm) # reduced shear
         
         
         # phi to get the compute the tangential shear
@@ -185,10 +190,8 @@ class simshear():
         
         #angular separation between lens-source pairs
         c_theta = lx*sx + ly*sy + lz*sz
-        #c_theta = np.cos(ldec)*np.cos(sdec)*c_sra_lra + np.sin(ldec)*np.sin(sdec)
         s_theta = np.sqrt(1-c_theta**2)
 
-        #sflag = (np.abs(kappa)<0.5) & (np.abs(g)<1)  #weak lensing flag 
         sflag = sflag & (np.abs(kappa)<0.5) & (np.abs(g)<1)  #weak lensing flag 
         #sflag = sflag & (np.abs(s_theta)>np.sin(np.pi/180 * 1/3600)) & (np.abs(kappa)<0.5) & (np.abs(g)<1)  #weak lensing flag and proximity flag
 
@@ -198,11 +201,15 @@ class simshear():
         # tangential shear
         g_1     = - g*(2*c_phi**2 - 1)
         g_2     = - g*(2*c_phi * s_phi)
+        if no_shear:
+            g       = 0.0*g_1
+            g_1     = 0.0*g_1
+            g_2     = 0.0*g_1
 
         return g_1, g_2, g, kappa, c_phi, s_phi, proj_sep, sflag, g_b, g_dm
 
 
-    def shear_src(self, lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred, se1, se2):
+    def shear_src(self, lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred, se1, se2, use_shear=False, no_shear=False):
         "apply shear on to the source galaxies with given intrinsic shapes"
         self.conc       = lconc#concentration.concentration(10**logmh, '200m', lzred, model = 'diemer19')
         self.hp         = halo(logmh, self.conc, omg_m=self.omg_m)
@@ -213,18 +220,19 @@ class simshear():
             #self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(szred)
             self.init_spl_sigma_crit_inv = True
 
+        g_1, g_2, gtan, kappa, c_phi, s_phi, proj_sep, sflag, g_b, g_dm = self.get_g(lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred, use_shear=use_shear, no_shear=no_shear)
 
-
-        g_1, g_2, etan, kappa, c_phi, s_phi, proj_sep, sflag, g_b, g_dm = self.get_g(lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred)
         g   = g_1 + 1j* g_2
         es  = se1 + 1j* se2 + 0.0*g  # intrinsic sizes
         e   = 0.0*es # sheared shapes
         #using the seitz and schnider 1995 formalism to shear the galaxy
         idx = np.abs(g)<=1
         e[idx] = (es[idx] + g[idx])/(1.0 + np.conj(g[idx])*es[idx])
-        #e[idx] = (es[idx] + g[idx])/(1.0 + np.conj(g[idx])*es[idx])
         e[~idx] = (1 + g[~idx]*np.conj(es[~idx]))/(np.conj(es[~idx]) + np.conj(g[~idx])) # mod(g)>1
-        return np.real(e), np.imag(e), etan, kappa, proj_sep, sflag, g_b, g_dm
+        #observed quantities
+        etan_obs = -np.real(e*(2*c_phi**2 - 1 - 1j *(2*c_phi*s_phi)))
+        ex_obs   = -np.imag(e*(2*c_phi**2 - 1 - 1j *(2*c_phi*s_phi)))
+        return np.real(e), np.imag(e), gtan, kappa, proj_sep, sflag, g_b, g_dm, etan_obs, ex_obs
 
 
 if __name__ == "__main__":
