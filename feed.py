@@ -6,13 +6,14 @@ nbins = 3
 binedgs = 10.0 + 0.5*np.arange(nbins+1)
 
 #call("python simulate_aroundlens.py --config config_full  --no_shape_noise True --logmstelmin 11.6 --logmstelmax 14.0 --test_case True --seed 345 >> test_out.dat_noshp 2>&1 &", shell=1)
-call("python simulate_aroundlens.py --config config_full  --logmstelmin 11.6 --logmstelmax 14.0 --test_case True --seed 456 --no_shear True >> test_out.dat 2>&1 &", shell=1)
+#call("python simulate_aroundlens.py --config config_full  --logmstelmin 11.6 --logmstelmax 14.0 --test_case True --seed 456 --no_shear True >> test_out.dat 2>&1 &", shell=1)
 #call("python simulate_aroundlens.py --config config_full  --rot90 True --logmstelmin 11.6 --logmstelmax 14.0 --test_case True  --seed 456 --no_shear True >> test_out.dat_90 2>&1 &", shell=1)
 
 
 
-#for ss in np.arange(10,20,2):
-#    #call("python simulate_aroundlens.py --config config_full --logmstelmin 11.6 --logmstelmax 14.0 --test_case True --use_shear True --seed %s >> test_out.dat_%d 2>&1 &"%(ss,ss), shell=1)
+for ss in np.arange(20):
+    call("python simulate_aroundlens.py --config config_full  --logmstelmin 11.6 --logmstelmax 14.0 --test_case True --seed %d >> test_out.dat_%d 2>&1 &"%(ss,ss), shell=1)
+    #call("python simulate_aroundlens.py --config config_full --logmstelmin 11.6 --logmstelmax 14.0 --test_case True --use_shear True --seed %s >> test_out.dat_%d 2>&1 &"%(ss,ss), shell=1)
 #    call("python simulate_aroundlens.py --config config_full --rot90 True --logmstelmin 11.6 --logmstelmax 14.0 --test_case True --use_shear True --seed %s >> test_out.dat_90_%s 2>&1 &"%(ss,ss), shell=1)
 #
 #for bb in range(nbins):

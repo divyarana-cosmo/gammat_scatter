@@ -12,7 +12,7 @@ class constants:
 
 class halo(constants):
     """Useful functions for weak lensing signal modelling"""
-    def __init__(self,log_mtot, con_par, omg_m=0.3, alpha=None, beta=None, gamma=None, Rmin=0.001, Rmax=10, Rbins=50):
+    def __init__(self,log_mtot, con_par, omg_m=0.3, alpha=None, beta=None, gamma=None, Rmin=0.005, Rmax=10, Rbins=80):
         self.m_tot = 10**log_mtot # total mass of the halo
         self.c = con_par # concentration parameter
         self.omg_m = omg_m
@@ -37,10 +37,6 @@ class halo(constants):
             self.alpha  = alpha
             self.beta   = beta
             self.gamma  = gamma
-            r_s = self.r_200/self.c
-            self.rho0_gnfw = self.m_tot/(4*np.pi*quad(lambda r: r**2/((r/r_s)**self.gamma * (1 + (r/r_s)**self.alpha)**((self.beta - self.gamma)/self.alpha)), 0.0, self.r_200)[0])
-
-
 
         #print("Intialing NFW parameters\n log_mtot = %s h-1 M_sun\nconc_parm = %s\nrho_0 = %s h-1 M_sun/(h-3 Mpc^3)\n r_s = %s h-1 Mpc"%(log_mtot,con_par,self.rho_0,self.r_200/self.c))
         #print("Intialing NFW parameters\n log_Mh = %s\n conc_parm = %s"%(log_mtot, con_par))
@@ -103,16 +99,16 @@ class halo(constants):
     def gnfw(self,r):
         """given r, this gives generalized nfw profile as per the instantiated parameters"""
         r_s = self.r_200/self.c
-        #rho0 = self.m_tot/(4*np.pi*quad(lambda r: r**2/((r/r_s)**self.gamma * (1 + (r/r_s)**self.alpha)**((self.beta - self.gamma)/self.alpha)), 0.0, self.r_200)[0])
+        rho0 = self.m_tot/(4*np.pi*quad(lambda r: r**2/((r/r_s)**self.gamma * (1 + (r/r_s)**self.alpha)**((self.beta - self.gamma)/self.alpha)), 0.0, self.r_200)[0])
 
-        value  = self.rho0_gnfw/((r/r_s)**self.gamma*(1+(r/r_s)**self.alpha)**((self.beta - self.gamma)/self.alpha))
+        value  = rho0/((r/r_s)**self.gamma*(1+(r/r_s)**self.alpha)**((self.beta - self.gamma)/self.alpha))
         return value
 
     def esd_gnfw(self,r):
         """ESD profile from interpolated predictions"""
         if np.isscalar(r):
             r = np.array([r])
-        sig = self.avg_sigma_gnfw(r) - self.sigma_gnfw(r)
+        sig = self.avg_sigma_nfw(r) - self.sigma_nfw(r)
         return sig
 
 
@@ -135,13 +131,10 @@ class halo(constants):
 
     def get_spl_avg_sigma_gnfw(self):
         """puts a log log interpolation scheme for the average sigma"""
-        if not self.init_spl_sigma_gnfw:
-            self.get_spl_sigma_gnfw()
- 
         xx = np.logspace(np.log10(self.spl_esd_rmin), np.log10(self.spl_esd_rmax), self.spl_esd_rbins)
-        yy = np.log10(self.num_avg_sigma(xx, self.spl_sigma_gnfw))
+        yy = np.log10(self.num_avg_sigma(xx, self.gnfw))
         self.init_spl_avg_sigma_gnfw = True
-        self.spl_avg_sigma_gnfw = interp1d(np.log10(xx), yy, kind='cubic')
+        self.spl_avg_sigma_gnfw = interp1d(np.log10(xx), yy, kind='cubic', fill_value=0.0)
         return 0
 
     def get_spl_sigma_gnfw(self):
@@ -149,56 +142,36 @@ class halo(constants):
         xx = np.logspace(np.log10(self.spl_esd_rmin), np.log10(self.spl_esd_rmax), self.spl_esd_rbins)
         yy = np.log10(self.num_sigma(xx, self.gnfw))
         self.init_spl_sigma_gnfw = True
-        self.spl_sigma_gnfw = interp1d(np.log10(xx), yy, kind='cubic', fill_value = (np.log10(yy[0]), -np.inf))
+        self.spl_sigma_gnfw = interp1d(np.log10(xx), yy, kind='cubic', fill_value=0.0)
         return 0
 
-    def num_sigma(self, Rarr, func):
+    def num_sigma(self,Rarr, func):
         """numerical test to the analytical part"""
         if np.isscalar(Rarr):
             return 2*quad((lambda z : func(np.sqrt(Rarr**2 + z**2))), 0, np.inf)[0]
+            #return 2*quad((lambda z : self.nfw(np.sqrt(Rarr**2 + z**2))), 0, np.inf)[0]
+
         Sigmaarr = Rarr*0.0
         for ii, R in enumerate(Rarr):
             Sigmaarr[ii] = 2*quad((lambda z : func(np.sqrt(R**2 + z**2))), 0, np.inf)[0]
+            #Sigmaarr[ii] = 2*quad((lambda z : self.nfw(np.sqrt(R**2 + z**2))), 0, np.inf)[0]
         return Sigmaarr
 
     def num_avg_sigma(self, R, func):
-        """numerical computation of mean sigma at R using log-log sigma spline"""
-        if not self.init_spl_sigma_gnfw:
-            self.get_spl_sigma_gnfw()
- 
-        extra =  quad(lambda Rp: Rp*self.num_sigma(Rp, self.gnfw), 0.0, self.spl_esd_rmin)[0]
-
+        """num difference between mean sigma and average over the circle of radius R"""
         if np.isscalar(R):
-            return 2*np.pi*(extra + quad(lambda Rp: Rp*10**func(np.log10(rr)), self.spl_esd_rmin, R)[0])/(np.pi*rr**2)
-
-        value = 0.0*R
-        #push in the spline of projected density
-        for ii,rr in enumerate(R):
-            value[ii] = 2*np.pi*(extra + quad(lambda Rp: Rp*10**func(np.log10(rr)), self.spl_esd_rmin, rr)[0])/(np.pi*rr**2)
+            value =  2*np.pi*quad(lambda Rp: Rp*func(Rp), 0.0, R)[0]/(np.pi*R**2)
+            #value =  2*np.pi*quad(lambda Rp: Rp*self.num_sigma(Rp), 0.0, R)[0]/(np.pi*R**2) - self.num_sigma(R)
+        else:
+            value = 0.0*R
+            for ii,rr in enumerate(R):
+                value[ii] = 2*np.pi*quad(lambda Rp: Rp*func(Rp), 0.0, rr)[0]/(np.pi*rr**2)
+                #value[ii] = 2*np.pi*quad(lambda Rp: Rp*self.num_sigma(Rp), 0.0, rr)[0]/(np.pi*rr**2) - self.num_sigma(rr)
         return value
 
 
 if __name__ == "__main__":
     plt.subplot(2,2,1)
-    rbin = np.logspace(np.log10(0.007),np.log10(0.8), int(1e6))
-    hp = halo(13,4)
-    print(hp.r_200)
-    #yy = hp.esd_nfw(rbin)/(1e12)
-    yy = hp.avg_sigma_nfw(rbin)/(1e12)
-    plt.plot(rbin, yy, '-')
-
-
-    hp = halo(13, 4, alpha = 1, beta=3, gamma=1)
-    print(hp.r_200)
-    #yy = hp.esd_gnfw(rbin)/(1e12)
-    yy = hp.avg_sigma_gnfw(rbin)/(1e12)
-    plt.plot(rbin, yy, '.')
-
-    plt.xscale('log')
-    plt.yscale('log')
-
-    plt.savefig('test.png')
- 
     #mlist =  [12]
     #for mm in mlist:
     #    hp = halo(mm,4)
@@ -215,6 +188,20 @@ if __name__ == "__main__":
     #    plt.plot(rbin, yy)
     #    #plt.plot(rbin, yy0,'.')
 
+    rbin = np.logspace(-2,np.log10(1), int(1e6))
+    hp = halo(13,4)
+    print(hp.r_200)
+    yy = hp.esd_nfw(rbin)/(1e12)
+    plt.plot(rbin, yy, '-')
+
+
+    hp = halo(13, 4, alpha = 1, beta=3, gamma=1)
+    print(hp.r_200)
+    yy = hp.esd_gnfw(rbin)/(1e12)
+    plt.plot(rbin, yy, '-')
+
+    plt.savefig('test.png')
+ 
 
 
 
@@ -222,10 +209,10 @@ if __name__ == "__main__":
 
 
     #plt.plot(rbin, hp.num_delta_sigma(rbin)/(1e12), '.', lw=0.0)
-    #plt.xscale('log')
-    #plt.yscale('log')
-    #plt.xlabel(r'$R [{\rm h^{-1}Mpc}]$')
-    #plt.ylabel(r'$M (<R)$')
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xlabel(r'$R [{\rm h^{-1}Mpc}]$')
+    plt.ylabel(r'$M (<R)$')
     #plt.ylabel(r'$\Delta \Sigma (R) [{\rm h M_\odot pc^{-2}}]$')
 
     plt.savefig('test.png', dpi=300)
