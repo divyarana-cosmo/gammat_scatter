@@ -155,10 +155,10 @@ class halo(constants):
     def num_sigma(self, Rarr, func):
         """numerical test to the analytical part"""
         if np.isscalar(Rarr):
-            return 2*quad((lambda z : func(np.sqrt(Rarr**2 + z**2))), 0, np.inf)[0]
+            return 2*quad((lambda z : func(np.sqrt(Rarr**2 + z**2))), 0, 100)[0]
         Sigmaarr = Rarr*0.0
         for ii, R in enumerate(Rarr):
-            Sigmaarr[ii] = 2*quad((lambda z : func(np.sqrt(R**2 + z**2))), 0, np.inf)[0]
+            Sigmaarr[ii] = 2*quad((lambda z : func(np.sqrt(R**2 + z**2))), 0, 100)[0]
         return Sigmaarr
 
     def num_avg_sigma(self, R, func):
@@ -169,12 +169,12 @@ class halo(constants):
         extra =  quad(lambda Rp: Rp*self.num_sigma(Rp, self.gnfw), 0.0, self.spl_esd_rmin)[0]
 
         if np.isscalar(R):
-            return 2*np.pi*(extra + quad(lambda Rp: Rp*10**func(np.log10(rr)), self.spl_esd_rmin, R)[0])/(np.pi*rr**2)
+            return 2*np.pi*(extra + quad(lambda Rp: Rp*10**func(np.log10(Rp)), self.spl_esd_rmin, R)[0])/(np.pi*rr**2)
 
         value = 0.0*R
         #push in the spline of projected density
         for ii,rr in enumerate(R):
-            value[ii] = 2*np.pi*(extra + quad(lambda Rp: Rp*10**func(np.log10(rr)), self.spl_esd_rmin, rr)[0])/(np.pi*rr**2)
+            value[ii] = 2*np.pi*(extra + quad(lambda Rp: Rp*10**func(np.log10(Rp)), self.spl_esd_rmin, rr)[0])/(np.pi*rr**2)
         return value
 
 
@@ -183,16 +183,18 @@ if __name__ == "__main__":
     rbin = np.logspace(np.log10(0.007),np.log10(0.8), int(1e6))
     hp = halo(13,4)
     print(hp.r_200)
-    #yy = hp.esd_nfw(rbin)/(1e12)
-    yy = hp.avg_sigma_nfw(rbin)/(1e12)
+    yy = hp.esd_nfw(rbin)/(1e12)
+    #yy = hp.avg_sigma_nfw(rbin)/(1e12)
     plt.plot(rbin, yy, '-')
 
 
-    hp = halo(13, 4, alpha = 1, beta=3, gamma=1)
+    hp = halo(13, 4, alpha = 1, beta=3, gamma=1.5)
     print(hp.r_200)
-    #yy = hp.esd_gnfw(rbin)/(1e12)
-    yy = hp.avg_sigma_gnfw(rbin)/(1e12)
-    plt.plot(rbin, yy, '.')
+    yy1 = hp.esd_gnfw(rbin)/(1e12)
+    #yy1 = hp.avg_sigma_gnfw(rbin)/(1e12)
+    plt.plot(rbin, yy1, '.')
+
+    print(yy1 - yy)
 
     plt.xscale('log')
     plt.yscale('log')
