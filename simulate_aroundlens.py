@@ -159,7 +159,7 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
     #..................................#
     for ii in tqdm(range(len(lra))):
         #setting random seed for each lens
-        np.random.seed(config["seed"] + ii)
+        np.random.seed(config["seed"]*len(lra) + ii)
         # simulating the sources
         sra, sdec, szred, wgal, intse1, intse2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell']) 
        

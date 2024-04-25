@@ -12,21 +12,15 @@ class constants:
 
 class stellar(constants):
     """Useful functions for weak lensing signal modelling"""
-    def __init__(self, log_mstel):
+    def __init__(self, log_mstel, log_re=None):
         self.log_mstel  = log_mstel # total mass of the halo
-        
-        #self.log_re     = 0.7*(0.774 + 0.977 *(log_mstel - np.log10(0.7) - 11.4)) #check arxiv:1811.04934
-        # correcting for the h-1 factors and also kpc to Mpc
-        self.log_re     = (0.774 + 0.977 *(np.log10(10**log_mstel / 0.7) - 11.4)) #check arxiv:1811.04934
-        self.log_re     = np.log10(10**self.log_re * 0.7/1e3) #h-1 kpc to h-1 Mpc
-
+        if log_re is not None:
+            self.log_re     = log_re
     def esd_pointmass(self,r):
         """ESD profile from analytical predictions"""
         if np.isscalar(r):
             r = np.array([r])
         val = self.avg_sigma_pointmass(r) - self.sigma_pointmass(r)
-        #idx =  r<5e-3
-        #val[idx] = 0.0
         return val
 
     def sigma_pointmass(self,r):
@@ -34,19 +28,12 @@ class stellar(constants):
         if np.isscalar(r):
             r = np.array([r])
         val = 0.0 * r
-        #idx = r>0
-        #if sum(idx)!=0:
-        #    val[idx]=0
-
-        #val[~idx] = np.inf
         return val
 
     def avg_sigma_pointmass(self,r):
         """analytical average projected of pointmass profile"""
         if np.isscalar(r):
             r = np.array([r])
-        #idx = r<5e-3
-        #r[idx] = 5e-3
         return 10**self.log_mstel*1.0/(np.pi*r**2)
 
 
@@ -90,11 +77,18 @@ if __name__ == "__main__":
     plt.subplot(2,2,1)
     rbin = np.logspace(-4,np.log10(5),10)
     hp = stellar(11)
-    print(hp.log_re)
-    #print hp.r_200
+   #print hp.r_200
     yy = hp.esd_pointmass(rbin)/(1e12)
     print(yy)
     plt.plot(rbin, yy)
+
+    # correcting for the h-1 factors and also kpc to Mpc
+    log_re     = (0.774 + 0.977 *(np.log10(10**11 / 0.7) - 11.4)) #check arxiv:1811.04934
+    log_re     = np.log10(10**log_re * 0.7/1e3) #h-1 kpc to h-1 Mpc
+
+    hp = stellar(11, log_re = log_re)
+    print(hp.log_re)
+ 
     yy = hp.esd_deVaucouleurs(rbin)/(1e12)
     print(yy)
     plt.plot(rbin, yy)

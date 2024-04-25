@@ -12,12 +12,11 @@ class constants:
 
 class halo(constants):
     """Useful functions for weak lensing signal modelling"""
-    def __init__(self,log_mtot, con_par, omg_m=0.3, alpha=None, beta=None, gamma=None, Rmin=0.001, Rmax=10, Rbins=50):
+    def __init__(self,log_mtot, con_par, omg_m=0.3, beta=None, Rmin=0.001, Rmax=5, Rbins=80):
         self.m_tot = 10**log_mtot # total mass of the halo
         self.c = con_par # concentration parameter
         self.omg_m = omg_m
         self.rho_crt = 3*self.H0**2/(8*np.pi*self.G) # rho critical
-        #self.r_200 = (3*self.m_tot/(4*np.pi*200*self.rho_crt))**(1./3.) # radius defines size of the halo
         self.r_200 = (3*self.m_tot/(4*np.pi*200*self.rho_crt*self.omg_m ))**(1./3.) # radius defines size of the halo
         self.rho_0 = con_par**3 *self.m_tot/(4*np.pi*self.r_200**3 *(np.log(1+con_par)-con_par/(1+con_par)))
 
@@ -33,17 +32,10 @@ class halo(constants):
         self.init_spl_sigma_gnfw = False
 
 
-        if alpha is not None and beta is not None and gamma is not None:
-            self.alpha  = alpha
-            self.beta   = beta
-            self.gamma  = gamma
+        if beta is not None :
+            self.beta  = beta
             r_s = self.r_200/self.c
-            self.rho0_gnfw = self.m_tot/(4*np.pi*quad(lambda r: r**2/((r/r_s)**self.gamma * (1 + (r/r_s)**self.alpha)**((self.beta - self.gamma)/self.alpha)), 0.0, self.r_200)[0])
-
-
-
-        #print("Intialing NFW parameters\n log_mtot = %s h-1 M_sun\nconc_parm = %s\nrho_0 = %s h-1 M_sun/(h-3 Mpc^3)\n r_s = %s h-1 Mpc"%(log_mtot,con_par,self.rho_0,self.r_200/self.c))
-        #print("Intialing NFW parameters\n log_Mh = %s\n conc_parm = %s"%(log_mtot, con_par))
+            self.rho0_gnfw = self.m_tot/(4*np.pi*quad(lambda r: r**2/((r/r_s)**self.beta * (1 + r/r_s)**(3 - self.beta)), 0.0, self.r_200)[0])
 
     def nfw(self,r):
         """given r, this gives nfw profile as per the instantiated parameters"""
@@ -103,9 +95,7 @@ class halo(constants):
     def gnfw(self,r):
         """given r, this gives generalized nfw profile as per the instantiated parameters"""
         r_s = self.r_200/self.c
-        #rho0 = self.m_tot/(4*np.pi*quad(lambda r: r**2/((r/r_s)**self.gamma * (1 + (r/r_s)**self.alpha)**((self.beta - self.gamma)/self.alpha)), 0.0, self.r_200)[0])
-
-        value  = self.rho0_gnfw/((r/r_s)**self.gamma*(1+(r/r_s)**self.alpha)**((self.beta - self.gamma)/self.alpha))
+        value  = self.rho0_gnfw/((r/r_s)**self.beta*(1 + r/r_s)**(3 - self.beta))
         return value
 
     def esd_gnfw(self,r):
@@ -138,8 +128,10 @@ class halo(constants):
         if not self.init_spl_sigma_gnfw:
             self.get_spl_sigma_gnfw()
  
+        extra =  quad(lambda Rp: Rp*self.num_sigma(Rp, self.gnfw), 0.0, self.spl_esd_rmin)[0]
+
         xx = np.logspace(np.log10(self.spl_esd_rmin), np.log10(self.spl_esd_rmax), self.spl_esd_rbins)
-        yy = np.log10(self.num_avg_sigma(xx, self.spl_sigma_gnfw))
+        yy = np.log10(self.num_avg_sigma(xx, self.spl_sigma_gnfw, extra))
         self.init_spl_avg_sigma_gnfw = True
         self.spl_avg_sigma_gnfw = interp1d(np.log10(xx), yy, kind='cubic')
         return 0
@@ -161,13 +153,8 @@ class halo(constants):
             Sigmaarr[ii] = 2*quad((lambda z : func(np.sqrt(R**2 + z**2))), 0, 100)[0]
         return Sigmaarr
 
-    def num_avg_sigma(self, R, func):
-        """numerical computation of mean sigma at R using log-log sigma spline"""
-        if not self.init_spl_sigma_gnfw:
-            self.get_spl_sigma_gnfw()
- 
-        extra =  quad(lambda Rp: Rp*self.num_sigma(Rp, self.gnfw), 0.0, self.spl_esd_rmin)[0]
-
+    def num_avg_sigma(self, R, func, extra):
+        """numerical computation of mean sigma at R using log-log sigma spline and less than Rpmin integral"""
         if np.isscalar(R):
             return 2*np.pi*(extra + quad(lambda Rp: Rp*10**func(np.log10(Rp)), self.spl_esd_rmin, R)[0])/(np.pi*rr**2)
 
@@ -188,7 +175,7 @@ if __name__ == "__main__":
     plt.plot(rbin, yy, '-')
 
 
-    hp = halo(13, 4, alpha = 1, beta=3, gamma=1.5)
+    hp = halo(13, 4, beta=1)
     print(hp.r_200)
     yy1 = hp.esd_gnfw(rbin)/(1e12)
     #yy1 = hp.avg_sigma_gnfw(rbin)/(1e12)
