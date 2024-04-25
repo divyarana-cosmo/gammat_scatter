@@ -81,7 +81,7 @@ class simshear():
     #    self._spl_get_esd(logmstel, logmh, lconc)
 
         self.hp    = halo(logmh, lconc, omg_m=self.omg_m)
-        log_re     = (0.774 + 0.977 *(np.log10(10**11 / 0.7) - 11.4)) #check arxiv:1811.04934
+        log_re     = (0.774 + 0.977 *(np.log10(10**logmstel / 0.7) - 11.4)) #check arxiv:1811.04934
         log_re     = np.log10(10**log_re * 0.7/1e3) #h-1 kpc to h-1 Mpc
         self.stel  = stellar(logmstel, log_re = log_re)
 
