@@ -84,15 +84,15 @@ def run_pipe(config, outputfilename):
     lra, ldec, lzred, lwgt, llogMh, llogmstel, llog_re, ljkreg = lens_select(lensargs)
     lconc = 0.0*lra
     if config['test_case']:
-        idx = (lra<10) & (ldec<10)
-        lra  = lra[idx]
-        ldec = ldec[idx]
         print("working with the test case")
-        llogmstel   = 12.0 + 0.0*lra
-        llog_re     = 0.02 + 0.0*lra
-        llogMh      = 14.0 + 0.0*lra
-        lconc       = 5.00 + 0.0*lra
-        lzred       = 0.20 + 0.0*lra
+        llogmstel   = np.median(llogmstel) + 0.0*lra
+        llog_re     = np.median(llog_re) + 0.0*lra
+        llogMh      = np.median(llogMh) + 0.0*lra
+        #assigning concentration
+        lconc       = concentration.concentration(10**np.median(llogMh), '200m', np.median(lzred), model = 'diemer19')
+        lconc       = np.median( lconc    ) + 0.0*lra
+        lzred       = np.median( lzred    ) + 0.0*lra
+        print('%2.2f\t%2.2f\t%2.2f\t%2.2f\t%2.2f'%(np.median( llogmstel), np.median(llog_re), np.median(llogMh), np.median(lconc), np.median(lzred)))
     else:
         xx = np.linspace(9,16,100)
         yy = 0.0*xx
@@ -139,10 +139,10 @@ if __name__ == "__main__":
     parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=123)
     parser.add_argument("--no_shape_noise", help="for removing shape noise-testing purpose", type=bool, default=False)
     parser.add_argument("--no_shear", help="for removing shear-testing purpose", type=bool, default=False)
-    parser.add_argument("--test_case", help="testing the ideal case", type=bool, default=False)
+    parser.add_argument("--test_case", help="testing the ideal case", type=int, default=0)
     parser.add_argument("--rot90", help="rotating intrinsic shapes by 90 degrees", type=bool, default=False)
-    parser.add_argument("--logmstelmin", help="log stellar mass minimum-lense selection", type=float, default=11.0)
-    parser.add_argument("--logmstelmax", help="log stellar mass maximum-lense selection", type=float, default=13.0)
+    parser.add_argument("--logmstelmin", help="log stellar mass minimum-lense selection", type=float, default=9.0)
+    parser.add_argument("--logmstelmax", help="log stellar mass maximum-lense selection", type=float, default=11.73)
 
 
     args = parser.parse_args()
@@ -154,8 +154,7 @@ if __name__ == "__main__":
     #make the directory for the output
     from subprocess import call
     #call("mkdir -p %s" % (config["outputdir"]), shell=1)
-
-    outputfilename = '%s/dsigma.dat'%(config['outputdir'])
+    
 
     if 'logmstelmin'not in config:
         config['lens']['logmstelmin'] = args.logmstelmin
@@ -163,7 +162,12 @@ if __name__ == "__main__":
         config['lens']['logmstelmax'] = args.logmstelmax
 
 
-    config['test_case'] = args.test_case
+    config['test_case'] = args.test_case==1.0
+    
+    if config['test_case']:
+        outputfilename = '%s/test_dsigma.dat'%(config['outputdir'])
+    else:
+        outputfilename = '%s/dsigma.dat'%(config['outputdir'])
 
     outputfilename = outputfilename + '_lmstelmin_%2.2f_lmstelmax_%2.2f'%(args.logmstelmin, args.logmstelmax)
 
