@@ -1,7 +1,7 @@
 #!/bin/bash
 python plot.py --config config_full  --logmstelmin 11.6 --logmstelmax 14.0 --test_case True 
-python plot.py --config config_full  --logmstelmin 11.6 --logmstelmax 14.0 --test_case True --rot90 True
-python plot.py --config config_full  --logmstelmin 11.6 --logmstelmax 14.0 --test_case True --no_shape_noise True
+#python plot.py --config config_full  --logmstelmin 11.6 --logmstelmax 14.0 --test_case True --rot90 True
+#python plot.py --config config_full  --logmstelmin 11.6 --logmstelmax 14.0 --test_case True --no_shape_noise True
 
 
 #

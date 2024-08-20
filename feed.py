@@ -1,12 +1,15 @@
 from subprocess import  call
 import numpy as np
 
+#nbins = 3
+#binedgs = 10.0 + 0.5*np.arange(nbins+1)
 
-nbins = 3
-binedgs = 10.0 + 0.5*np.arange(nbins+1)
+logMbin = [9.0, 9.25, 9.5, 9.75, 10.0, 10.25, 10.5]
 
-for ss in np.arange(10):
-    call("python simulate_aroundlens.py --config config_full  --logmstelmin 11.6 --logmstelmax 14.0 --test_case True --seed %d >> test_out.dat_%d 2>&1 &"%(ss,ss), shell=1)
+
+for ss in range(len(logMbin)-1):
+    call("python simulate_aroundlens.py --config config_full  --logmstelmin %2.2f --logmstelmax %2.2f>> logs/out.dat_%d 2>&1 &"%(logMbin[ss], logMbin[ss+1], ss), shell=1)
+    #call("python simulate_aroundlens.py --config config_full  --logmstelmin 11.6 --logmstelmax 14.0 --test_case True --seed %d >> test_out.dat_%d 2>&1 &"%(ss,ss), shell=1)
 
 
 

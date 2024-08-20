@@ -1,5 +1,5 @@
 # have to add the responsivity part
-# the psf of Euclid part -- airy disk or check the preparation paper
+# have to add the dsigma part
 
 
 import numpy as np

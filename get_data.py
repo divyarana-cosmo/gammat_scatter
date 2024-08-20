@@ -62,15 +62,13 @@ def get_rands_wgts(rra,rdec,ra,dec):
 
 def lens_select(lensargs):
     if lensargs['type'] == "micecatv2" :
-        #fname = './DataStore/micecatv2/15407.fits' # one eigth of the sample
-        fname = './DataStore/micecatv2/15412.fits_mstelcut_10_centrals'
-        df = fitsio.FITS(fname)
-        #df = df[1][df[1].where('flag_central == 0 && ra_gal < 30.0 && dec_gal < 30.0 && lmstellar > %2.2f && lmstellar < %2.2f && z_cgal_v > %2.2f && z_cgal_v < %2.2f'%(lensargs['logmstelmin'], lensargs['logmstelmax'], lensargs['zmin'], lensargs['zmax']))]
-        df = df[1][df[1].where('flag_central == 0  && lmstellar > %2.2f && lmstellar < %2.2f && z_cgal_v > %2.2f && z_cgal_v < %2.2f'%(lensargs['logmstelmin'], lensargs['logmstelmax'], lensargs['zmin'], lensargs['zmax']))]
-        #if lensargs["ten_percent"]:
-        if lensargs["two_percent"]:
-            idx = (np.random.uniform(size=len(df['ra_gal']))<0.02)
-            df  = df[idx]
+        fname   = './DataStore/micecatv2/micecatv2/mock_desi_bgs/combined_table.fits'
+        df      = fits.getdata(fname)
+        idx     = (df['lmstellar']>lensargs['logmstelmin']) & (df['lmstellar']<lensargs['logmstelmax'])
+        idx     = idx & (df['flag_central'] == 0) & (df['z_cgal_v'] > lensargs['zmin']) & (df['z_cgal_v'] < lensargs['zmax'])         
+        idx     = idx & (df['log_re(h-1 kpc)']!=-999)
+        df      = df[idx]
+
         idx = (np.isfinite(df['unique_gal_id'])) & (np.isfinite(df['ra_gal'])) & (np.isfinite(df['dec_gal'])) & (df['lmstellar']>0) & (df['lmhalo']>0)#check if something is nan here
 
 
@@ -91,6 +89,40 @@ def lens_select(lensargs):
         lxjkreg     = np.random.randint(Njacks, size=len(lra))
         sys.stdout.write("Number of lenses: %d \n" % (len(df['ra_gal'])))
         return lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg  
+
+
+
+
+    #if lensargs['type'] == "micecatv2" :
+    #    #fname = './DataStore/micecatv2/15407.fits' # one eigth of the sample
+    #    fname = './DataStore/micecatv2/15412.fits_mstelcut_10_centrals'
+    #    df = fitsio.FITS(fname)
+    #    #df = df[1][df[1].where('flag_central == 0 && ra_gal < 30.0 && dec_gal < 30.0 && lmstellar > %2.2f && lmstellar < %2.2f && z_cgal_v > %2.2f && z_cgal_v < %2.2f'%(lensargs['logmstelmin'], lensargs['logmstelmax'], lensargs['zmin'], lensargs['zmax']))]
+    #    df = df[1][df[1].where('flag_central == 0  && lmstellar > %2.2f && lmstellar < %2.2f && z_cgal_v > %2.2f && z_cgal_v < %2.2f'%(lensargs['logmstelmin'], lensargs['logmstelmax'], lensargs['zmin'], lensargs['zmax']))]
+    #    #if lensargs["ten_percent"]:
+    #    if lensargs["two_percent"]:
+    #        idx = (np.random.uniform(size=len(df['ra_gal']))<0.02)
+    #        df  = df[idx]
+    #    idx = (np.isfinite(df['unique_gal_id'])) & (np.isfinite(df['ra_gal'])) & (np.isfinite(df['dec_gal'])) & (df['lmstellar']>0) & (df['lmhalo']>0)#check if something is nan here
+
+
+    #    df  = df[idx]
+
+    #    lid         = df['unique_gal_id'][:]
+    #    lra         = df['ra_gal'][:]  
+    #    ldec        = df['dec_gal'][:] 
+    #    lzred       = df['z_cgal_v'][:]
+    #    llogmstel   = df['lmstellar'][:]
+    #    llogmh      = df['lmhalo'][:]
+
+    #    lwgt        = 1.0 + 0.0*lra
+
+
+    #    np.random.seed(123)
+    #    Njacks = lensargs['Njacks']
+    #    lxjkreg     = np.random.randint(Njacks, size=len(lra))
+    #    sys.stdout.write("Number of lenses: %d \n" % (len(df['ra_gal'])))
+    #    return lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg  
 
 
 

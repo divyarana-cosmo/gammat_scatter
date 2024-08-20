@@ -1,5 +1,5 @@
 #cosmological parameters
-Om0: 0.25 
+Om0: 0.308
 Ob0: 0.044 
 Tcmb0: 2.7255 
 Neff: 3.046
@@ -7,10 +7,11 @@ sigma8: 0.8
 ns: 0.95
 
 #outputdir: /net/dobbe/data2/debug_z_0.1_0.5
-outputdir: /net/dobbe/data2/debug_full_z_0.1_0.5
+#outputdir: ./debug_full_z_0.1_0.5
+outputdir: ./debug_z_0.1_0.4
 #outputdir: debug
 Rmin: 0.007
-Rmax: 0.4
+Rmax: 1.0
 #Nbins: 5
 Nbins: 15
 
@@ -19,7 +20,7 @@ Nbins: 15
 lens:
     type: micecatv2
     zmin: 0.1
-    zmax: 0.5
+    zmax: 0.4
     Njacks: 20
 
 # Source configuration (to be used in splashback_select.py:source_select)

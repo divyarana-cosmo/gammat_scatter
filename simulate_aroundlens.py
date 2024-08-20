@@ -356,8 +356,8 @@ if __name__ == "__main__":
    
     outputfilename = outputfilename + '_w_jacks'
     print(config)
-    run_pipe(config, outputfilename = outputfilename, outputpairfile = outputfilename + '_pairs')           
-    #run_pipe(config, outputfilename = outputfilename)           
+    #run_pipe(config, outputfilename = outputfilename, outputpairfile = outputfilename + '_pairs')           
+    run_pipe(config, outputfilename = outputfilename)           
 
         #for ll,sep in enumerate(sl_sep):
         #    if sep<rmin or sep>rmax or sflag[ll]==0:
