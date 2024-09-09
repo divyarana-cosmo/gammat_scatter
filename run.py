@@ -77,8 +77,8 @@ if __name__ == "__main__":
     # getting the lenses data and massaging it a bit
     lra, ldec, lzred, lwgt, llogMh, llogmstel, llog_re, ljkreg = lens_select(lensargs)
     
-    Nbins = 40
-    perc = np.linspace(0,1, Nbins)*100
+    Nbins = 10
+    perc = np.linspace(0,1, Nbins+1)*100
     print(len(llogmstel)/Nbins)
 
     for ii in range(len(perc)-1):

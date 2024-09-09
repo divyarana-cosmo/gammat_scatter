@@ -5,7 +5,7 @@
 
 # This code is adapted from iagrg's notes
 import sys
-sys.path.append('./src/')
+#sys.path.append('./src/')
 from distort import simshear
 import numpy as np
 import matplotlib.pyplot as plt
@@ -17,7 +17,7 @@ from get_data import lens_select
 from tqdm import tqdm
 import argparse
 import yaml
-from mpi4py import MPI
+#from mpi4py import MPI
 from subprocess import  call
 from scipy import stats
 from colossus.cosmology import cosmology
@@ -86,6 +86,13 @@ class weakpipe():
         self.sumd_dsigmat_inp_num          = np.zeros(self.nbins * self.njacks)
         self.sumd_dsigmat_inp_bary_num     = np.zeros(self.nbins * self.njacks)
         self.sumd_dsigmat_inp_dm_num       = np.zeros(self.nbins * self.njacks)
+
+        self.sumd_gammat_inp_num          = np.zeros(self.nbins * self.njacks)
+        self.sumd_gammat_inp_bary_num     = np.zeros(self.nbins * self.njacks)
+        self.sumd_gammat_inp_dm_num       = np.zeros(self.nbins * self.njacks)
+
+        self.sumd_kappa_inp_num           = np.zeros(self.nbins * self.njacks)
+
         return 0
  
  
@@ -175,6 +182,9 @@ class weakpipe():
         etan_b      = etan_b[idx]
         etan_dm     = etan_dm[idx]
 
+        # input kappa values
+        kappa       = kappa[idx]
+
         jkidxs      = l_xjkreg[idx] 
         # getting the radial separations for a lense source pair
         slnbins = np.log10(sl_sep*1.0/self.rmin)//self.rdiff
@@ -210,13 +220,17 @@ class weakpipe():
                     self.sumd_dsigmat_inp_num      [jk*self.nbins + rb]     +=sum((sigma_crit * etan)[idx])
                     self.sumd_dsigmat_inp_bary_num [jk*self.nbins + rb]     +=sum((sigma_crit * etan_b)[idx])
                     self.sumd_dsigmat_inp_dm_num   [jk*self.nbins + rb]     +=sum((sigma_crit * etan_dm)[idx])
+
+                    self.sumd_gammat_inp_num       [jk*self.nbins + rb] +=sum(etan[idx])  
+                    self.sumd_gammat_inp_bary_num  [jk*self.nbins + rb] +=sum(etan_b[idx])         
+                    self.sumd_gammat_inp_dm_num    [jk*self.nbins + rb] +=sum(etan_dm[idx])         
+                    self.sumd_kappa_inp_num        [jk*self.nbins + rb] +=sum(kappa[idx])
         return 0                
 
 
     def write2file(self):
         fout = open(self.outputfilename, "w")
-        fout.write("# 0:rmin/2+rmax/2 1:dsigt 2:SN_Errdsigt 3:dsigx 4:SN_Errdsigx 5:r90_dsigt 6:r90_SN_Errdsigt 7:r90_dsigx 8:r90_SN_Errdsigx 9:true_dsig_bary 10:true_dsig_dm 11:true_dsig 12:sumdwls 13:jkreg\n")
-
+        fout.write("# 0:rmin/2+rmax/2 1:dsigt 2:SN_Errdsigt 3:dsigx 4:SN_Errdsigx 5:r90_dsigt 6:r90_SN_Errdsigt 7:r90_dsigx 8:r90_SN_Errdsigx 9:true_dsig_bary 10:true_dsig_dm 11:true_dsig 12:sumdwls 13:sumd_dsigmat_num 14:sumd_dsigmax_num 15:sumd_dsigmatsq_num 16:sumd_dsigmaxsq_num 17:r90_sumd_dsigmat_num 18:r90_sumd_dsigmax_num 19:r90_sumd_dsigmatsq_num 20:r90_sumd_dsigmaxsq_num 21:true_gammat_bary 22:true_gammat_dm 23:true_gammat 24:true_kappa 25:jkreg\n")
         for jk in range(self.njacks):
             for i in range(self.nbins):
                 rmin = self.rbins[i]
@@ -240,9 +254,14 @@ class weakpipe():
                 true_dsig_bary      =   self.sumd_dsigmat_inp_bary_num      [jk*self.nbins + i]/self.pair_counts[jk*self.nbins + i] 
                 true_dsig_dm        =   self.sumd_dsigmat_inp_dm_num [jk*self.nbins + i]/self.pair_counts[jk*self.nbins + i] 
                 true_dsig           =   self.sumd_dsigmat_inp_num   [jk*self.nbins + i]/self.pair_counts[jk*self.nbins + i] 
+
+                true_gammat_bary      =   self.sumd_gammat_inp_bary_num [jk*self.nbins + i]/self.pair_counts[jk*self.nbins + i]
+                true_gammat_dm        =   self.sumd_gammat_inp_dm_num   [jk*self.nbins + i]/self.pair_counts[jk*self.nbins + i]
+                true_gammat           =   self.sumd_gammat_inp_num      [jk*self.nbins + i]/self.pair_counts[jk*self.nbins + i]
+                true_kappa            =   self.sumd_kappa_inp_num       [jk*self.nbins + i]/self.pair_counts[jk*self.nbins + i]
                 #print(self.sumdwls[jk*self.nbins + i])
                 #print(rr, dsig, sig_dsigt, SN_Errdsigt, dsigx, sig_dsigx, SN_Errdsigx, r90_dsig, r90_sig_dsigt, r90_SN_Errdsigt, r90_dsigx, r90_sig_dsigx, r90_SN_Errdsigx, true_dsig_bary, true_dsig_dm, true_dsig, jk)
-                fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%d\n"%(rr, dsig, SN_Errdsigt, dsigx, SN_Errdsigx, r90_dsig, r90_SN_Errdsigt, r90_dsigx, r90_SN_Errdsigx, true_dsig_bary, true_dsig_dm, true_dsig, self.sumdwls[jk*self.nbins + i], jk))
+                fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%d\n"%(rr, dsig, SN_Errdsigt, dsigx, SN_Errdsigx, r90_dsig, r90_SN_Errdsigt, r90_dsigx, r90_SN_Errdsigx, true_dsig_bary, true_dsig_dm, true_dsig, self.sumdwls[jk*self.nbins + i], self.sumd_dsigmat_num[jk*self.nbins + i], self.sumd_dsigmax_num[jk*self.nbins + i], self.sumd_dsigmatsq_num[jk*self.nbins + i], self.sumd_dsigmaxsq_num[jk*self.nbins + i], self.r90_sumd_dsigmat_num[jk*self.nbins + i], self.r90_sumd_dsigmax_num[jk*self.nbins + i], self.r90_sumd_dsigmatsq_num[jk*self.nbins + i], self.r90_sumd_dsigmaxsq_num[jk*self.nbins + i], true_gammat_bary, true_gammat_dm, true_gammat, true_kappa, jk))
                 #fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%d\n"%(rr, dsig, sig_dsigt, SN_Errdsigt, dsigx, sig_dsigx, SN_Errdsigx, r90_dsig, r90_sig_dsigt, r90_SN_Errdsigt, r90_dsigx, r90_sig_dsigx, r90_SN_Errdsigx, true_dsig_bary, true_dsig_dm, true_dsig, jk))
         fout.write("#OK")
         fout.close()

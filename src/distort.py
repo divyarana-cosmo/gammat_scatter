@@ -64,7 +64,7 @@ class simshear():
         # sigma_crit_calculations for a given lense-source pair
         sigm_crit_inv = self.Astropy_cosmo.angular_diameter_distance(lzred).value * self.Astropy_cosmo.angular_diameter_distance_z1z2(lzred, szred).value * 1.0/self.Astropy_cosmo.angular_diameter_distance(szred).value
 
-        # If you want to work with comoving cooredinates
+        # If you want to work with comoving coordinates
         #sigm_crit_inv = self.Astropy_cosmo.angular_diameter_distance(lzred).value * self.Astropy_cosmo.angular_diameter_distance_z1z2(lzred, szred).value * (1.0 + lzred)**2 * 1.0/self.Astropy_cosmo.angular_diameter_distance(szred).value
 
         sigm_crit_inv[~idx]=0.0 

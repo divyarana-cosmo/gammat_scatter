@@ -1,16 +1,10 @@
 # split the lense sky in 100 chunks and assign sources via possion distribution
 # run the code chunk by chunk 
 
-# make a class which given the config values initialize up the arrays
-# write a function to process lens
-# write a function to process source
-# write a function to put measured signal in a file everything in a file
-
 import sys
-sys.path.append('./src/')
+sys.path.append('./src_no_jk/')
 from weakpipe import weakpipe
 import numpy as np
-import matplotlib.pyplot as plt
 #from astropy.cosmology import FlatLambdaCDM
 from scipy.integrate import quad
 from scipy.interpolate import interp1d
@@ -26,7 +20,7 @@ from colossus.cosmology import cosmology
 from colossus.halo import concentration
 #from welford import Welford
 import time
-from glob import glob
+import matplotlib.pyplot as plt
 
 def get_interp_szred():
     "assigns redshifts respecting the distribution"
@@ -43,8 +37,10 @@ def get_interp_szred():
 
 interp_szred = get_interp_szred()
 
-def create_sources(ramin, ramax, decmin, decmax, sigell=0.27, nsrc=30, mask=None): #mask for future application
+def create_sources(ramin, ramax, decmin, decmax, sigell=0.27, nsrc=30, seed=123, mask=None): #mask for future application
     "takes the angles in degrees and outputs in degrees"
+    np.random.seed(seed)
+    #print("curret seed value",np.random.get_state()[1][0])
     thetamin        = (90 - decmax) *np.pi/180
     thetamax        = (90 - decmin) *np.pi/180
     ramin           = ramin*np.pi/180
@@ -54,8 +50,7 @@ def create_sources(ramin, ramax, decmin, decmax, sigell=0.27, nsrc=30, mask=None
     area            = (ramax - ramin) * (np.cos(thetamin) - np.cos(thetamax))* (180*60/np.pi)**2
     avgNgal         = nsrc * area      # area of square in steradians --> arcmin^2
     Ngal            = round(np.random.poisson(avgNgal))
-    print(avgNgal, Ngal)
- 
+    #print(avgNgal, Ngal)
     cdec            = np.random.uniform(np.cos(thetamax), np.cos(thetamin), size=Ngal)     
     sdec            = (90.0 - np.arccos(cdec)*180/np.pi)
     sra             = np.random.uniform(ramin, ramax, size=Ngal)*180/np.pi
@@ -72,34 +67,32 @@ def create_sources(ramin, ramax, decmin, decmax, sigell=0.27, nsrc=30, mask=None
 
 
 
-def run_pipe(config, outputfilename):
+def run_pipe(config, outputfilename, jk):
     lensargs    = config["lens"]
     sourceargs  = config["source"]
-    ##setting up cosmology and class instance
+    #setting up cosmology and class instance
 
     params = {'flat': True, 'H0': 100, 'Om0': config['Om0'], 'Ob0': config['Ob0'], 'sigma8': config['sigma8'], 'ns': config['ns']}
     cosmo = cosmology.setCosmology('myCosmo', **params)
     
     # getting the lenses data and massaging it a bit
-    lid, lra, ldec, lzred, lwgt, llogmstel,llog_re, llogmh, lxjkreg = lens_select(lensargs)
-    #lra, ldec, lzred, lwgt, llogMh, llogmstel, llog_re, ljkreg = lens_select(lensargs)
+    lra, ldec, lzred, lwgt, llogMh, llogmstel, llog_re, ljkreg = lens_select(lensargs)
     lconc = 0.0*lra
     if config['test_case']:
         print("working with the test case")
-
         idx = (np.random.uniform(size=len(lra))<0.05)
         lra = lra[idx]; ldec = ldec[idx]; lzred = lzred[idx]
         lwgt = lwgt[idx]; llogMh = llogMh[idx]; llogmstel = llogmstel[idx]
         llog_re = llog_re[idx]; ljkreg = np.random.randint(lensargs['Njacks'], size=int(sum(idx)))
 
 
-        llogmstel   = np.median(llogmstel) + 0.0*lra
-        llog_re     = np.median(llog_re) + 0.0*lra
-        llogMh      = np.median(llogMh) + 0.0*lra
+        llogmstel   = np.median(llogmstel)  + 0.0*lra
+        llog_re     = np.median(llog_re)    + 0.0*lra
+        llogMh      = np.median(llogMh)     + 0.0*lra
         #assigning concentration
         lconc       = concentration.concentration(10**np.median(llogMh), '200m', np.median(lzred), model = 'diemer19')
-        lconc       = np.median( lconc    ) + 0.0*lra
-        lzred       = np.median( lzred    ) + 0.0*lra
+        lconc       = np.median( lconc)     + 0.0*lra
+        lzred       = np.median( lzred)     + 0.0*lra
         print('%2.2f\t%2.2f\t%2.2f\t%2.2f\t%2.2f'%(np.median( llogmstel), np.median(llog_re), np.median(llogMh), np.median(lconc), np.median(lzred)))
     else:
         xx = np.linspace(9,16,100)
@@ -111,46 +104,37 @@ def run_pipe(config, outputfilename):
         lconc = 10**spl_c_mh(llogMh)
 
     # initialize weakpipe
-    wpipe = weakpipe(H0 = 100, Om0 = 0.25, Ob0 = 0.044, Tcmb0 = 2.7255, Neff = 3.046, sigma8 = 0.8, ns = 0.95, Rmin=0.02, Rmax=1.0, Nbins=10, Njacks=20, outputfilename=outputfilename)
+    wpipe = weakpipe(H0 = 100, Om0 = 0.25, Ob0 = 0.044, Tcmb0 = 2.7255, Neff = 3.046, sigma8 = 0.8, ns = 0.95, Rmin=0.02, Rmax=1.0, Nbins=10, outputfilename=outputfilename)
 
     #process lens data and put a tree
+    idx = ljkreg==jk
+    wpipe.process_lens(lra[idx], ldec[idx], lzred[idx], lwgt[idx], llogMh[idx], lconc[idx], llogmstel[idx], llog_re[idx])
 
-    #lid, lra, ldec, lzred, lwgt, llogmstel,llog_re, llogmh, lxjkreg = lens_select(lensargs)
-    wpipe.process_lens(lra, ldec, lzred, lwgt, llogmh, lconc, llogmstel, llog_re, lxjkreg)
-
-    # reading the source catalog data file by file  
+    # make source catalog using the lens field dimensions, we are currently using a rectangular field 
     # but if we have a footprint we can easily generalize it
     # chopping up the lense field in the 10000 regions 
-    #Nchunks     = 500
-    #brickra     = np.linspace(lra.min(), lra.max(), Nchunks+1)
-    #lthetamax   = (90 - ldec.min())*np.pi/180
-    #lthetamin   = (90 - ldec.max())*np.pi/180
-    #brickdec    = np.linspace(np.cos(lthetamax), np.cos(lthetamin), Nchunks+1)     
-    #brickdec    = (90.0 - np.arccos(brickdec)*180/np.pi)
-    #ax1 = plt.subplot(2,2,2)
-    #for ii in range(Nchunks):  
-    srcflist = glob('/net/dobbe/data2/github/ggl_aroundsource/DataStore/unsheared_euclid/galaxy_*.fits')
-    for ifil in srcflist:
-        datagal = fits.open(ifil)[1].data
-        #np.random.seed(ii*Nchunks+jj)
-        #print(brickra[ii], brickra[ii+1], brickdec[jj], brickdec[jj+1])
-        #datagal = create_sources(brickra[ii], brickra[ii+1], brickdec[jj], brickdec[jj+1], sigell=sourceargs['sigell'], nsrc = sourceargs['nsrc'])
-
-        
-        #processing the source galaxies
-        for igal in range(len(datagal['sra'][:])):
-            ragal       =   datagal['sra'][igal]  
-            decgal      =   datagal['sdec'][igal] 
-            zphotgal    =   datagal['szred'][igal] 
-            wgal        =   datagal['wgal'][igal] 
-            e1gal       =   datagal['se1'][igal]    
-            e2gal       =   datagal['se2'][igal] 
-            wpipe.process_source(ragal, decgal, zphotgal, wgal, e1gal, e2gal, zdiff=sourceargs['zdiff'])
-
+    Nchunks     = 500
+    brickra     = np.linspace(lra.min(), lra.max(), Nchunks+1)
+    lthetamax   = (90 - ldec.min())*np.pi/180
+    lthetamin   = (90 - ldec.max())*np.pi/180
+    brickdec    = np.linspace(np.cos(lthetamax), np.cos(lthetamin), Nchunks+1)     
+    brickdec    = (90.0 - np.arccos(brickdec)*180/np.pi)
+    for ii in range(Nchunks):  
+        for jj in range(Nchunks):
+            seed = ii*Nchunks+jj
+            print(jk,'%2.2f\t%2.2f\t%2.2f\t%2.2f\n'%(brickra[ii], brickra[ii+1], brickdec[jj], brickdec[jj+1]))
+            datagal = create_sources(brickra[ii], brickra[ii+1], brickdec[jj], brickdec[jj+1], sigell=sourceargs['sigell'], nsrc = sourceargs['nsrc'], seed=seed)
+            
+            #processing the source galaxies
+            for igal in range(len(datagal[:,0])):
+                ragal, decgal, zphotgal, wgal, e1gal, e2gal = datagal[igal,:]
+                wpipe.process_source(ragal, decgal, zphotgal, wgal, e1gal, e2gal, zdiff=sourceargs['zdiff'])
     wpipe.write2file()
     return 0
 
 if __name__ == "__main__":
+    comm = MPI.COMM_WORLD
+
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--config", help="Configuration file")
     parser.add_argument("--outdir", help="Output filename with pairs information", default="debug")
@@ -172,7 +156,7 @@ if __name__ == "__main__":
     #make the directory for the output
     from subprocess import call
     #call("mkdir -p %s" % (config["outputdir"]), shell=1)
-    
+        
 
     if 'logmstelmin'not in config:
         config['lens']['logmstelmin'] = args.logmstelmin
@@ -200,6 +184,12 @@ if __name__ == "__main__":
     if args.test_case:
         outputfilename = outputfilename + '_test_case'
     np.random.seed(args.seed)
+    
+    outfil = outputfilename
 
-    run_pipe(config, outputfilename = outputfilename)           
-
+    for jk in range(config['lens']['Njacks']):
+        if jk%comm.size != comm.rank:
+            continue
+        outputfilename = outfil + 'jk_%d'%jk      
+        run_pipe(config, outputfilename = outputfilename, jk=jk)           
+    comm.Barrier()

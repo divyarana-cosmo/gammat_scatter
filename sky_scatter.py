@@ -98,6 +98,9 @@ def run_pipe(config, outputfile = 'gamma.dat', outputpairfile=None):
 
     # getting the lenses data and massaging it a bit
     lra, ldec, lzred, lwgt, llogMh, llogmstel, llog_re, ljkreg = lens_select(lensargs)
+    plt.hist(llog_re)
+    plt.savefig('test.png')
+    exit()
     lconc = 0.0*lra
     if config['test_case']:
         print("working with the test case")
@@ -334,7 +337,7 @@ if __name__ == "__main__":
     parser.add_argument("--no_shear", help="for removing shear-testing purpose", type=bool, default=False)
     parser.add_argument("--test_case", help="testing the ideal case", type=bool, default=False)
     parser.add_argument("--rot90", help="rotating intrinsic shapes by 90 degrees", type=bool, default=False)
-    parser.add_argument("--logmstelmin", help="log stellar mass minimum-lense selection", type=float, default=11.0)
+    parser.add_argument("--logmstelmin", help="log stellar mass minimum-lense selection", type=float, default=9.0)
     parser.add_argument("--logmstelmax", help="log stellar mass maximum-lense selection", type=float, default=13.0)
 
 
