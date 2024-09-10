@@ -1,5 +1,11 @@
+# make a class which given the config values initialize up the arrays
+# write a function to process lens
+# write a function to process source
+# write a function to put measured signal in a file everything in a file
+
 # This code is adapted from iagrg's notes
 import sys
+#sys.path.append('./src/')
 from distort import simshear
 import numpy as np
 import matplotlib.pyplot as plt
@@ -79,10 +85,17 @@ class weakpipe():
         self.sumd_dsigmat_inp_num          = np.zeros(self.nbins)
         self.sumd_dsigmat_inp_bary_num     = np.zeros(self.nbins)
         self.sumd_dsigmat_inp_dm_num       = np.zeros(self.nbins)
+
+        self.sumd_gammat_inp_num          = np.zeros(self.nbins)
+        self.sumd_gammat_inp_bary_num     = np.zeros(self.nbins)
+        self.sumd_gammat_inp_dm_num       = np.zeros(self.nbins)
+
+        self.sumd_kappa_inp_num           = np.zeros(self.nbins)
+
         return 0
  
  
-    def process_lens(self, lra, ldec, lzred, lwgt, llogMh, lconc, llogmstel, llog_re):
+    def process_lens(self, lra, ldec, lzred, lwgt, llogMh, lconc, llogmstel, llog_re, ljkreg):
         self.lra         = lra      
         self.ldec        = ldec     
         self.lzred       = lzred    
@@ -91,6 +104,7 @@ class weakpipe():
         self.lconc       = lconc    
         self.llogmstel   = llogmstel
         self.llog_re     = llog_re
+        self.lxjkreg     = ljkreg   
 
         # convert lense ra and dec into x,y,z cartesian coordinates
         lx, ly, lz = get_xyz(lra, ldec)
@@ -111,106 +125,149 @@ class weakpipe():
         # ra and dec to x,y,z for sources
         sx, sy, sz = get_xyz(ragal, decgal)
         # query in a ball around individual sources and collect the lenses ids with a maximum radius
-        lidx = np.array(self.lens_tree.query_ball_point(np.transpose([sx, sy, sz]), self.dismax))
-            
-        #lidx = np.array(slidx[igal])
-        # removing sources which doesn't have any lenses around them
-        if len(lidx)==0:
-            return 
+        #_lidx = np.array(self.lens_tree.query_ball_point(np.transpose([sx, sy, sz]), self.dismax, workers=10))
+        _lidx = self.lens_tree.query_ball_point(np.transpose([sx, sy, sz]), self.dismax, workers=1)
+        print(_lidx)
+        
+        print("query done")
 
-        # selecting a cleaner background
-        zcut = (np.max(self.lzred) < (zphotgal - zdiff)) #only taking the foreground lenses
-
-        # again skipping the onces which doesn't satisfy the above criteria
-        if zcut==0.0:
-            return 
-        # collecting the  data of lenses around individual source
-        lidx   = lidx[zcut] # this will catch the array indices for our lenses
-        sra    = ragal
-        sdec   = decgal
-        
-        #lid, lra, ldec, lzred, lwgt, logmstel, logMh, xjkreg 
-        #l_id        = lid[lidx]
-        l_ra        = self.lra[lidx]
-        l_dec       = self.ldec[lidx]
-        l_zred      = self.lzred[lidx]
-        l_wgt       = self.lwgt[lidx]
-        l_logmstel  = self.llogmstel[lidx]
-        l_log_re    = self.llog_re[lidx]
-        l_logMh     = self.llogMh[lidx]
-        l_conc      = self.lconc[lidx]
-        
-        e1gal, e2gal, etan, kappa, proj_sep, sflag, etan_b, etan_dm, etan_obs, ex_obs = self.ss.shear_src(l_ra, l_dec, l_zred, l_logmstel, l_log_re, l_logMh, l_conc, ragal, decgal, zphotgal, e1gal, e2gal)
-
-        e1gal, e2gal, etan, kappa, proj_sep, sflag, etan_b, etan_dm, r90_etan_obs, r90_ex_obs = self.ss.shear_src(l_ra, l_dec, l_zred, l_logmstel, l_log_re, l_logMh, l_conc, ragal, decgal, zphotgal, r90_e1gal, r90_e2gal)
-        
-
-        # tangential shear
-        sl_sep  = proj_sep
-        w_ls    = l_wgt*wgal*self.ss.get_sigma_crit_inv**2
- 
-        #cure the arrays a bin
-        idx = (sl_sep>self.rmin) & (sl_sep<self.rmax) & (sflag==1)
-        sl_sep      = sl_sep[idx]
-        sigma_crit  = 1/self.ss.get_sigma_crit_inv[idx]
-        w_ls        = w_ls[idx]
-        
-        # measured values
-        etan_obs        = etan_obs[idx]
-        ex_obs          = ex_obs[idx]  
-        r90_etan_obs    = r90_etan_obs[idx]
-        r90_ex_obs      = r90_ex_obs[idx]  
-        
-        # input shear values
-        etan        = etan[idx]   
-        etan_b      = etan_b[idx]
-        etan_dm     = etan_dm[idx]
-
-        # getting the radial separations for a lense source pair
-        slnbins = np.log10(sl_sep*1.0/self.rmin)//self.rdiff
-        
-        for rb in range(self.nbins):
-            idx  = slnbins==rb 
-            if sum(idx)==0:
+        for nn,lidx in enumerate(_lidx):
+            lidx = np.array(lidx)
+            print(nn)#, lidx)
+            #lidx = np.array(slidx[igal])
+            # removing sources which doesn't have any lenses around them
+            if len(lidx)==0:
+                #print("none")
                 continue
-            #print(np.shape(w_ls * etan_obs * sigma_crit))
-            #print(np.shape(idx))
-            #exit()
 
-            self.sumd_dsigmat_num          [rb]     +=sum((w_ls * etan_obs * sigma_crit)[idx])
-            self.sumd_dsigmatsq_num        [rb]     +=sum(((w_ls* etan_obs * sigma_crit)**2)[idx])
-            self.sumd_dsigmax_num          [rb]     +=sum((w_ls * ex_obs * sigma_crit)[idx])
-            self.sumd_dsigmaxsq_num        [rb]     +=sum(((w_ls* ex_obs * sigma_crit)**2)[idx])
-            self.sumdwls                   [rb]     +=sum(w_ls[idx])
+            # selecting a cleaner background
+            zcut = (np.max(self.lzred) < (zphotgal[nn] - zdiff)) #only taking the foreground lenses
+
+            # again skipping the onces which doesn't satisfy the above criteria
+            if zcut==0.0:
+                continue
+            # collecting the  data of lenses around individual source
+            #lidx   = lidx[zcut] # this will catch the array indices for our lenses
+            
+            #lid, lra, ldec, lzred, lwgt, logmstel, logMh, xjkreg 
+            #l_id        = lid[lidx]
+            l_ra        = self.lra[lidx]
+            l_dec       = self.ldec[lidx]
+            l_zred      = self.lzred[lidx]
+            l_wgt       = self.lwgt[lidx]
+            l_logmstel  = self.llogmstel[lidx]
+            l_log_re    = self.llog_re[lidx]
+            l_logMh     = self.llogMh[lidx]
+            l_conc      = self.lconc[lidx]
+            l_xjkreg    = self.lxjkreg[lidx]
+            #print(np.shape(ragal)) 
+            #print( ragal[7])#, ragal[nn], decgal[nn], zphotgal[nn], e1gal[nn], e2gal[nn])
+            _e1gal, _e2gal, etan, kappa, proj_sep, sflag, etan_b, etan_dm, etan_obs, ex_obs = self.ss.shear_src(l_ra, l_dec, l_zred, l_logmstel, l_log_re, l_logMh, l_conc, ragal[nn], decgal[nn], zphotgal[nn], e1gal[nn], e2gal[nn])
+            
+            
+            #print(np.shape(ragal)) 
+
+            _e1gal, _e2gal, etan, kappa, proj_sep, sflag, etan_b, etan_dm, r90_etan_obs, r90_ex_obs = self.ss.shear_src(l_ra, l_dec, l_zred, l_logmstel, l_log_re, l_logMh, l_conc, ragal[nn], decgal[nn], zphotgal[nn], r90_e1gal[nn], r90_e2gal[nn])
+            
+            # tangential shear
+            sl_sep  = proj_sep
+            w_ls    = l_wgt*wgal[nn]*self.ss.get_sigma_crit_inv**2
+ 
+            #cure the arrays a bin
+            idx = (sl_sep>self.rmin) & (sl_sep<self.rmax) & (sflag==1)
+            if len(idx)==1:
+                sl_sep = np.array([sl_sep])
+                w_ls            =   np.array([ w_ls        ])            
+                etan_obs        =   np.array([ etan_obs    ])
+                ex_obs          =   np.array([ ex_obs      ])
+                r90_etan_obs    =   np.array([ r90_etan_obs])
+                r90_ex_obs      =   np.array([ r90_ex_obs  ])
+                etan            =   np.array([ etan        ])
+                etan_b          =   np.array([ etan_b      ])
+                etan_dm         =   np.array([ etan_dm     ])
+                kappa           =   np.array([ kappa       ])
+                l_xjkreg        =   np.array([ l_xjkreg    ])
+                sigma_crit      =    1/self.ss.get_sigma_crit_inv
+            else:
+                sigma_crit  = 1/self.ss.get_sigma_crit_inv[idx]
+
+            #print(idx)
+            #print(sl_sep)
+            #print(np.shape(sl_sep))
+            sl_sep      = sl_sep[idx]
+            #sigma_crit  = 1/self.ss.get_sigma_crit_inv[idx]
+            w_ls        = w_ls[idx]
+            
+            # measured values
+            etan_obs        = etan_obs[idx]
+            ex_obs          = ex_obs[idx]  
+            r90_etan_obs    = r90_etan_obs[idx]
+            r90_ex_obs      = r90_ex_obs[idx]  
+            
+            # input shear values
+            etan        = etan[idx]   
+            etan_b      = etan_b[idx]
+            etan_dm     = etan_dm[idx]
+
+            # input kappa values
+            kappa       = kappa[idx]
+
+            jkidxs      = l_xjkreg[idx] 
+            # getting the radial separations for a lense source pair
+            slnbins = np.log10(sl_sep*1.0/self.rmin)//self.rdiff
+            
+            #for ljk in jkidxs:
+            #    for jk in range(self.njacks):
+            #        if ljk == jk:
+            #            continue
+
+            for rb in range(self.nbins):
+                idx  = slnbins==rb 
+                if sum(idx)==0:
+                    continue
+                #print(np.shape(w_ls * etan_obs * sigma_crit))
+                #print(np.shape(idx))
+                #exit()
+
+                self.sumd_dsigmat_num          [rb]     +=sum((w_ls * etan_obs * sigma_crit)[idx])
+                self.sumd_dsigmatsq_num        [rb]     +=sum(((w_ls* etan_obs * sigma_crit)**2)[idx])
+                self.sumd_dsigmax_num          [rb]     +=sum((w_ls * ex_obs * sigma_crit)[idx])
+                self.sumd_dsigmaxsq_num        [rb]     +=sum(((w_ls* ex_obs * sigma_crit)**2)[idx])
+                self.sumdwls                   [rb]     +=sum(w_ls[idx])
 
 
-            self.r90_sumd_dsigmat_num      [rb]     +=sum((w_ls * r90_etan_obs * sigma_crit)[idx])      
-            self.r90_sumd_dsigmatsq_num    [rb]     +=sum(((w_ls* r90_etan_obs * sigma_crit)**2)[idx])  
-            self.r90_sumd_dsigmax_num      [rb]     +=sum((w_ls * r90_ex_obs * sigma_crit)[idx])      
-            self.r90_sumd_dsigmaxsq_num    [rb]     +=sum(((w_ls* r90_ex_obs * sigma_crit)**2)[idx])  
-            self.r90_sumdwls               [rb]     +=sum(w_ls[idx])
+                self.r90_sumd_dsigmat_num      [rb]     +=sum((w_ls * r90_etan_obs * sigma_crit)[idx])      
+                self.r90_sumd_dsigmatsq_num    [rb]     +=sum(((w_ls* r90_etan_obs * sigma_crit)**2)[idx])  
+                self.r90_sumd_dsigmax_num      [rb]     +=sum((w_ls * r90_ex_obs * sigma_crit)[idx])      
+                self.r90_sumd_dsigmaxsq_num    [rb]     +=sum(((w_ls* r90_ex_obs * sigma_crit)**2)[idx])  
+                self.r90_sumdwls               [rb]     +=sum(w_ls[idx])
 
-            self.pair_counts               [rb]     +=sum(idx)
+                self.pair_counts               [rb]     +=sum(idx)
   
 
-            self.sumd_dsigmat_inp_num      [rb]     +=sum((sigma_crit * etan)[idx])
-            self.sumd_dsigmat_inp_bary_num [rb]     +=sum((sigma_crit * etan_b)[idx])
-            self.sumd_dsigmat_inp_dm_num   [rb]     +=sum((sigma_crit * etan_dm)[idx])
+                self.sumd_dsigmat_inp_num      [rb]     +=sum((sigma_crit * etan)[idx])
+                self.sumd_dsigmat_inp_bary_num [rb]     +=sum((sigma_crit * etan_b)[idx])
+                self.sumd_dsigmat_inp_dm_num   [rb]     +=sum((sigma_crit * etan_dm)[idx])
+
+                self.sumd_gammat_inp_num       [rb] +=sum(etan[idx])  
+                self.sumd_gammat_inp_bary_num  [rb] +=sum(etan_b[idx])         
+                self.sumd_gammat_inp_dm_num    [rb] +=sum(etan_dm[idx])         
+                self.sumd_kappa_inp_num        [rb] +=sum(kappa[idx])
         return 0                
 
 
     def write2file(self):
         fout = open(self.outputfilename, "w")
-        fout.write("# 0:rmin/2+rmax/2 1:dsigt 2:SN_Errdsigt 3:dsigx 4:SN_Errdsigx 5:r90_dsigt 6:r90_SN_Errdsigt 7:r90_dsigx 8:r90_SN_Errdsigx 9:true_dsig_bary 10:true_dsig_dm 11:true_dsig 12:sumdwls 13:jkreg\n")
-
+        fout.write("# 0:rmin/2+rmax/2 1:dsigt 2:SN_Errdsigt 3:dsigx 4:SN_Errdsigx 5:r90_dsigt 6:r90_SN_Errdsigt 7:r90_dsigx 8:r90_SN_Errdsigx 9:true_dsig_bary 10:true_dsig_dm 11:true_dsig 12:sumdwls 13:sumd_dsigmat_num 14:sumd_dsigmax_num 15:sumd_dsigmatsq_num 16:sumd_dsigmaxsq_num 17:r90_sumd_dsigmat_num 18:r90_sumd_dsigmax_num 19:r90_sumd_dsigmatsq_num 20:r90_sumd_dsigmaxsq_num 21:true_gammat_bary 22:true_gammat_dm 23:true_gammat 24:true_kappa\n")
+        #for jk in range(self.njacks):
         for i in range(self.nbins):
             rmin = self.rbins[i]
             rmax = self.rbins[i+1]
             rr                  =   rmin/2.0 + rmax/2.0 
-            dsig                =   self.sumd_dsigmat_num[i]*1.0/self.sumdwls[i]
-            SN_Errdsigt         =   np.sqrt(self.sumd_dsigmatsq_num[i])*1.0/self.sumdwls[i]
+            dsig                =   self.sumd_dsigmat_num           [i]*1.0/self.sumdwls[i]
+            SN_Errdsigt         =   np.sqrt(self.sumd_dsigmatsq_num [i])*1.0/self.sumdwls[i]
             dsigx               =   self.sumd_dsigmax_num[i]*1.0/self.sumdwls[i]
-            SN_Errdsigx         =   np.sqrt(self.sumd_dsigmaxsq_num[i])*1.0/self.sumdwls[jk*self.nbins + i]
+            SN_Errdsigx         =   np.sqrt(self.sumd_dsigmaxsq_num[i])*1.0/self.sumdwls[i]
 
 
             r90_dsig            =   self.r90_sumd_dsigmat_num[i]*1.0/self.r90_sumdwls[i]
@@ -221,7 +278,13 @@ class weakpipe():
             true_dsig_bary      =   self.sumd_dsigmat_inp_bary_num      [i]/self.pair_counts[i] 
             true_dsig_dm        =   self.sumd_dsigmat_inp_dm_num [i]/self.pair_counts[i] 
             true_dsig           =   self.sumd_dsigmat_inp_num   [i]/self.pair_counts[i] 
-            fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rr, dsig, SN_Errdsigt, dsigx, SN_Errdsigx, r90_dsig, r90_SN_Errdsigt, r90_dsigx, r90_SN_Errdsigx, true_dsig_bary, true_dsig_dm, true_dsig, self.sumdwls[jk*self.nbins + i]))
+
+            true_gammat_bary      =   self.sumd_gammat_inp_bary_num [i]/self.pair_counts[i]
+            true_gammat_dm        =   self.sumd_gammat_inp_dm_num   [i]/self.pair_counts[i]
+            true_gammat           =   self.sumd_gammat_inp_num      [i]/self.pair_counts[i]
+            true_kappa            =   self.sumd_kappa_inp_num       [i]/self.pair_counts[i]
+            fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%d\n"%(rr, dsig, SN_Errdsigt, dsigx, SN_Errdsigx, r90_dsig, r90_SN_Errdsigt, r90_dsigx, r90_SN_Errdsigx, true_dsig_bary, true_dsig_dm, true_dsig, self.sumdwls[i], self.sumd_dsigmat_num[i], self.sumd_dsigmax_num[i], self.sumd_dsigmatsq_num[i], self.sumd_dsigmaxsq_num[i], self.r90_sumd_dsigmat_num[i], self.r90_sumd_dsigmax_num[i], self.r90_sumd_dsigmatsq_num[i], self.r90_sumd_dsigmaxsq_num[i], true_gammat_bary, true_gammat_dm, true_gammat, true_kappa))
+                #fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%d\n"%(rr, dsig, sig_dsigt, SN_Errdsigt, dsigx, sig_dsigx, SN_Errdsigx, r90_dsig, r90_sig_dsigt, r90_SN_Errdsigt, r90_dsigx, r90_sig_dsigx, r90_SN_Errdsigx, true_dsig_bary, true_dsig_dm, true_dsig, jk))
         fout.write("#OK")
         fout.close()
 
