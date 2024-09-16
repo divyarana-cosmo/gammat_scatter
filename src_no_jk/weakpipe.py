@@ -118,7 +118,7 @@ class weakpipe():
  
 
     
-    def process_source(self, ragal, decgal, zphotgal, wgal, e1gal, e2gal, zdiff): 
+    def process_source(self, ragal, decgal, zphotgal, wgal, e1gal, e2gal, zmax, zdiff): 
         "takes the intrinsic shapes and redshifts to get the Delta sigma, Delta sigma cross"
         r90_e1gal = -e1gal
         r90_e2gal = -e2gal
@@ -141,7 +141,8 @@ class weakpipe():
                 continue
 
             # selecting a cleaner background
-            zcut = (np.max(self.lzred) < (zphotgal[nn] - zdiff)) #only taking the foreground lenses
+            #zcut = (np.max(self.lzred) < (zphotgal[nn] - zdiff)) #only taking the foreground lenses
+            zcut = (zmax < (zphotgal[nn] - zdiff)) #only taking the foreground lenses
 
             # again skipping the onces which doesn't satisfy the above criteria
             if zcut==0.0:
@@ -283,7 +284,7 @@ class weakpipe():
             true_gammat_dm        =   self.sumd_gammat_inp_dm_num   [i]/self.pair_counts[i]
             true_gammat           =   self.sumd_gammat_inp_num      [i]/self.pair_counts[i]
             true_kappa            =   self.sumd_kappa_inp_num       [i]/self.pair_counts[i]
-            fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%d\n"%(rr, dsig, SN_Errdsigt, dsigx, SN_Errdsigx, r90_dsig, r90_SN_Errdsigt, r90_dsigx, r90_SN_Errdsigx, true_dsig_bary, true_dsig_dm, true_dsig, self.sumdwls[i], self.sumd_dsigmat_num[i], self.sumd_dsigmax_num[i], self.sumd_dsigmatsq_num[i], self.sumd_dsigmaxsq_num[i], self.r90_sumd_dsigmat_num[i], self.r90_sumd_dsigmax_num[i], self.r90_sumd_dsigmatsq_num[i], self.r90_sumd_dsigmaxsq_num[i], true_gammat_bary, true_gammat_dm, true_gammat, true_kappa))
+            fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rr, dsig, SN_Errdsigt, dsigx, SN_Errdsigx, r90_dsig, r90_SN_Errdsigt, r90_dsigx, r90_SN_Errdsigx, true_dsig_bary, true_dsig_dm, true_dsig, self.sumdwls[i], self.sumd_dsigmat_num[i], self.sumd_dsigmax_num[i], self.sumd_dsigmatsq_num[i], self.sumd_dsigmaxsq_num[i], self.r90_sumd_dsigmat_num[i], self.r90_sumd_dsigmax_num[i], self.r90_sumd_dsigmatsq_num[i], self.r90_sumd_dsigmaxsq_num[i], true_gammat_bary, true_gammat_dm, true_gammat, true_kappa))
                 #fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%d\n"%(rr, dsig, sig_dsigt, SN_Errdsigt, dsigx, sig_dsigx, SN_Errdsigx, r90_dsig, r90_sig_dsigt, r90_SN_Errdsigt, r90_dsigx, r90_sig_dsigx, r90_SN_Errdsigx, true_dsig_bary, true_dsig_dm, true_dsig, jk))
         fout.write("#OK")
         fout.close()
