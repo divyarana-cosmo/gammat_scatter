@@ -127,13 +127,12 @@ class weakpipe():
         # query in a ball around individual sources and collect the lenses ids with a maximum radius
         #_lidx = np.array(self.lens_tree.query_ball_point(np.transpose([sx, sy, sz]), self.dismax, workers=10))
         _lidx = self.lens_tree.query_ball_point(np.transpose([sx, sy, sz]), self.dismax, workers=1)
-        print(_lidx)
+        #print(_lidx)
         
         print("query done")
 
         for nn,lidx in enumerate(_lidx):
             lidx = np.array(lidx)
-            print(nn)#, lidx)
             #lidx = np.array(slidx[igal])
             # removing sources which doesn't have any lenses around them
             if len(lidx)==0:
