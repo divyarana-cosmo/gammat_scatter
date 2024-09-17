@@ -259,7 +259,7 @@ class weakpipe():
 
     def write2file(self):
         fout = open(self.outputfilename, "w")
-        fout.write("# 0:rmin/2+rmax/2 1:dsigt 2:SN_Errdsigt 3:dsigx 4:SN_Errdsigx 5:r90_dsigt 6:r90_SN_Errdsigt 7:r90_dsigx 8:r90_SN_Errdsigx 9:true_dsig_bary 10:true_dsig_dm 11:true_dsig 12:sumdwls 13:sumd_dsigmat_num 14:sumd_dsigmax_num 15:sumd_dsigmatsq_num 16:sumd_dsigmaxsq_num 17:r90_sumd_dsigmat_num 18:r90_sumd_dsigmax_num 19:r90_sumd_dsigmatsq_num 20:r90_sumd_dsigmaxsq_num 21:true_gammat_bary 22:true_gammat_dm 23:true_gammat 24:true_kappa\n")
+        fout.write("#0:rmin 1:rmax 2:rmin/2+rmax/2 3:dsigt 4:SN_Errdsigt 5:dsigx 6:SN_Errdsigx 7:r90_dsigt 8:r90_SN_Errdsigt 9:r90_dsigx 10:r90_SN_Errdsigx 11:true_dsig_bary 12:true_dsig_dm 13:true_dsig 14:sumdwls 15:sumd_dsigmat_num 16:sumd_dsigmax_num 17:sumd_dsigmatsq_num 18:sumd_dsigmaxsq_num 19:r90_sumd_dsigmat_num 20:r90_sumd_dsigmax_num 21:r90_sumd_dsigmatsq_num 22:r90_sumd_dsigmaxsq_num 23:true_gammat_bary 24:true_gammat_dm 25:true_gammat 26:true_kappa\n")
         #for jk in range(self.njacks):
         for i in range(self.nbins):
             rmin = self.rbins[i]
@@ -284,7 +284,7 @@ class weakpipe():
             true_gammat_dm        =   self.sumd_gammat_inp_dm_num   [i]/self.pair_counts[i]
             true_gammat           =   self.sumd_gammat_inp_num      [i]/self.pair_counts[i]
             true_kappa            =   self.sumd_kappa_inp_num       [i]/self.pair_counts[i]
-            fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rr, dsig, SN_Errdsigt, dsigx, SN_Errdsigx, r90_dsig, r90_SN_Errdsigt, r90_dsigx, r90_SN_Errdsigx, true_dsig_bary, true_dsig_dm, true_dsig, self.sumdwls[i], self.sumd_dsigmat_num[i], self.sumd_dsigmax_num[i], self.sumd_dsigmatsq_num[i], self.sumd_dsigmaxsq_num[i], self.r90_sumd_dsigmat_num[i], self.r90_sumd_dsigmax_num[i], self.r90_sumd_dsigmatsq_num[i], self.r90_sumd_dsigmaxsq_num[i], true_gammat_bary, true_gammat_dm, true_gammat, true_kappa))
+            fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rmin, rmax, rr, dsig, SN_Errdsigt, dsigx, SN_Errdsigx, r90_dsig, r90_SN_Errdsigt, r90_dsigx, r90_SN_Errdsigx, true_dsig_bary, true_dsig_dm, true_dsig, self.sumdwls[i], self.sumd_dsigmat_num[i], self.sumd_dsigmax_num[i], self.sumd_dsigmatsq_num[i], self.sumd_dsigmaxsq_num[i], self.r90_sumd_dsigmat_num[i], self.r90_sumd_dsigmax_num[i], self.r90_sumd_dsigmatsq_num[i], self.r90_sumd_dsigmaxsq_num[i], true_gammat_bary, true_gammat_dm, true_gammat, true_kappa))
                 #fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%d\n"%(rr, dsig, sig_dsigt, SN_Errdsigt, dsigx, sig_dsigx, SN_Errdsigx, r90_dsig, r90_sig_dsigt, r90_SN_Errdsigt, r90_dsigx, r90_sig_dsigx, r90_SN_Errdsigx, true_dsig_bary, true_dsig_dm, true_dsig, jk))
         fout.write("#OK")
         fout.close()
