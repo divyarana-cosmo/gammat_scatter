@@ -1,6 +1,5 @@
 # split the lense sky in 100 chunks and assign sources via possion distribution
 # run the code chunk by chunk 
-
 # make a class which given the config values initialize up the arrays
 # write a function to process lens
 # write a function to process source
@@ -27,50 +26,7 @@ from colossus.halo import concentration
 #from welford import Welford
 import time
 from glob import glob
-
-def get_interp_szred():
-    "assigns redshifts respecting the distribution"
-    z0 = 0.9/(2)**0.5
-    f = lambda zred: (zred/z0)**2 * np.exp(-(zred/z0)**(3/2)) #taken from euclid prep 2020 page 22
-    zmin = 0.0
-    zmax = 3
-    zarr = np.linspace(zmin, zmax, 20)
-    xx  = 0.0 * zarr
-    for ii in range(len(xx)):
-        xx[ii] = quad(f, zmin, zarr[ii])[0]/quad(f, zmin, zmax)[0]
-    proj = interp1d(xx,zarr)
-    return proj
-
-interp_szred = get_interp_szred()
-
-def create_sources(ramin, ramax, decmin, decmax, sigell=0.27, nsrc=30, mask=None): #mask for future application
-    "takes the angles in degrees and outputs in degrees"
-    thetamin        = (90 - decmax) *np.pi/180
-    thetamax        = (90 - decmin) *np.pi/180
-    ramin           = ramin*np.pi/180
-    ramax           = ramax*np.pi/180
-    
-    #samplying the poisson distributed sources
-    area            = (ramax - ramin) * (np.cos(thetamin) - np.cos(thetamax))* (180*60/np.pi)**2
-    avgNgal         = nsrc * area      # area of square in steradians --> arcmin^2
-    Ngal            = round(np.random.poisson(avgNgal))
-    print(avgNgal, Ngal)
- 
-    cdec            = np.random.uniform(np.cos(thetamax), np.cos(thetamin), size=Ngal)     
-    sdec            = (90.0 - np.arccos(cdec)*180/np.pi)
-    sra             = np.random.uniform(ramin, ramax, size=Ngal)*180/np.pi
-
-    # putting the interpolation for source redshift assignment
-    szred       =   interp_szred(np.random.uniform(size=Ngal))
-    se1         =   np.random.normal(0.0, sigell, size=Ngal) 
-    se2         =   np.random.normal(0.0, sigell, size=Ngal)
-    # inverse variance weights for the sources
-    wgal        =   1/sigell**2 + 0.0*sra
-    return np.transpose([sra, sdec, szred, wgal, se1, se2])
-    #return np.transpose([sra, sdec, szred, wgal, se1, se2])
-
-
-
+from astropy.io import fits
 
 def run_pipe(config, outputfilename):
     lensargs    = config["lens"]
@@ -79,28 +35,31 @@ def run_pipe(config, outputfilename):
 
     params = {'flat': True, 'H0': 100, 'Om0': config['Om0'], 'Ob0': config['Ob0'], 'sigma8': config['sigma8'], 'ns': config['ns']}
     cosmo = cosmology.setCosmology('myCosmo', **params)
-    
+     # initialize weakpipe
+    wpipe = weakpipe(H0 = 100, Om0 = config['Om0'], Ob0 = config['Ob0'], Tcmb0 = config['Tcmb0'], Neff = config['Neff'], sigma8 = config['sigma8'], ns = config['ns'], Rmin = config['Rmin'], Rmax = config['Rmax'], Nbins = config['Nbins'], Njacks=lensargs['Njacks'], outputfilename=outputfilename)
+
+   
     # getting the lenses data and massaging it a bit
-    lid, lra, ldec, lzred, lwgt, llogmstel,llog_re, llogmh, lxjkreg = lens_select(lensargs)
-    #lra, ldec, lzred, lwgt, llogMh, llogmstel, llog_re, ljkreg = lens_select(lensargs)
+    lid, lra, ldec, lzred, lwgt, llogmstel, llog_re, llogmh, lxjkreg = lens_select(lensargs)
+    #lra, ldec, lzred, lwgt, llogmh, llogmstel, llog_re, ljkreg = lens_select(lensargs)
     lconc = 0.0*lra
     if config['test_case']:
         print("working with the test case")
 
         idx = (np.random.uniform(size=len(lra))<0.05)
         lra = lra[idx]; ldec = ldec[idx]; lzred = lzred[idx]
-        lwgt = lwgt[idx]; llogMh = llogMh[idx]; llogmstel = llogmstel[idx]
+        lwgt = lwgt[idx]; llogmh = llogmh[idx]; llogmstel = llogmstel[idx]
         llog_re = llog_re[idx]; ljkreg = np.random.randint(lensargs['Njacks'], size=int(sum(idx)))
 
 
         llogmstel   = np.median(llogmstel) + 0.0*lra
         llog_re     = np.median(llog_re) + 0.0*lra
-        llogMh      = np.median(llogMh) + 0.0*lra
+        llogmh      = np.median(llogmh) + 0.0*lra
         #assigning concentration
-        lconc       = concentration.concentration(10**np.median(llogMh), '200m', np.median(lzred), model = 'diemer19')
+        lconc       = concentration.concentration(10**np.median(llogmh), '200m', np.median(lzred), model = 'diemer19')
         lconc       = np.median( lconc    ) + 0.0*lra
         lzred       = np.median( lzred    ) + 0.0*lra
-        print('%2.2f\t%2.2f\t%2.2f\t%2.2f\t%2.2f'%(np.median( llogmstel), np.median(llog_re), np.median(llogMh), np.median(lconc), np.median(lzred)))
+        print('%2.2f\t%2.2f\t%2.2f\t%2.2f\t%2.2f'%(np.median( llogmstel), np.median(llog_re), np.median(llogmh), np.median(lconc), np.median(lzred)))
     else:
         xx = np.linspace(9,16,100)
         yy = 0.0*xx
@@ -108,10 +67,7 @@ def run_pipe(config, outputfilename):
         for kk, mh in enumerate(10**xx):
             yy[kk]    = concentration.concentration(mh, '200m', med_lzred, model = 'diemer19')
         spl_c_mh = interp1d(xx,np.log10(yy))
-        lconc = 10**spl_c_mh(llogMh)
-
-    # initialize weakpipe
-    wpipe = weakpipe(H0 = 100, Om0 = 0.25, Ob0 = 0.044, Tcmb0 = 2.7255, Neff = 3.046, sigma8 = 0.8, ns = 0.95, Rmin=0.02, Rmax=1.0, Nbins=10, Njacks=20, outputfilename=outputfilename)
+        lconc = 10**spl_c_mh(llogmh)
 
     #process lens data and put a tree
 
@@ -130,23 +86,18 @@ def run_pipe(config, outputfilename):
     #ax1 = plt.subplot(2,2,2)
     #for ii in range(Nchunks):  
     srcflist = glob('/net/dobbe/data2/github/ggl_aroundsource/DataStore/unsheared_euclid/galaxy_*.fits')
-    for ifil in srcflist:
+    for ifil in srcflist[:1]:
         datagal = fits.open(ifil)[1].data
-        #np.random.seed(ii*Nchunks+jj)
-        #print(brickra[ii], brickra[ii+1], brickdec[jj], brickdec[jj+1])
-        #datagal = create_sources(brickra[ii], brickra[ii+1], brickdec[jj], brickdec[jj+1], sigell=sourceargs['sigell'], nsrc = sourceargs['nsrc'])
-
-        
         #processing the source galaxies
-        for igal in range(len(datagal['sra'][:])):
-            ragal       =   datagal['sra'][igal]  
-            decgal      =   datagal['sdec'][igal] 
-            zphotgal    =   datagal['szred'][igal] 
-            wgal        =   datagal['wgal'][igal] 
-            e1gal       =   datagal['se1'][igal]    
-            e2gal       =   datagal['se2'][igal] 
-            wpipe.process_source(ragal, decgal, zphotgal, wgal, e1gal, e2gal, zdiff=sourceargs['zdiff'])
-
+        #for igal in range(len(datagal['sra'])):
+        ragal       =   datagal['sra']  #[:]  
+        decgal      =   datagal['sdec'] #[:] 
+        zphotgal    =   datagal['szred']#[:] 
+        wgal        =   datagal['wgal'] #[:] 
+        e1gal       =   datagal['se1']  #[:]    
+        e2gal       =   datagal['se2']  #[:] 
+        wpipe.process_source(ragal, decgal, zphotgal, wgal, e1gal, e2gal, zdiff=sourceargs['zdiff'])
+        print(ifil)
     wpipe.write2file()
     return 0
 
@@ -203,3 +154,50 @@ if __name__ == "__main__":
 
     run_pipe(config, outputfilename = outputfilename)           
 
+
+
+"""
+def get_interp_szred():
+    "assigns redshifts respecting the distribution"
+    z0 = 0.9/(2)**0.5
+    f = lambda zred: (zred/z0)**2 * np.exp(-(zred/z0)**(3/2)) #taken from euclid prep 2020 page 22
+    zmin = 0.0
+    zmax = 3
+    zarr = np.linspace(zmin, zmax, 20)
+    xx  = 0.0 * zarr
+    for ii in range(len(xx)):
+        xx[ii] = quad(f, zmin, zarr[ii])[0]/quad(f, zmin, zmax)[0]
+    proj = interp1d(xx,zarr)
+    return proj
+
+interp_szred = get_interp_szred()
+
+def create_sources(ramin, ramax, decmin, decmax, sigell=0.27, nsrc=30, mask=None): #mask for future application
+    "takes the angles in degrees and outputs in degrees"
+    thetamin        = (90 - decmax) *np.pi/180
+    thetamax        = (90 - decmin) *np.pi/180
+    ramin           = ramin*np.pi/180
+    ramax           = ramax*np.pi/180
+    
+    #samplying the poisson distributed sources
+    area            = (ramax - ramin) * (np.cos(thetamin) - np.cos(thetamax))* (180*60/np.pi)**2
+    avgNgal         = nsrc * area      # area of square in steradians --> arcmin^2
+    Ngal            = round(np.random.poisson(avgNgal))
+    print(avgNgal, Ngal)
+ 
+    cdec            = np.random.uniform(np.cos(thetamax), np.cos(thetamin), size=Ngal)     
+    sdec            = (90.0 - np.arccos(cdec)*180/np.pi)
+    sra             = np.random.uniform(ramin, ramax, size=Ngal)*180/np.pi
+
+    # putting the interpolation for source redshift assignment
+    szred       =   interp_szred(np.random.uniform(size=Ngal))
+    se1         =   np.random.normal(0.0, sigell, size=Ngal) 
+    se2         =   np.random.normal(0.0, sigell, size=Ngal)
+    # inverse variance weights for the sources
+    wgal        =   1/sigell**2 + 0.0*sra
+    return np.transpose([sra, sdec, szred, wgal, se1, se2])
+    #return np.transpose([sra, sdec, szred, wgal, se1, se2])
+
+
+
+"""

@@ -21,6 +21,7 @@ def lens_select(lensargs):
         df      = df[idx]
 
         idx = (np.isfinite(df['unique_gal_id'])) & (np.isfinite(df['ra_gal'])) & (np.isfinite(df['dec_gal'])) & (df['lmstellar']>0) & (df['lmhalo']>0)#check if something is nan here
+        idx = (df['ra_gal']<30) & (df['dec_gal']<30)
 
 
         df  = df[idx]

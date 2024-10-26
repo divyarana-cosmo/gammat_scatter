@@ -45,15 +45,15 @@ def run_pipe(config, outputfilename, jk):
         idx = (np.random.uniform(size=len(lra))<0.05)
         lra = lra[idx]; ldec = ldec[idx]; lzred = lzred[idx]
         lwgt = lwgt[idx]; llogmh = llogmh[idx]; llogmstel = llogmstel[idx]
-        llog_re = llog_re[idx]; ljkreg = np.random.randint(lensargs['Njacks'], size=int(sum(idx)))
+        llog_re = llog_re[idx]; lxjkreg = np.random.randint(lensargs['Njacks'], size=int(sum(idx)))
 
 
         llogmstel   = np.median(llogmstel)  + 0.0*lra
         llog_re     = np.median(llog_re)    + 0.0*lra
         llogmh      = np.median(llogmh)     + 0.0*lra
         #assigning concentration
-        lconc       = concentration.concentration(10**np.median(llogmh), '200m', np.median(lzred), model = 'diemer19')
-        lconc       = np.median( lconc)     + 0.0*lra
+        lconc       = concentration.concentration(10**np.median(llogmh), '200m', np.median(lzred), model = 'diemer19') 
+        lconc       = lconc     + 0.0*lra
         lzred       = np.median( lzred)     + 0.0*lra
         print('%2.2f\t%2.2f\t%2.2f\t%2.2f\t%2.2f'%(np.median( llogmstel), np.median(llog_re), np.median(llogmh), np.median(lconc), np.median(lzred)))
     else:
