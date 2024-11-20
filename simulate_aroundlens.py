@@ -3,6 +3,8 @@
 # integrate 90 rotation in the code itself
 import sys
 sys.path.append('./src/')
+sys.path.append('./utils/')
+from lensutils import get_re
 from distort import simshear
 import numpy as np
 #import matplotlib.pyplot as plt
@@ -90,7 +92,9 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
     zdiff   = sourceargs["zdiff"]
 
     #setting up cosmology and class instance
-    ss = simshear(H0 = 100, Om0 = config['Om0'], Ob0 = config['Ob0'], Tcmb0 = config['Tcmb0'], Neff = config['Neff'], sigma8 = config['sigma8'], ns = config['ns'])
+    #only working with H0 and omg0
+    ss = simshear(H0 = config['H0'], Om0 = config['Om0'], Ob0 = 0.044, Tcmb0 = 2.7255, Neff = 3.046, sigma8 = 0.8, ns = 0.95)
+    #ss = simshear(H0 = config['H0'], Om0 = config['Om0'], Ob0 = config['Ob0'], Tcmb0 = config['Tcmb0'], Neff = config['Neff'], sigma8 = config['sigma8'], ns = config['ns'])
 
     colossus_cosmo  = cosmology.fromAstropy(ss.Astropy_cosmo, sigma8 = ss.sigma8, ns = ss.ns, cosmo_name=ss.cosmo_name)
 
@@ -116,34 +120,52 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
     r90sumdgammax_num           = np.zeros(nbins*Njacks) 
     r90sumdgammaxsq_num         = np.zeros(nbins*Njacks)
  
+    sumddsigma_num              = np.zeros(nbins*Njacks)
+    sumddsigma_inp_num          = np.zeros(nbins*Njacks)
+    sumddsigma_inp_bary_num     = np.zeros(nbins*Njacks)
+    sumddsigma_inp_dm_num       = np.zeros(nbins*Njacks)
+    sumddsigmasq_num            = np.zeros(nbins*Njacks)
+    sumddsigma_num              = np.zeros(nbins*Njacks) 
+    sumddsigmasq_num            = np.zeros(nbins*Njacks)
+    sumddsigmawls               = np.zeros(nbins*Njacks)
 
+    r90sumddsigmat_num          = np.zeros(nbins*Njacks)
+    r90sumddsigmatsq_num        = np.zeros(nbins*Njacks)
+    r90sumddsigmax_num          = np.zeros(nbins*Njacks) 
+    r90sumddsigmaxsq_num        = np.zeros(nbins*Njacks)
+ 
     # getting the lenses data
     lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
-
     #fixed position 
     lra     = 130 + 0.0*lra
     ldec    = 0.0 + 0.0*ldec
 
-
-    lzredmax = np.max(lzred)
-    lconc = 0.0*lid
-    xx = np.linspace(9,16,50)
-    yy = 0.0*xx
-    med_lzred = np.median(lzred)
-
-    for kk, mh in enumerate(10**xx):
-        yy[kk]    = concentration.concentration(mh, '200m', med_lzred, model = 'diemer19')
-    
-    spl_c_mh = interp1d(xx,yy)
-    lconc = spl_c_mh(llogmh)
- 
-    print("lens data read fully")
     if config['test_case']:
-        llogmh      = 14.0  + 0.0*llogmh
-        lzred       = 0.3   + 0.0*lzred
+        np.random.seed(123)
+        idx         = (np.random.uniform(size=len(lra))<0.01)
+        lra         = lra[idx]
+        ldec        = ldec[idx]
+        llogmh      = 14.0  + 0.0*llogmh[idx]
+        lzred       = 0.3   + 0.0*lzred[idx]
         lconc       = concentration.concentration(10**14, '200m', 0.3, model = 'diemer19') + 0.0*lzred
         llogmstel   = 12.0  + 0.0*llogmh
+    else:
+        lconc = 0.0*lid
+        xx = np.linspace(9,16,50)
+        yy = 0.0*xx
+        med_lzred = np.median(lzred)
+
+        for kk, mh in enumerate(10**xx):
+            yy[kk]    = concentration.concentration(mh, '200m', med_lzred, model = 'diemer19')
+        
+        spl_c_mh = interp1d(xx,yy)
+        lconc = spl_c_mh(llogmh)
  
+    lzredmax = np.max(lzred)
+
+    print("lens data read fully")
+    llogre = get_re(llogmstel - np.log10(config['H0']/100)) -3 # converting Kpc to Mpc
+
     #variables defs for welford approx sigma calculations
     #weldict = {}
     #weldictx = {}
@@ -196,8 +218,8 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
         r90intse2   =   r90intse2[scut]
 
         # shearing the sources
-        se1, se2, etan, kappa, proj_sep, sflag, etan_b, etan_dm, et_obs, ex_obs = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra, sdec, szred, intse1, intse2, use_shear=sourceargs["use_shear"], no_shear=sourceargs["no_shear"])
-        r90se1, r90se2, r90etan, kappa, proj_sep, sflag, etan_b, etan_dm, r90et_obs, r90ex_obs = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra, sdec, szred, r90intse1, r90intse2, use_shear=sourceargs["use_shear"], no_shear=sourceargs["no_shear"])
+        se1, se2, etan, kappa, proj_sep, sflag, etan_b, etan_dm, et_obs, ex_obs = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogre[ii], llogmh[ii], lconc[ii], sra, sdec, szred, intse1, intse2, use_shear=sourceargs["use_shear"], no_shear=sourceargs["no_shear"])
+        r90se1, r90se2, r90etan, kappa, proj_sep, sflag, etan_b, etan_dm, r90et_obs, r90ex_obs = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogre[ii], llogmh[ii], lconc[ii], sra, sdec, szred, r90intse1, r90intse2, use_shear=sourceargs["use_shear"], no_shear=sourceargs["no_shear"])
         
        
         if sourceargs['no_shear']:
@@ -248,13 +270,6 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
                 idx = slrbins==rb
                 if sum(idx)==0:
                     continue
-                #try:
-                #    weldict[jk*nbins + rb].add_all(np.array(w_ls * et_obs)[idx])
-                #    weldictx[jk*nbins + rb].add_all(np.array(w_ls * ex_obs)[idx])
-                #except:
-                #    weldict[jk*nbins + rb]  = Welford(np.array(w_ls * et_obs)[idx])
-                #    weldictx[jk*nbins + rb] = Welford(np.array(w_ls * ex_obs)[idx])
-
 
                 sumdgammat_inp_num      [jk*nbins + rb] +=sum((w_ls * etan)[idx])
                 sumdgammat_inp_bary_num [jk*nbins + rb] +=sum((w_ls * etan_b)[idx])
@@ -273,13 +288,32 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
                 r90sumdgammax_num       [jk*nbins + rb] +=sum((w_ls * r90ex_obs)[idx])
                 r90sumdgammaxsq_num     [jk*nbins + rb] +=sum(((w_ls* r90ex_obs)**2)[idx])
 
+                sumddsigmat_inp_num      [jk*nbins + rb] +=sum((w_ls * etan)[idx])
+                sumddsigmat_inp_bary_num [jk*nbins + rb] +=sum((w_ls * etan_b)[idx])
+                sumddsigmat_inp_dm_num   [jk*nbins + rb] +=sum((w_ls * etan_dm)[idx])
+                sumddsigmat_num          [jk*nbins + rb] +=sum((w_ls * et_obs)[idx])
+                sumddsigmatsq_num        [jk*nbins + rb] +=sum(((w_ls* et_obs)**2)[idx])
+                sumddsigmax_num          [jk*nbins + rb] +=sum((w_ls * ex_obs)[idx])
+                sumddsigmaxsq_num        [jk*nbins + rb] +=sum(((w_ls* ex_obs)**2)[idx])
+                sumddsigmawls            [jk*nbins + rb] +=sum(w_ls[idx])
+
+
+                r90sumddsigmat_num       [jk*nbins + rb] +=sum((w_ls * r90et_obs)[idx])
+                r90sumddsigmatsq_num     [jk*nbins + rb] +=sum(((w_ls* r90et_obs)**2)[idx])
+                r90sumddsigmax_num       [jk*nbins + rb] +=sum((w_ls * r90ex_obs)[idx])
+                r90sumddsigmaxsq_num     [jk*nbins + rb] +=sum(((w_ls* r90ex_obs)**2)[idx])
+
+
+
+
+
+
     if outputpairfile != None:
         fpairout.write("#OK")
         fpairout.close()
     
     
     #need to clean this up
-
     df = {}
     df["rmin/2+rmax/2"    ]     =   np.tile(rbins[:-1] *0.5 +rbins[1:]*0.5, Njacks)
     df["gammat"           ]     =   sumdgammat_num[:] * 1.0 / sumdwls[:]
@@ -309,28 +343,6 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
     import pandas as pd
     df = pd.DataFrame(df)
     df.to_csv(outputfilename, index=False, sep=' ')
-
-
-    ##fout = open(outputfilename, "w")
-    ##fout.write("# 0:rmin/2+rmax/2 1:gammat 2:gammatsq 3:sigma_gammat 4:SN_Errgammat 5:gammax 6:gammaxsq 7:sigma_gammax 8:SN_Errgammax 9:truegamma 10:gammat_inp 11:gammat_inp_bary 12:gammat_inp_dm 13:sumd_wls 14:welford_gammat_mean 15:welford_gammat_std 16:welford_counts 17:welford_gammax_mean 18:welford_gammax_std 19:r90gammat 20:r90gammatsq 21:r90sigma_gammat 22:r90SN_Errgammat 23:r90gammax 24:r90gammaxsq 25:r90sigma_gammax 26:r90SN_Errgammax 27:Jkid\n")
-    #fout.write("# 0:rmin/2+rmax/2 1:gammat 2:gammatsq 3:sigma_gammat 4:SN_Errgammat 5:gammax 6:gammaxsq 7:sigma_gammax 8:SN_Errgammax 9:truegamma 10:gammat_inp 11:gammat_inp_bary 12:gammat_inp_dm 13:sumd_wls 14:r90gammat 15:r90gammatsq 16:r90sigma_gammat 17:r90SN_Errgammat 18:r90gammax 19:r90gammaxsq 20:r90sigma_gammax 21:r90SN_Errgammax 22:Jkid\n")
-    #for jk in range(Njacks):
-    #    for i in range(nbins):
-    #        rrmin = rbins[i]
-    #        rrmax = rbins[i+1]
-    #        if np.isnan(sumdwls[jk*nbins + i]):
-    #            print('error', jk, i, sumdwls[jk*nbins + i])
-    #            exit()
-    #       #Resp = sumdwls_resp[i]*1.0/sumdwls[i]
-    #        try:
-    #            fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], weldict[jk*nbins + i].mean, weldict[jk*nbins + i].var_p**0.5, weldict[jk*nbins + i].count, weldictx[jk*nbins + i].mean, weldictx[jk*nbins + i].var_p**0.5, r90sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], r90sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(r90sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (r90sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(r90sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], r90sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], r90sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(r90sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (r90sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(r90sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], jk))
-    #        
-    #        except KeyError:
-    #            fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], -999, -999, -999, -999, -999, -999, -999, -999, -999, -999, -999, -999, -999, jk))
-
-
-    #fout.write("#OK")
-    #fout.close()
     return 0
 
 
@@ -417,4 +429,33 @@ if __name__ == "__main__":
         #    sumdgammax_num[rb]              += w_ls  * ex[ll]
         #    sumdgammaxsq_num[rb]            += (w_ls * ex[ll])**2
         #    sumdwls[rb]                      += w_ls
+
+
+    ##fout = open(outputfilename, "w")
+    ##fout.write("# 0:rmin/2+rmax/2 1:gammat 2:gammatsq 3:sigma_gammat 4:SN_Errgammat 5:gammax 6:gammaxsq 7:sigma_gammax 8:SN_Errgammax 9:truegamma 10:gammat_inp 11:gammat_inp_bary 12:gammat_inp_dm 13:sumd_wls 14:welford_gammat_mean 15:welford_gammat_std 16:welford_counts 17:welford_gammax_mean 18:welford_gammax_std 19:r90gammat 20:r90gammatsq 21:r90sigma_gammat 22:r90SN_Errgammat 23:r90gammax 24:r90gammaxsq 25:r90sigma_gammax 26:r90SN_Errgammax 27:Jkid\n")
+    #fout.write("# 0:rmin/2+rmax/2 1:gammat 2:gammatsq 3:sigma_gammat 4:SN_Errgammat 5:gammax 6:gammaxsq 7:sigma_gammax 8:SN_Errgammax 9:truegamma 10:gammat_inp 11:gammat_inp_bary 12:gammat_inp_dm 13:sumd_wls 14:r90gammat 15:r90gammatsq 16:r90sigma_gammat 17:r90SN_Errgammat 18:r90gammax 19:r90gammaxsq 20:r90sigma_gammax 21:r90SN_Errgammax 22:Jkid\n")
+    #for jk in range(Njacks):
+    #    for i in range(nbins):
+    #        rrmin = rbins[i]
+    #        rrmax = rbins[i+1]
+    #        if np.isnan(sumdwls[jk*nbins + i]):
+    #            print('error', jk, i, sumdwls[jk*nbins + i])
+    #            exit()
+    #       #Resp = sumdwls_resp[i]*1.0/sumdwls[i]
+    #        try:
+    #            fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], weldict[jk*nbins + i].mean, weldict[jk*nbins + i].var_p**0.5, weldict[jk*nbins + i].count, weldictx[jk*nbins + i].mean, weldictx[jk*nbins + i].var_p**0.5, r90sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], r90sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(r90sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (r90sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(r90sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], r90sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], r90sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(r90sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (r90sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(r90sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], jk))
+    #        
+    #        except KeyError:
+    #            fout.write("%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\t%le\n"%(rrmin/2.0+rrmax/2.0, sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammatsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammat_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammatsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], np.sqrt(sumdgammaxsq_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i]- (sumdgammax_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i])**2), np.sqrt(sumdgammaxsq_num[jk*nbins + i])*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]*1.0/sumdwls[jk*nbins + i], sumdgammat_inp_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_bary_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdgammat_inp_dm_num[jk*nbins + i]/sumdwls[jk*nbins + i], sumdwls[jk*nbins + i], -999, -999, -999, -999, -999, -999, -999, -999, -999, -999, -999, -999, -999, jk))
+
+
+    #fout.write("#OK")
+    #fout.close()
+                #try:
+                #    weldict[jk*nbins + rb].add_all(np.array(w_ls * et_obs)[idx])
+                #    weldictx[jk*nbins + rb].add_all(np.array(w_ls * ex_obs)[idx])
+                #except:
+                #    weldict[jk*nbins + rb]  = Welford(np.array(w_ls * et_obs)[idx])
+                #    weldictx[jk*nbins + rb] = Welford(np.array(w_ls * ex_obs)[idx])
+
 
