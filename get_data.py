@@ -74,12 +74,12 @@ def lens_select(lensargs):
 
         df  = df[idx]
 
-        lid         = df['unique_gal_id'][:]
-        lra         = df['ra_gal'][:]  
-        ldec        = df['dec_gal'][:] 
-        lzred       = df['z_cgal_v'][:]
-        llogmstel   = df['lmstellar'][:]
-        llogmh      = df['lmhalo'][:]
+        lid         = df['unique_gal_id']   [:100]
+        lra         = df['ra_gal']          [:100]  
+        ldec        = df['dec_gal']         [:100] 
+        lzred       = df['z_cgal_v']        [:100]
+        llogmstel   = df['lmstellar']       [:100]
+        llogmh      = df['lmhalo']          [:100]
 
         lwgt        = 1.0 + 0.0*lra
 

@@ -282,33 +282,33 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
 
     df = {}
     df["rmin/2+rmax/2"    ]     =   np.tile(rbins[:-1] *0.5 +rbins[1:]*0.5, Njacks)
-    df["gammat"           ]     =   sumdgammat_num[jk*nbins + i] * 1.0 / sumdwls[jk*nbins + i]
-    df["gammatsq"         ]     =   sumdgammatsq_num[jk*nbins + i] * 1.0 / sumdwls[jk*nbins + i]
-    df["sigma_gammat"     ]     =   np.sqrt(sumdgammatsq_num[jk*nbins + i] * 1.0 / sumdwls[jk*nbins + i] - (sumdgammat_num[jk*nbins + i] * 1.0 / sumdwls[jk*nbins + i])**2)
-    df["SN_Errgammat"     ]     =   np.sqrt(sumdgammatsq_num[jk*nbins + i]) * 1.0 / sumdwls[jk*nbins + i]
-    df["gammax"           ]     =   sumdgammax_num[jk*nbins + i] * 1.0 / sumdwls[jk*nbins + i]
-    df["gammaxsq"         ]     =   sumdgammaxsq_num[jk*nbins + i] * 1.0 / sumdwls[jk*nbins + i]
-    df["sigma_gammax"     ]     =   np.sqrt(sumdgammaxsq_num[jk*nbins + i] * 1.0 / sumdwls[jk*nbins + i] - (sumdgammax_num[jk*nbins + i] * 1.0 / sumdwls[jk*nbins + i])**2)
-    df["SN_Errgammax"     ]     =   np.sqrt(sumdgammaxsq_num[jk*nbins + i]) * 1.0 / sumdwls[jk*nbins + i]
-    df["truegamma"        ]     =   sumdgammat_inp_num[jk*nbins + i] * 1.0 / sumdwls[jk*nbins + i]
-    df["gammat_inp"      ]      =   sumdgammat_inp_num[jk*nbins + i] / sumdwls[jk*nbins + i]
-    df["gammat_inp_bary" ]      =   sumdgammat_inp_bary_num[jk*nbins + i] / sumdwls[jk*nbins + i]
-    df["gammat_inp_dm"   ]      =   sumdgammat_inp_dm_num[jk*nbins + i] / sumdwls[jk*nbins + i]
-    df["sumd_wls"        ]      =   sumdwls[jk*nbins + i]
-    df["r90gammat"       ]      =   r90sumdgammat_num[jk*nbins + i] * 1.0 / sumdwls[jk*nbins + i]
-    df["r90gammatsq"     ]      =   r90sumdgammatsq_num[jk*nbins + i] * 1.0 / sumdwls[jk*nbins + i]
-    df["r90sigma_gammat" ]      =   np.sqrt(r90sumdgammatsq_num[jk*nbins + i] * 1.0 / sumdwls[jk*nbins + i] - (r90sumdgammat_num[jk*nbins + i] * 1.0 / sumdwls[jk*nbins + i])**2)
-    df["r90SN_Errgammat" ]      =   np.sqrt(r90sumdgammatsq_num[jk*nbins + i]) * 1.0 / sumdwls[jk*nbins + i]
-    df["r90gammax"       ]      =   r90sumdgammax_num[jk*nbins + i] * 1.0 / sumdwls[jk*nbins + i]
-    df["r90gammaxsq"     ]      =   r90sumdgammaxsq_num[jk*nbins + i] * 1.0 / sumdwls[jk*nbins + i]
-    df["r90sigma_gammax" ]      =   np.sqrt(r90sumdgammaxsq_num[jk*nbins + i] * 1.0 / sumdwls[jk*nbins + i] - (r90sumdgammax_num[jk*nbins + i] * 1.0 / sumdwls[jk*nbins + i])**2)
-    df["r90SN_Errgammax" ]      =   np.sqrt(r90sumdgammaxsq_num[jk*nbins + i]) * 1.0 / sumdwls[jk*nbins + i]
-    df["Jkid"            ]      = np.sort(np.tile(np.arange(Njacks),nbin))
+    df["gammat"           ]     =   sumdgammat_num[:] * 1.0 / sumdwls[:]
+    df["gammatsq"         ]     =   sumdgammatsq_num[:] * 1.0 / sumdwls[:]
+    df["sigma_gammat"     ]     =   np.sqrt(sumdgammatsq_num[:] * 1.0 / sumdwls[:] - (sumdgammat_num[:] * 1.0 / sumdwls[:])**2)
+    df["SN_Errgammat"     ]     =   np.sqrt(sumdgammatsq_num[:]) * 1.0 / sumdwls[:]
+    df["gammax"           ]     =   sumdgammax_num[:] * 1.0 / sumdwls[:]
+    df["gammaxsq"         ]     =   sumdgammaxsq_num[:] * 1.0 / sumdwls[:]
+    df["sigma_gammax"     ]     =   np.sqrt(sumdgammaxsq_num[:] * 1.0 / sumdwls[:] - (sumdgammax_num[:] * 1.0 / sumdwls[:])**2)
+    df["SN_Errgammax"     ]     =   np.sqrt(sumdgammaxsq_num[:]) * 1.0 / sumdwls[:]
+    df["truegamma"        ]     =   sumdgammat_inp_num[:] * 1.0 / sumdwls[:]
+    df["gammat_inp"      ]      =   sumdgammat_inp_num[:] / sumdwls[:]
+    df["gammat_inp_bary" ]      =   sumdgammat_inp_bary_num[:] / sumdwls[:]
+    df["gammat_inp_dm"   ]      =   sumdgammat_inp_dm_num[:] / sumdwls[:]
+    df["sumd_wls"        ]      =   sumdwls[:]
+    df["r90gammat"       ]      =   r90sumdgammat_num[:] * 1.0 / sumdwls[:]
+    df["r90gammatsq"     ]      =   r90sumdgammatsq_num[:] * 1.0 / sumdwls[:]
+    df["r90sigma_gammat" ]      =   np.sqrt(r90sumdgammatsq_num[:] * 1.0 / sumdwls[:] - (r90sumdgammat_num[:] * 1.0 / sumdwls[:])**2)
+    df["r90SN_Errgammat" ]      =   np.sqrt(r90sumdgammatsq_num[:]) * 1.0 / sumdwls[:]
+    df["r90gammax"       ]      =   r90sumdgammax_num[:] * 1.0 / sumdwls[:]
+    df["r90gammaxsq"     ]      =   r90sumdgammaxsq_num[:] * 1.0 / sumdwls[:]
+    df["r90sigma_gammax" ]      =   np.sqrt(r90sumdgammaxsq_num[:] * 1.0 / sumdwls[:] - (r90sumdgammax_num[:] * 1.0 / sumdwls[:])**2)
+    df["r90SN_Errgammax" ]      =   np.sqrt(r90sumdgammaxsq_num[:]) * 1.0 / sumdwls[:]
+    df["Jkid"            ]      = np.sort(np.tile(np.arange(Njacks),nbins))
 
 
     import pandas as pd
-    df = pf.DataFramce(df)
-    df.to_csv(outfilename, index=False, sep=' ')
+    df = pd.DataFrame(df)
+    df.to_csv(outputfilename, index=False, sep=' ')
 
 
     ##fout = open(outputfilename, "w")
