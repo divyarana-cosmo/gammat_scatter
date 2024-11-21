@@ -77,13 +77,12 @@ class simshear():
         yy = self._get_sigma_crit_inv(lzred, xx)
         return interp1d(xx, yy, kind='cubic')
 
-    def _get_esd(self, logmstel, logmh, lconc, proj_sep):
+    def _get_esd(self, logmstel, logre, logmh, lconc, proj_sep):
     #    self._spl_get_esd(logmstel, logmh, lconc)
 
         self.hp    = halo(logmh, lconc, omg_m=self.omg_m)
-        log_re     = (0.774 + 0.977 *(np.log10(10**logmstel / 0.7) - 11.4)) #check arxiv:1811.04934
-        log_re     = np.log10(10**log_re * 0.7/1e3) #h-1 kpc to h-1 Mpc
-        self.stel  = stellar(logmstel, log_re = log_re)
+        #log_re     = np.log10(10**logre/1e3) #h-1 kpc to h-1 Mpc
+        self.stel  = stellar(logmstel, log_re = logre)
 
         print('ESD spline ready')
         esd_s       =  -999 + 0.0*proj_sep      
@@ -100,7 +99,7 @@ class simshear():
 
 
 
-    def _get_g(self, logmstel, logmh, lconc, lzred, szred, proj_sep):
+    def _get_g(self, logmstel, logre, logmh, lconc, lzred, szred, proj_sep):
         if not self.init_spl_sigma_crit_inv:
             self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(lzred)
             self.init_spl_sigma_crit_inv = True
@@ -110,7 +109,7 @@ class simshear():
             get_sigma_crit_inv = self.interp_get_sigma_crit_inv(szred) 
 
         get_sigma_crit_inv = self.interp_get_sigma_crit_inv(szred) 
-        esd_s, esd_dm, sigma_s, sigma_dm =  self._get_esd(logmstel, logmh, lconc, proj_sep)
+        esd_s, esd_dm, sigma_s, sigma_dm =  self._get_esd(logmstel, logre, logmh, lconc, proj_sep)
         gamma_s     =  -999 + 0.0*esd_s    
         gamma_dm    =  -999 + 0.0*esd_dm   
         kappa_s     =  -999 + 0.0*sigma_s  
@@ -124,19 +123,19 @@ class simshear():
         kappa_dm[idx]    =   sigma_dm[idx]  * get_sigma_crit_inv[idx]
         return gamma_s, gamma_dm, kappa_s, kappa_dm
 
-    def get_g(self, lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred, use_shear=False, no_shear=False):
+    def get_g(self, lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, use_shear=False, no_shear=False):
         "computes the g1 and g2 components for the reduced shear"
         lx, ly, lz = self.get_xyz(lra, ldec) 
         sx, sy, sz = self.get_xyz(sra, sdec) 
 
-        #projected separation on the lense plane
+        #projected separation on the lense plane in physical
         proj_sep = self.Astropy_cosmo.angular_diameter_distance(lzred).value * np.sqrt((sx-lx)**2 + (sy-ly)**2 + (sz-lz)**2) # in h-1 Mpc
 
         #if you want to use the comoving distance
         #proj_sep = self.Astropy_cosmo.comoving_distance(lzred).value * np.sqrt((sx-lx)**2 + (sy-ly)**2 + (sz-lz)**2) # in h-1 Mpc
 
         #considering only tangential shear and adding both contributions
-        gamma_s, gamma_dm, kappa_s, kappa_dm = self._get_g(logmstel, logmh, lconc, lzred, szred, proj_sep)
+        gamma_s, gamma_dm, kappa_s, kappa_dm = self._get_g(logmstel, logre, logmh, lconc, lzred, szred, proj_sep)
         sflag = (gamma_s != -999) & (gamma_dm != -999) & (kappa_s != -999) & (kappa_dm != -999)
         #if np.any(np.isnan(kappa_s))>0:
         #    kappa_s[np.isnan(kappa_s)] = 0.0
@@ -185,7 +184,7 @@ class simshear():
         return g_1, g_2, g, kappa, c_phi, s_phi, proj_sep, sflag, g_b, g_dm
 
 
-    def shear_src(self, lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred, intse1, intse2, use_shear=False, no_shear=False):
+    def shear_src(self, lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, intse1, intse2, use_shear=False, no_shear=False):
         se1 = intse1
         se2 = intse2
         "apply shear on to the source galaxies with given intrinsic shapes"
@@ -198,7 +197,7 @@ class simshear():
             #self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(szred)
             self.init_spl_sigma_crit_inv = True
 
-        g_1, g_2, gtan, kappa, c_phi, s_phi, proj_sep, sflag, g_b, g_dm = self.get_g(lra, ldec, lzred, logmstel, logmh, lconc, sra, sdec, szred, use_shear=use_shear, no_shear=no_shear)
+        g_1, g_2, gtan, kappa, c_phi, s_phi, proj_sep, sflag, g_b, g_dm = self.get_g(lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, use_shear=use_shear, no_shear=no_shear)
 
         g   = g_1 + 1j* g_2
         es  = se1 + 1j* se2 + 0.0*g  # intrinsic sizes
@@ -216,15 +215,16 @@ class simshear():
 if __name__ == "__main__":
     ss = simshear()
 
-    proj_sep = np.logspace(-2,0,10)
+    proj_sep = np.logspace(np.log10(0.005), np.log10(0.3),10)
     
     from time import time
     begin = time()
 
-    #gamma_s, gamma_dm, kappa_s, kappa_dm = ss._get_esd(logmstel=11, logmh=13, lconc=4, proj_sep=proj_sep)
+    #gamma_s, gamma_dm, kappa_s, kappa_dm = ss._get_esd(logmstel=11, logre=-2, logmh=13, lconc=4, proj_sep=proj_sep)
 
-
-    gamma_s, gamma_dm, kappa_s, kappa_dm = ss._get_g(logmstel=12, logmh=14, lconc=5.98, lzred=0.5, szred=1.0 + 0.0*proj_sep, proj_sep=proj_sep)
+    #print(gamma_s)
+    #print(gamma_dm)
+    gamma_s, gamma_dm, kappa_s, kappa_dm = ss._get_g(logmstel=10, logre=-2, logmh=12, lconc=5.98, lzred=0.3, szred=0.8 + 0.0*proj_sep, proj_sep=proj_sep)
     
 
 
@@ -232,9 +232,9 @@ if __name__ == "__main__":
     sigcrit_inv = ss._get_sigma_crit_inv(lzred=0.5, szred=1.0)
    
     plt.subplot(2,2,1)
-    plt.plot(proj_sep, gamma_s/(1 - kappa_s), label='point')
-    plt.plot(proj_sep, gamma_dm/(1 - kappa_dm), label='nfw') 
-    plt.plot(proj_sep, (gamma_dm + gamma_s)/(1 - kappa_dm-kappa_s), label='nfw') 
+    plt.plot(proj_sep, gamma_s, label='DEV')
+    plt.plot(proj_sep, gamma_dm, label='NFW') 
+    plt.plot(proj_sep, (gamma_dm + gamma_s), label='Total') 
  
     #plt.plot(proj_sep, ss.stel.esd_deVaucouleurs(proj_sep), label='dev')
     #plt.plot(proj_sep, ss.stel.esd_pointmass(proj_sep), label='point')

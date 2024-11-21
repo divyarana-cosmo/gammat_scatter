@@ -66,7 +66,7 @@ def lens_select(lensargs):
         df      = fits.getdata(fname)
         idx     = (df['lmstellar']>lensargs['logmstelmin']) & (df['lmstellar']<lensargs['logmstelmax'])
         idx     = idx & (df['flag_central'] == 0) & (df['z_cgal_v'] > lensargs['zmin']) & (df['z_cgal_v'] < lensargs['zmax'])         
-        idx     = idx & (df['log_re(h-1 kpc)']!=-999)
+
         df      = df[idx]
 
         idx = (np.isfinite(df['unique_gal_id'])) & (np.isfinite(df['ra_gal'])) & (np.isfinite(df['dec_gal'])) & (df['lmstellar']>0) & (df['lmhalo']>0)#check if something is nan here
@@ -74,12 +74,12 @@ def lens_select(lensargs):
 
         df  = df[idx]
 
-        lid         = df['unique_gal_id']   [:100]
-        lra         = df['ra_gal']          [:100]  
-        ldec        = df['dec_gal']         [:100] 
-        lzred       = df['z_cgal_v']        [:100]
-        llogmstel   = df['lmstellar']       [:100]
-        llogmh      = df['lmhalo']          [:100]
+        lid         = df['unique_gal_id']   [:]
+        lra         = df['ra_gal']          [:]  
+        ldec        = df['dec_gal']         [:] 
+        lzred       = df['z_cgal_v']        [:]
+        llogmstel   = df['lmstellar']       [:]
+        llogmh      = df['lmhalo']          [:]
 
         lwgt        = 1.0 + 0.0*lra
 

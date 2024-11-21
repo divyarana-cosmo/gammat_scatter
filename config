@@ -1,32 +1,28 @@
 #cosmological parameters
-Om0: 0.25 
-Ob0: 0.044 
-Tcmb0: 2.7255 
-Neff: 3.046
-sigma8: 0.8 
-ns: 0.95
+H0: 67.7
+Om0: 0.308 
 
-outputdir: /net/dobbe/data2/debug_z_0.1_0.5
+outputdir: ./output/debug_z_0.1_0.4
 #outputdir: /data2/debug_full_z_0.1_0.5
 #outputdir: debug
-Rmin: 0.007
-Rmax: 0.05
+Rmin: 0.02
+Rmax: 0.3
 #Rmax: 0.25
-Nbins: 15 
+Nbins: 15
 
 # Whether to output lens source pair information
 # Lens configuration (to be used in splashback_select.py:lens_select)
 lens:
     type: micecatv2
     zmin: 0.1
-    zmax: 0.5
-    Njacks: 20
+    zmax: 0.4
+    Njacks: 50
 
 # Source configuration (to be used in splashback_select.py:source_select)
 source:
   # Source file related
   type: euclid
   nsrc: 30 # source density Euclid-like
-  zdiff: 0.2
+  zdiff: 0.2 # zlmax + zdiff
   sigell: 0.27 #intrinsic shapes sampled from the gaussian of sige=0.27    
 

@@ -23,7 +23,6 @@ from colossus.halo import concentration
 #from welford import Welford
 
 
-
 def get_xyz(ra, dec):
     ra = ra*np.pi/180.
     dec = dec*np.pi/180.
@@ -31,7 +30,6 @@ def get_xyz(ra, dec):
     y = np.cos(dec)*np.sin(ra)
     z = np.sin(dec)
     return x, y, z
-
 
 
 def get_interp_szred():
@@ -120,13 +118,13 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
     r90sumdgammax_num           = np.zeros(nbins*Njacks) 
     r90sumdgammaxsq_num         = np.zeros(nbins*Njacks)
  
-    sumddsigma_num              = np.zeros(nbins*Njacks)
-    sumddsigma_inp_num          = np.zeros(nbins*Njacks)
-    sumddsigma_inp_bary_num     = np.zeros(nbins*Njacks)
-    sumddsigma_inp_dm_num       = np.zeros(nbins*Njacks)
-    sumddsigmasq_num            = np.zeros(nbins*Njacks)
-    sumddsigma_num              = np.zeros(nbins*Njacks) 
-    sumddsigmasq_num            = np.zeros(nbins*Njacks)
+    sumddsigmat_num              = np.zeros(nbins*Njacks)
+    sumddsigmat_inp_num          = np.zeros(nbins*Njacks)
+    sumddsigmat_inp_bary_num     = np.zeros(nbins*Njacks)
+    sumddsigmat_inp_dm_num       = np.zeros(nbins*Njacks)
+    sumddsigmatsq_num            = np.zeros(nbins*Njacks)
+    sumddsigmax_num              = np.zeros(nbins*Njacks) 
+    sumddsigmaxsq_num            = np.zeros(nbins*Njacks)
     sumddsigmawls               = np.zeros(nbins*Njacks)
 
     r90sumddsigmat_num          = np.zeros(nbins*Njacks)
@@ -145,10 +143,10 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
         idx         = (np.random.uniform(size=len(lra))<0.01)
         lra         = lra[idx]
         ldec        = ldec[idx]
-        llogmh      = 14.0  + 0.0*llogmh[idx]
+        llogmh      = 12.0  + 0.0*llogmh[idx]
         lzred       = 0.3   + 0.0*lzred[idx]
         lconc       = concentration.concentration(10**14, '200m', 0.3, model = 'diemer19') + 0.0*lzred
-        llogmstel   = 12.0  + 0.0*llogmh
+        llogmstel   = 10.0  + 0.0*llogmh
     else:
         lconc = 0.0*lid
         xx = np.linspace(9,16,50)
@@ -165,13 +163,7 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
 
     print("lens data read fully")
     llogre = get_re(llogmstel - np.log10(config['H0']/100)) -3 # converting Kpc to Mpc
-
-    #variables defs for welford approx sigma calculations
-    #weldict = {}
-    #weldictx = {}
-
     dismax = config['Rmax']/ss.Astropy_cosmo.angular_diameter_distance(np.min(lzred)).value 
-    #dismax = config['Rmax']/ss.Astropy_cosmo.comoving_distance(np.min(lzred)).value 
     
     if sourceargs['use_shear']:
         print("using shear not reduced shear for the sims")
@@ -184,10 +176,8 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
 
     #..................................#
     for ii in tqdm(range(len(lra))):
-        #setting random seed for each lens
-        np.random.seed(config["seed"]*len(lra) + ii)
         # simulating the sources
-        sra, sdec, szred, wgal, intse1, intse2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell']) 
+        sra, sdec, szred, wgal, intse1, intse2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell'], seed = config["seed"]*len(lra) + ii) 
        
         #after 90 rotation
         r90intse1 = -intse1
@@ -228,6 +218,7 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
         
         sl_sep  = proj_sep
         w_ls    = lwgt[ii]*wgal
+    
         #cure the arrays a bin
         idx = (sl_sep>rmin) & (sl_sep<rmax) & (sflag==1)
         if sum(idx)==0.0:
@@ -257,7 +248,13 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
         if outputpairfile != None:
             for jj in range(sum(idx)):
                 fpairout.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lxjkreg[ii], lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra[jj], sdec[jj], szred[jj], se1[jj], se2[jj], etan[jj], et_obs[jj], ex_obs[jj], sl_sep[jj], w_ls[jj], kappa[jj], intse1[jj], intse2[jj], r90se1[jj], r90se2[jj], r90et_obs[jj], r90ex_obs[jj], r90intse1[jj], r90intse2[jj]))
-
+        
+        w_ls_invsigmacritsq = np.zeros(int(sum(idx)))
+        w_ls_invsigmacrit   = np.zeros(int(sum(idx)))
+        #get the sigma critical
+        for zz in range(sum(idx)):
+            w_ls_invsigmacritsq[zz] = w_ls[zz] *(ss._get_sigma_crit_inv(lzred=lzred[ii], szred=szred[zz])*1e12)**2
+            w_ls_invsigmacrit[zz] = w_ls[zz] *ss._get_sigma_crit_inv(lzred=lzred[ii], szred=szred[zz])*1e12
 
         #exit()
         slrbins = np.log10(sl_sep*1.0/rmin)//rdiff
@@ -288,20 +285,20 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
                 r90sumdgammax_num       [jk*nbins + rb] +=sum((w_ls * r90ex_obs)[idx])
                 r90sumdgammaxsq_num     [jk*nbins + rb] +=sum(((w_ls* r90ex_obs)**2)[idx])
 
-                sumddsigmat_inp_num      [jk*nbins + rb] +=sum((w_ls * etan)[idx])
-                sumddsigmat_inp_bary_num [jk*nbins + rb] +=sum((w_ls * etan_b)[idx])
-                sumddsigmat_inp_dm_num   [jk*nbins + rb] +=sum((w_ls * etan_dm)[idx])
-                sumddsigmat_num          [jk*nbins + rb] +=sum((w_ls * et_obs)[idx])
-                sumddsigmatsq_num        [jk*nbins + rb] +=sum(((w_ls* et_obs)**2)[idx])
-                sumddsigmax_num          [jk*nbins + rb] +=sum((w_ls * ex_obs)[idx])
-                sumddsigmaxsq_num        [jk*nbins + rb] +=sum(((w_ls* ex_obs)**2)[idx])
-                sumddsigmawls            [jk*nbins + rb] +=sum(w_ls[idx])
+                sumddsigmat_inp_num      [jk*nbins + rb] +=sum(( w_ls_invsigmacrit * etan)[idx])
+                sumddsigmat_inp_bary_num [jk*nbins + rb] +=sum(( w_ls_invsigmacrit * etan_b)[idx])
+                sumddsigmat_inp_dm_num   [jk*nbins + rb] +=sum(( w_ls_invsigmacrit * etan_dm)[idx])
+                sumddsigmat_num          [jk*nbins + rb] +=sum(( w_ls_invsigmacrit * et_obs)[idx])
+                sumddsigmatsq_num        [jk*nbins + rb] +=sum(((w_ls_invsigmacrit * et_obs)**2)[idx])
+                sumddsigmax_num          [jk*nbins + rb] +=sum(( w_ls_invsigmacrit * ex_obs)[idx])
+                sumddsigmaxsq_num        [jk*nbins + rb] +=sum(((w_ls_invsigmacrit * ex_obs)**2)[idx])
+                sumddsigmawls            [jk*nbins + rb] +=sum(  w_ls_invsigmacritsq[idx])
 
 
-                r90sumddsigmat_num       [jk*nbins + rb] +=sum((w_ls * r90et_obs)[idx])
-                r90sumddsigmatsq_num     [jk*nbins + rb] +=sum(((w_ls* r90et_obs)**2)[idx])
-                r90sumddsigmax_num       [jk*nbins + rb] +=sum((w_ls * r90ex_obs)[idx])
-                r90sumddsigmaxsq_num     [jk*nbins + rb] +=sum(((w_ls* r90ex_obs)**2)[idx])
+                r90sumddsigmat_num       [jk*nbins + rb] +=sum(( w_ls_invsigmacrit * r90et_obs)[idx])
+                r90sumddsigmatsq_num     [jk*nbins + rb] +=sum(((w_ls_invsigmacrit * r90et_obs)**2)[idx])
+                r90sumddsigmax_num       [jk*nbins + rb] +=sum(( w_ls_invsigmacrit * r90ex_obs)[idx])
+                r90sumddsigmaxsq_num     [jk*nbins + rb] +=sum(((w_ls_invsigmacrit * r90ex_obs)**2)[idx])
 
 
 
@@ -315,29 +312,51 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
     
     #need to clean this up
     df = {}
-    df["rmin/2+rmax/2"    ]     =   np.tile(rbins[:-1] *0.5 +rbins[1:]*0.5, Njacks)
-    df["gammat"           ]     =   sumdgammat_num[:] * 1.0 / sumdwls[:]
-    df["gammatsq"         ]     =   sumdgammatsq_num[:] * 1.0 / sumdwls[:]
-    df["sigma_gammat"     ]     =   np.sqrt(sumdgammatsq_num[:] * 1.0 / sumdwls[:] - (sumdgammat_num[:] * 1.0 / sumdwls[:])**2)
-    df["SN_Errgammat"     ]     =   np.sqrt(sumdgammatsq_num[:]) * 1.0 / sumdwls[:]
-    df["gammax"           ]     =   sumdgammax_num[:] * 1.0 / sumdwls[:]
-    df["gammaxsq"         ]     =   sumdgammaxsq_num[:] * 1.0 / sumdwls[:]
-    df["sigma_gammax"     ]     =   np.sqrt(sumdgammaxsq_num[:] * 1.0 / sumdwls[:] - (sumdgammax_num[:] * 1.0 / sumdwls[:])**2)
-    df["SN_Errgammax"     ]     =   np.sqrt(sumdgammaxsq_num[:]) * 1.0 / sumdwls[:]
-    df["truegamma"        ]     =   sumdgammat_inp_num[:] * 1.0 / sumdwls[:]
-    df["gammat_inp"      ]      =   sumdgammat_inp_num[:] / sumdwls[:]
-    df["gammat_inp_bary" ]      =   sumdgammat_inp_bary_num[:] / sumdwls[:]
-    df["gammat_inp_dm"   ]      =   sumdgammat_inp_dm_num[:] / sumdwls[:]
-    df["sumd_wls"        ]      =   sumdwls[:]
-    df["r90gammat"       ]      =   r90sumdgammat_num[:] * 1.0 / sumdwls[:]
-    df["r90gammatsq"     ]      =   r90sumdgammatsq_num[:] * 1.0 / sumdwls[:]
-    df["r90sigma_gammat" ]      =   np.sqrt(r90sumdgammatsq_num[:] * 1.0 / sumdwls[:] - (r90sumdgammat_num[:] * 1.0 / sumdwls[:])**2)
-    df["r90SN_Errgammat" ]      =   np.sqrt(r90sumdgammatsq_num[:]) * 1.0 / sumdwls[:]
-    df["r90gammax"       ]      =   r90sumdgammax_num[:] * 1.0 / sumdwls[:]
-    df["r90gammaxsq"     ]      =   r90sumdgammaxsq_num[:] * 1.0 / sumdwls[:]
-    df["r90sigma_gammax" ]      =   np.sqrt(r90sumdgammaxsq_num[:] * 1.0 / sumdwls[:] - (r90sumdgammax_num[:] * 1.0 / sumdwls[:])**2)
-    df["r90SN_Errgammax" ]      =   np.sqrt(r90sumdgammaxsq_num[:]) * 1.0 / sumdwls[:]
-    df["Jkid"            ]      = np.sort(np.tile(np.arange(Njacks),nbins))
+    df["0-rmin/2+rmax/2"    ]     =   np.tile(rbins[:-1] *0.5 +rbins[1:]*0.5, Njacks)
+    df["1-gammat"           ]     =   sumdgammat_num[:] * 1.0 / sumdwls[:]
+    df["2-gammatsq"         ]     =   sumdgammatsq_num[:] * 1.0 / sumdwls[:]
+    df["3-sigma_gammat"     ]     =   np.sqrt(sumdgammatsq_num[:] * 1.0 / sumdwls[:] - (sumdgammat_num[:] * 1.0 / sumdwls[:])**2)
+    df["4-SN_Errgammat"     ]     =   np.sqrt(sumdgammatsq_num[:]) * 1.0 / sumdwls[:]
+    df["5-gammax"           ]     =   sumdgammax_num[:] * 1.0 / sumdwls[:]
+    df["6-gammaxsq"         ]     =   sumdgammaxsq_num[:] * 1.0 / sumdwls[:]
+    df["7-sigma_gammax"     ]     =   np.sqrt(sumdgammaxsq_num[:] * 1.0 / sumdwls[:] - (sumdgammax_num[:] * 1.0 / sumdwls[:])**2)
+    df["8-SN_Errgammax"     ]     =   np.sqrt(sumdgammaxsq_num[:]) * 1.0 / sumdwls[:]
+    df["9-gammat_inp"      ]      =   sumdgammat_inp_num[:] / sumdwls[:]
+    df["10-gammat_inp_bary" ]      =   sumdgammat_inp_bary_num[:] / sumdwls[:]
+    df["11-gammat_inp_dm"   ]      =   sumdgammat_inp_dm_num[:] / sumdwls[:]
+    df["12-sumd_wls"        ]      =   sumdwls[:]
+    df["13-r90gammat"       ]      =   r90sumdgammat_num[:] * 1.0 / sumdwls[:]
+    df["14-r90gammatsq"     ]      =   r90sumdgammatsq_num[:] * 1.0 / sumdwls[:]
+    df["15-r90sigma_gammat" ]      =   np.sqrt(r90sumdgammatsq_num[:] * 1.0 / sumdwls[:] - (r90sumdgammat_num[:] * 1.0 / sumdwls[:])**2)
+    df["16-r90SN_Errgammat" ]      =   np.sqrt(r90sumdgammatsq_num[:]) * 1.0 / sumdwls[:]
+    df["17-r90gammax"       ]      =   r90sumdgammax_num[:] * 1.0 / sumdwls[:]
+    df["18-r90gammaxsq"     ]      =   r90sumdgammaxsq_num[:] * 1.0 / sumdwls[:]
+    df["19-r90sigma_gammax" ]      =   np.sqrt(r90sumdgammaxsq_num[:] * 1.0 / sumdwls[:] - (r90sumdgammax_num[:] * 1.0 / sumdwls[:])**2)
+    df["20-r90SN_Errgammax" ]      =   np.sqrt(r90sumdgammaxsq_num[:]) * 1.0 / sumdwls[:]
+
+    df["21-dsigma"           ]         =   sumddsigmat_num[:] * 1.0 / sumddsigmawls[:]
+    df["22-dsigmasq"         ]         =   sumddsigmatsq_num[:] * 1.0 / sumddsigmawls[:]
+    df["23-sigma_dsigmat"     ]        =   np.sqrt(sumddsigmatsq_num[:] * 1.0 / sumddsigmawls[:] - (sumddsigmat_num[:] * 1.0 / sumddsigmawls[:])**2)
+    df["24-SN_Errdsigmat"     ]        =   np.sqrt(sumddsigmatsq_num[:]) * 1.0 / sumddsigmawls[:]
+    df["25-dsigmax"           ]        =   sumddsigmax_num[:] * 1.0 / sumddsigmawls[:]
+    df["26-dsigmaxsq"         ]        =   sumddsigmaxsq_num[:] * 1.0 / sumddsigmawls[:]
+    df["27-sigma_dsigmax"     ]        =   np.sqrt(sumddsigmaxsq_num[:] * 1.0 / sumddsigmawls[:] - (sumddsigmax_num[:] * 1.0 / sumddsigmawls[:])**2)
+    df["28-SN_Errdsigmax"     ]        =   np.sqrt(sumddsigmaxsq_num[:]) * 1.0 / sumddsigmawls[:]
+    df["29-dsigmat_inp"      ]         =   sumddsigmat_inp_num[:] / sumddsigmawls[:]
+    df["30-dsigmat_inp_bary" ]         =   sumddsigmat_inp_bary_num[:] / sumddsigmawls[:]
+    df["31-dsigmat_inp_dm"   ]         =   sumddsigmat_inp_dm_num[:] / sumddsigmawls[:]
+    df["32-sumd_dsigma_wls"        ]   =   sumddsigmawls[:]
+    df["33-r90dsigmat"       ]         =   r90sumddsigmat_num[:] * 1.0 / sumddsigmawls[:]
+    df["34-r90dsigmatsq"     ]         =   r90sumddsigmatsq_num[:] * 1.0 / sumddsigmawls[:]
+    df["35-r90sigma_dsigmat" ]         =   np.sqrt(r90sumddsigmatsq_num[:] * 1.0 / sumddsigmawls[:] - (r90sumddsigmat_num[:] * 1.0 / sumddsigmawls[:])**2)
+    df["36-r90SN_Errdsigmat" ]         =   np.sqrt(r90sumddsigmatsq_num[:]) * 1.0 / sumddsigmawls[:]
+    df["37-r90dsigmax"       ]         =   r90sumddsigmax_num[:] * 1.0 / sumddsigmawls[:]
+    df["38-r90dsigmaxsq"     ]         =   r90sumddsigmaxsq_num[:] * 1.0 / sumddsigmawls[:]
+    df["39-r90sigma_dsigmax" ]         =   np.sqrt(r90sumddsigmaxsq_num[:] * 1.0 / sumddsigmawls[:] - (r90sumddsigmax_num[:] * 1.0 / sumddsigmawls[:])**2)
+    df["40-r90SN_Errdsigmax" ]         =   np.sqrt(r90sumddsigmaxsq_num[:]) * 1.0 / sumddsigmawls[:]
+
+
+    df["41-Jkid"            ]      = np.sort(np.tile(np.arange(Njacks),nbins))
 
 
     import pandas as pd
