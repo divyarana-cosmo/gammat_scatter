@@ -85,14 +85,15 @@ def run_pipe(config, outputfilename = 'gamma.dat', jksamp=0, outputpairfile=None
     lensargs    = config["lens"]
     sourceargs  = config["source"]
 
-    zdiff   = sourceargs["zdiff"]
+    zdiff   =   sourceargs["zdiff"]
+    hval    =   config['H0']/100   
 
     #only working with H0 and omg0
-    ss = simshear(H0 = config['H0'], Om0 = config['Om0'], Ob0 = 0.044, Tcmb0 = 2.7255, Neff = 3.046, sigma8 = 0.8, ns = 0.95)
+    ss = simshear(Om0 = config['Om0'], Ob0 = 0.044, Tcmb0 = 2.7255, Neff = 3.046, sigma8 = 0.8, ns = 0.95)
 
     colossus_cosmo  = cosmology.fromAstropy(ss.Astropy_cosmo, sigma8 = ss.sigma8, ns = ss.ns, cosmo_name=ss.cosmo_name)
 
-    # set the projected radial binning
+    # set the projected radial binning in units of Mpc
     rmin  =  rmin
     rmax  =  rmax
     nbins = nbins #10 radial bins for our case
@@ -119,9 +120,13 @@ def run_pipe(config, outputfilename = 'gamma.dat', jksamp=0, outputpairfile=None
 
     # getting the lenses data
     lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
+    llogre = get_re(llogmstel - np.log10(hval)) + np.log10(hval) -3 # converting Kpc to h-1 Mpc
+
     NNlens = int(len(lid))
     lid = np.arange(len(lid))
-    idx = (lxjkreg != jksamp)
+
+    idx = (np.random.uniform(size=len(lra))<0.1)
+    idx = idx & (lxjkreg != jksamp) & (llogre != -999)
     lra         = lra       [idx]
     ldec        = ldec      [idx]
     lzred       = lzred     [idx]
@@ -129,13 +134,14 @@ def run_pipe(config, outputfilename = 'gamma.dat', jksamp=0, outputpairfile=None
     llogmstel   = llogmstel [idx]
     llogmh      = llogmh    [idx]
     lid         = lid       [idx]
+    llogre      = llogre    [idx]
     #fixed position 
     lra     = 130 + 0.0*lra
     ldec    = 0.0 + 0.0*ldec
 
     if config['test_case']:
         np.random.seed(123)
-        idx         = (np.random.uniform(size=len(lra))<0.1)
+        idx         = (np.random.uniform(size=len(lra))<0.05)
         lra         = lra[idx]
         ldec        = ldec[idx]
         llogmh      = 12.0  + 0.0*llogmh[idx]
@@ -157,7 +163,6 @@ def run_pipe(config, outputfilename = 'gamma.dat', jksamp=0, outputpairfile=None
     lzredmax = np.max(lzred)
 
     print("lens data read fully")
-    llogre = get_re(llogmstel - np.log10(config['H0']/100)) -3 # converting Kpc to Mpc
     dismax = config['Rmax']/ss.Astropy_cosmo.angular_diameter_distance(np.min(lzred)).value 
     
     if sourceargs['use_shear']:
@@ -268,12 +273,12 @@ def run_pipe(config, outputfilename = 'gamma.dat', jksamp=0, outputpairfile=None
     if outputpairfile != None:
         fpairout.write("#OK")
         fpairout.close()
-    
+    Resp = 1 - sourceargs['sigell']**2 
     #need to clean this up
     print(sumdwls)
     df = {}
     df["0-rmin/2+rmax/2"    ]           =   rbins[:-1] *0.5 + rbins[1:]*0.5
-    df["1-gammat"           ]           =   sumdgammat_num[:] * 1.0 / sumdwls[:]
+    df["1-gammat"           ]           =   sumdgammat_num[:] * 1.0 / sumdwls[:]    
     df["2-gammatsq"         ]           =   sumdgammatsq_num[:] * 1.0 / sumdwls[:]
     df["3-sigma_gammat"     ]           =   np.sqrt(sumdgammatsq_num[:] * 1.0 / sumdwls[:] - (sumdgammat_num[:] * 1.0 / sumdwls[:])**2)
     df["4-SN_Errgammat"     ]           =   np.sqrt(sumdgammatsq_num[:]) * 1.0 / sumdwls[:]
