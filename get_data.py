@@ -62,10 +62,11 @@ def get_rands_wgts(rra,rdec,ra,dec):
 
 def lens_select(lensargs):
     if lensargs['type'] == "micecatv2" :
-        fname   = './DataStore/micecatv2/micecatv2/mock_desi_bgs/combined_table.fits'
+        fname   = './DataStore/combined_table.fits'
+        #fname   = './DataStore/micecatv2/micecatv2/mock_desi_bgs/combined_table.fits'
         df      = fits.getdata(fname)
         idx     = (df['lmstellar']>lensargs['logmstelmin']) & (df['lmstellar']<lensargs['logmstelmax'])
-        idx     = idx & (df['flag_central'] == 0) & (df['z_cgal_v'] > lensargs['zmin']) & (df['z_cgal_v'] < lensargs['zmax'])         
+        idx     = idx & (df['flag_central'] == 0) & (df['z_cgal_v'] > lensargs['zmin']) & (df['z_cgal_v'] < lensargs['zmax'])
 
         df      = df[idx]
 
@@ -75,8 +76,8 @@ def lens_select(lensargs):
         df  = df[idx]
 
         lid         = df['unique_gal_id']   [:]
-        lra         = df['ra_gal']          [:]  
-        ldec        = df['dec_gal']         [:] 
+        lra         = df['ra_gal']          [:]
+        ldec        = df['dec_gal']         [:]
         lzred       = df['z_cgal_v']        [:]
         llogmstel   = df['lmstellar']       [:]
         llogmh      = df['lmhalo']          [:]
@@ -88,7 +89,7 @@ def lens_select(lensargs):
         Njacks = lensargs['Njacks']
         lxjkreg     = np.random.randint(Njacks, size=len(lra))
         sys.stdout.write("Number of lenses: %d \n" % (len(df['ra_gal'])))
-        return lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg  
+        return lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg
 
 
 
@@ -109,8 +110,8 @@ def lens_select(lensargs):
     #    df  = df[idx]
 
     #    lid         = df['unique_gal_id'][:]
-    #    lra         = df['ra_gal'][:]  
-    #    ldec        = df['dec_gal'][:] 
+    #    lra         = df['ra_gal'][:]
+    #    ldec        = df['dec_gal'][:]
     #    lzred       = df['z_cgal_v'][:]
     #    llogmstel   = df['lmstellar'][:]
     #    llogmh      = df['lmhalo'][:]
@@ -122,7 +123,7 @@ def lens_select(lensargs):
     #    Njacks = lensargs['Njacks']
     #    lxjkreg     = np.random.randint(Njacks, size=len(lra))
     #    sys.stdout.write("Number of lenses: %d \n" % (len(df['ra_gal'])))
-    #    return lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg  
+    #    return lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg
 
 
 
