@@ -120,13 +120,14 @@ def run_pipe(config, outputfilename = 'gamma.dat', jksamp=0, outputpairfile=None
 
     # getting the lenses data
     lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
-    llogre = get_re(llogmstel - np.log10(hval)) + np.log10(hval) -3 # converting Kpc to h-1 Mpc
+    print("lens data read fully")
+    llogre = get_re(llogmstel ,lzred, ss.Astropy_cosmo) # in the units of  h-1 Mpc
 
     NNlens = int(len(lid))
     lid = np.arange(len(lid))
 
     idx = (np.random.uniform(size=len(lra))<0.1)
-    idx = idx & (lxjkreg != jksamp) & (llogre != -999)
+    idx = idx & (lxjkreg == jksamp) & (llogre != -999)
     lra         = lra       [idx]
     ldec        = ldec      [idx]
     lzred       = lzred     [idx]
@@ -299,7 +300,10 @@ def run_pipe(config, outputfilename = 'gamma.dat', jksamp=0, outputpairfile=None
     df["19-dsigmat_inp"      ]          =   sumddsigmat_inp_num[:] / sumddsigmawls[:]
     df["20-dsigmat_inp_bary" ]          =   sumddsigmat_inp_bary_num[:] / sumddsigmawls[:]
     df["21-dsigmat_inp_dm"   ]          =   sumddsigmat_inp_dm_num[:] / sumddsigmawls[:]
-    df["22-sumd_dsigma_wls"        ]    =   sumddsigmawls[:]
+    df["22-sumd_dsigma_wls" ]           =   sumddsigmawls[:]
+    df["23-sumd_dsigma_num" ]           =   sumddsigmat_num[:]    
+    df["24-sumd_dsigma_den" ]           =   sumddsigmawls[:]
+
     import pandas as pd
     df = pd.DataFrame(df)
     #idx =  sumdwls!=0

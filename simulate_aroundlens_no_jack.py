@@ -162,7 +162,7 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
     lzredmax = np.max(lzred)
 
     print("lens data read fully")
-    llogre = get_re(llogmstel - np.log10(config['H0']/100),lzred, ss.Astropy_cosmo) # in the units of  h-1 Mpc
+    llogre = get_re(llogmstel ,lzred, ss.Astropy_cosmo) # in the units of  h-1 Mpc
     dismax = config['Rmax']/ss.Astropy_cosmo.angular_diameter_distance(np.min(lzred)).value
 
     if sourceargs['use_shear']:
@@ -175,7 +175,8 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
         fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tkappa\tintse1\tintse2\tr90se1\tr90se2\tr90et\tr90ex\tr90intse1\tr90intse2\n')
 
     #..................................#
-    for ii in tqdm(range(len(lra))):
+    #for ii in tqdm(range(len(lra))):
+    for ii in tqdm(range(100)):
         # simulating the sources
         sra, sdec, szred, wgal, intse1, intse2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell'], seed = config["seed"]*len(lra) + ii)
 

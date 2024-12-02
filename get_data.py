@@ -62,8 +62,8 @@ def get_rands_wgts(rra,rdec,ra,dec):
 
 def lens_select(lensargs):
     if lensargs['type'] == "micecatv2" :
-        fname   = './DataStore/combined_table.fits'
-        #fname   = './DataStore/micecatv2/micecatv2/mock_desi_bgs/combined_table.fits'
+        #fname   = './DataStore/combined_table.fits'
+        fname   = './DataStore/micecatv2/micecatv2/mock_desi_bgs/combined_table.fits'
         df      = fits.getdata(fname)
         idx     = (df['lmstellar']>lensargs['logmstelmin']) & (df['lmstellar']<lensargs['logmstelmax'])
         idx     = idx & (df['flag_central'] == 0) & (df['z_cgal_v'] > lensargs['zmin']) & (df['z_cgal_v'] < lensargs['zmax'])
