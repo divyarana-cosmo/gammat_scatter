@@ -24,37 +24,38 @@ def gauss(x,mean,sigma):
     return ans
 
 def model(x, rbins):
-    logmstel, log_re, logmh, cfac, beta = x
+    logmstel, log_re, logmh, cfac = x
     # we are evaluating at redshift of 0.3
     lconc   = concentration.concentration(10**logmh, '200m', 0.3, model = 'diemer19')
     conc    =   cfac * lconc
-    hp          = halo(logmh, conc, omg_m=Om0, beta=beta)
+    hp          = halo(logmh, conc, omg_m=Om0)
     stel        = stellar(logmstel, log_re=log_re)
     esd_s       = stel.esd_deVaucouleurs(rbins)
-    esd_dm      = hp.esd_gnfw(rbins)
-    return esd_s, esd_dm
+    esd_dm      = hp.esd_nfw(rbins)
+    return esd_s/1e12, esd_dm/1e12
 
 def lnprior(x):
-    logmstel, log_re, logmh, c, beta = x
-    if 8<=logmstel<=13  and 0.001<log_re<0.2 and 9<=logmh<=16 and 0<=beta<=5 and c>0:
+    logmstel, log_re, logmh, c = x
+    if 9.0<=logmstel<=11.5  and 0.001<log_re<0.2 and 9<=logmh<=16 and  c>0:
         return 0.0 + np.log(gauss(c,mean=1.0, sigma=0.2))
     return -np.inf
 
 def lnprob(x, rbins, data, icov):
     lp = lnprior(x)
     if not np.isfinite(lp):
-       dirt = 5*np.ones(2*len(data))
+       dirt = 5*np.ones(2*len(data) + 1)
        return -np.inf,dirt
     mod = model(x, rbins)
     Delta = (mod[0] + mod[1]) - data
     chisq = np.dot(Delta, np.dot(icov, Delta))
 
     blob = np.append(mod[0],mod[1])
+    blob = np.append(blob, chisq)
 
-    print( 'log_Mstel, log_Mh, c, beta, chisq')
+    print( 'log_Mstel, log_re, log_Mh, cfac, chisq')
     print( x,chisq)
     if chisq<0 or np.isnan(chisq):
-        return -np.inf, 5*np.ones(2*len(data))
+        return -np.inf, 5*np.ones(2*len(data) + 1)
     res = lp-chisq*0.5 #added 3 to scale micecat area to the whole euclid area 
 
     return res,blob
@@ -67,11 +68,10 @@ def runchain(Ntotal,sampler,chainf,blobf,pos):
     fblob=open(blobf,"w");
     iterno=1;
     # Store chainfile and prednfile in the same format as before
-    for result in sampler.sample(pos, iterations=Ntotal, store=0):
+    for result in sampler.sample(pos, iterations=Ntotal, store=1):
         posn,probn,staten,blobsn = result;
         for i in range(nwalkers):
             np.savetxt(fchain,posn[i],newline=' ');
-            np.savetxt(fchain,[-2.*probn[i]],newline=' ');
             np.savetxt(fchain,[sampler.acceptance_fraction[i],-2.*probn[i]],newline=' ');
             np.savetxt(fblob,blobsn[i],newline=' ');
             np.savetxt(fchain,blnk,fmt='%s');
@@ -88,52 +88,54 @@ if __name__ == "__main__":
     import sys
     logMmin =   float(sys.argv[1])
     logMmax =   float(sys.argv[2])
-    rbins, data    =   np.loadtxt('/home/rana/github_0/gammat_scatter/output/debug_z_0.1_0.4/dsigma_logMmin_%2.2f_logMmax_%2.2f.dat'%(logMmin, logMmax), unpack=1)
+
+    njacks = 100
+    rbins, data, err, xdata, err    =   np.loadtxt('/home/rana/github_0/gammat_scatter/output/debug_z_0.1_0.4/dsigma_logMmin_%2.2f_logMmax_%2.2f.dat'%(logMmin, logMmax), unpack=1)
     cov     =   np.loadtxt('/home/rana/github_0/gammat_scatter/output/debug_z_0.1_0.4/cov_dsigma_logMmin_%2.2f_logMmax_%2.2f.dat'%(logMmin, logMmax))                  
 
-    outputdir = 'output_mcmc' 
+    _nanfix = sum(~np.isfinite(data))
+    rbins = rbins[_nanfix:]
+    data  = data[_nanfix:]
+    
+    cov   = cov[_nanfix:,_nanfix:]
 
-    #with MPIPool() as pool:
-    #    if not pool.is_master():
-    #        pool.wait()
-    #        print("error")
-    #        sys.exit(0)
+    outputdir = 'output_mcmc' 
 
     pool = MPIPool()
     if not pool.is_master():
         pool.wait()
         sys.exit(0)                 
-        
+    
     icov    =   np.linalg.inv(cov)
+    hartlap_factor = (njacks - len(data) - 2) * 1.0/(njacks - 1)
+    icov = hartlap_factor*icov
 
-
-    ndim = 5
-    nwalkers = 64
+    ndim = 4
+    nwalkers = 128
     
     np.random.seed(123)
-    p_logmstel  = np.random.uniform(8, 13, nwalkers) 
+    p_logmstel  = np.random.uniform(9.5, 10.5, nwalkers) 
     p_log_re    = np.random.uniform(0.001, 0.2, nwalkers)    
     p_logmh     = np.random.uniform(9, 16, nwalkers)
     p_c         = np.random.uniform(0.8, 1.2, nwalkers)
-    p_beta      = np.random.uniform(0, 5, nwalkers)
 
-    p_0         = np.transpose([p_logmstel, p_log_re, p_logmh, p_c, p_beta])
+    p_0         = np.transpose([p_logmstel, p_log_re, p_logmh, p_c])
     # Initialize the sampler
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, pool=pool, args=[rbins,data,icov])
 
     print("Running burn-in...")
     Ntotal = 4000
 
-    burnfile        =   './%s/burnfile_gnfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
-    burnpredfile    =   './%s/burnpredfile_gnfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
+    burnfile        =   './%s/burnfile_nfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
+    burnpredfile    =   './%s/burnpredfile_nfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
 
     pos = runchain(Ntotal,sampler, burnfile, burnpredfile, p_0)
     sampler.reset()
 
     print("Running production...")
     Ntotal = 4000
-    chainfile = './%s/chainfile_gnfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
-    predfile  = './%s/predfile_gnfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
+    chainfile = './%s/chainfile_nfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
+    predfile  = './%s/predfile_nfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
 
     pos = runchain(Ntotal,sampler, chainfile, predfile, pos)
 

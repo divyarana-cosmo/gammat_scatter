@@ -126,8 +126,9 @@ def run_pipe(config, outputfilename = 'gamma.dat', jksamp=0, outputpairfile=None
     NNlens = int(len(lid))
     lid = np.arange(len(lid))
 
-    idx = (np.random.uniform(size=len(lra))<0.1)
-    idx = idx & (lxjkreg == jksamp) & (llogre != -999)
+    #idx = (np.random.uniform(size=len(lra))<0.1)
+    #idx = idx & (lxjkreg == jksamp) & (llogre != -999)
+    idx = (lxjkreg == jksamp) & (llogre != -999)
     lra         = lra       [idx]
     ldec        = ldec      [idx]
     lzred       = lzred     [idx]

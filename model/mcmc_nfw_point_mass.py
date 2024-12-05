@@ -24,19 +24,19 @@ def gauss(x,mean,sigma):
     return ans
 
 def model(x, rbins):
-    logmstel, log_re, logmh, cfac, beta = x
+    logmstel, log_re, logmh, cfac = x
     # we are evaluating at redshift of 0.3
     lconc   = concentration.concentration(10**logmh, '200m', 0.3, model = 'diemer19')
     conc    =   cfac * lconc
-    hp          = halo(logmh, conc, omg_m=Om0, beta=beta)
+    hp          = halo(logmh, conc, omg_m=Om0)
     stel        = stellar(logmstel, log_re=log_re)
     esd_s       = stel.esd_deVaucouleurs(rbins)
-    esd_dm      = hp.esd_gnfw(rbins)
-    return esd_s, esd_dm
+    esd_dm      = hp.esd_nfw(rbins)
+    return esd_s/1e12, esd_dm/1e12
 
 def lnprior(x):
-    logmstel, log_re, logmh, c, beta = x
-    if 8<=logmstel<=13  and 0.001<log_re<0.2 and 9<=logmh<=16 and 0<=beta<=5 and c>0:
+    logmstel, log_re, logmh, c = x
+    if 8<=logmstel<=13  and 0.001<log_re<0.2 and 9<=logmh<=16 and  c>0:
         return 0.0 + np.log(gauss(c,mean=1.0, sigma=0.2))
     return -np.inf
 
@@ -51,7 +51,7 @@ def lnprob(x, rbins, data, icov):
 
     blob = np.append(mod[0],mod[1])
 
-    print( 'log_Mstel, log_Mh, c, beta, chisq')
+    print( 'log_Mstel, log_re, log_Mh, cfac, chisq')
     print( x,chisq)
     if chisq<0 or np.isnan(chisq):
         return -np.inf, 5*np.ones(2*len(data))
@@ -88,52 +88,48 @@ if __name__ == "__main__":
     import sys
     logMmin =   float(sys.argv[1])
     logMmax =   float(sys.argv[2])
-    rbins, data    =   np.loadtxt('/home/rana/github_0/gammat_scatter/output/debug_z_0.1_0.4/dsigma_logMmin_%2.2f_logMmax_%2.2f.dat'%(logMmin, logMmax), unpack=1)
+
+    njacks = 50
+    rbins, data, err, xdata, err    =   np.loadtxt('/home/rana/github_0/gammat_scatter/output/debug_z_0.1_0.4/dsigma_logMmin_%2.2f_logMmax_%2.2f.dat'%(logMmin, logMmax), unpack=1)
     cov     =   np.loadtxt('/home/rana/github_0/gammat_scatter/output/debug_z_0.1_0.4/cov_dsigma_logMmin_%2.2f_logMmax_%2.2f.dat'%(logMmin, logMmax))                  
 
     outputdir = 'output_mcmc' 
-
-    #with MPIPool() as pool:
-    #    if not pool.is_master():
-    #        pool.wait()
-    #        print("error")
-    #        sys.exit(0)
 
     pool = MPIPool()
     if not pool.is_master():
         pool.wait()
         sys.exit(0)                 
-        
+    
     icov    =   np.linalg.inv(cov)
+    hartlap_factor = (njacks - len(data) - 2) * 1.0/(njacks - 1)
+    icov = hartlap_factor*icov
 
-
-    ndim = 5
-    nwalkers = 64
+    ndim = 4
+    nwalkers = 128
     
     np.random.seed(123)
     p_logmstel  = np.random.uniform(8, 13, nwalkers) 
     p_log_re    = np.random.uniform(0.001, 0.2, nwalkers)    
     p_logmh     = np.random.uniform(9, 16, nwalkers)
     p_c         = np.random.uniform(0.8, 1.2, nwalkers)
-    p_beta      = np.random.uniform(0, 5, nwalkers)
 
-    p_0         = np.transpose([p_logmstel, p_log_re, p_logmh, p_c, p_beta])
+    p_0         = np.transpose([p_logmstel, p_log_re, p_logmh, p_c])
     # Initialize the sampler
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, pool=pool, args=[rbins,data,icov])
 
     print("Running burn-in...")
-    Ntotal = 4000
+    Ntotal = 1000
 
-    burnfile        =   './%s/burnfile_gnfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
-    burnpredfile    =   './%s/burnpredfile_gnfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
+    burnfile        =   './%s/burnfile_nfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
+    burnpredfile    =   './%s/burnpredfile_nfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
 
     pos = runchain(Ntotal,sampler, burnfile, burnpredfile, p_0)
     sampler.reset()
 
     print("Running production...")
-    Ntotal = 4000
-    chainfile = './%s/chainfile_gnfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
-    predfile  = './%s/predfile_gnfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
+    Ntotal = 2000
+    chainfile = './%s/chainfile_nfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
+    predfile  = './%s/predfile_nfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
 
     pos = runchain(Ntotal,sampler, chainfile, predfile, pos)
 
