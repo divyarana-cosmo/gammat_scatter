@@ -84,7 +84,7 @@ class simshear():
         #log_re     = np.log10(10**logre/1e3) #h-1 kpc to h-1 Mpc
         self.stel  = stellar(logmstel, log_re = logre)
 
-        print('ESD spline ready')
+        #print('ESD spline ready')
         esd_s       =  -999 + 0.0*proj_sep      
         esd_dm      =  -999 + 0.0*proj_sep
         sigma_s     =  -999 + 0.0*proj_sep
@@ -214,27 +214,42 @@ class simshear():
 
 if __name__ == "__main__":
     ss = simshear()
-
     proj_sep = np.logspace(np.log10(0.005), np.log10(0.3),10)
     
     from time import time
     begin = time()
-
     #gamma_s, gamma_dm, kappa_s, kappa_dm = ss._get_esd(logmstel=11, logre=-2, logmh=13, lconc=4, proj_sep=proj_sep)
-
     #print(gamma_s)
     #print(gamma_dm)
-    gamma_s, gamma_dm, kappa_s, kappa_dm = ss._get_g(logmstel=10, logre=-2, logmh=12, lconc=5.98, lzred=0.3, szred=0.8 + 0.0*proj_sep, proj_sep=proj_sep)
+    gamma_s, gamma_dm, kappa_s, kappa_dm = ss._get_g(logmstel=10, logre=-3, logmh=12, lconc=5.98, lzred=0.3, szred=0.8 + 0.0*proj_sep, proj_sep=proj_sep)
     
-
-
+    g_s = gamma_s/(1-kappa_s)
+    g_dm = gamma_dm/(1-kappa_dm)
+    g_tot = (gamma_s + gamma_dm)/(1-kappa_s-kappa_dm)
     print( ss._get_sigma_crit_inv(lzred=0.5, szred=1.0))
     sigcrit_inv = ss._get_sigma_crit_inv(lzred=0.5, szred=1.0)
    
     plt.subplot(2,2,1)
-    plt.plot(proj_sep, gamma_s, label='DEV')
-    plt.plot(proj_sep, gamma_dm, label='NFW') 
-    plt.plot(proj_sep, (gamma_dm + gamma_s), label='Total') 
+    plt.plot(proj_sep, g_s/(sigcrit_inv*1e12))
+    plt.plot(proj_sep, g_dm/(sigcrit_inv*1e12))
+    plt.plot(proj_sep, g_tot/(sigcrit_inv*1e12))
+
+
+    from halopy import halo
+    from stellarpy import stellar
+
+    hp = halo(log_mtot = 12, con_par=5.98, omg_m=0.25)
+    stel = stellar(log_mstel=10, log_re=-3)
+
+    esd_s              = stel.esd_deVaucouleurs(proj_sep)/1e12   
+    esd_dm             = hp.esd_nfw(proj_sep)/1e12           
+    plt.plot(proj_sep, esd_s, '.')
+    plt.plot(proj_sep, esd_dm, '.')
+    plt.plot(proj_sep, esd_s+esd_dm,'.')
+
+    #plt.plot(proj_sep, gamma_s, label='DEV')
+    #plt.plot(proj_sep, gamma_dm, label='NFW') 
+    #plt.plot(proj_sep, (gamma_dm + gamma_s), label='Total') 
  
     #plt.plot(proj_sep, ss.stel.esd_deVaucouleurs(proj_sep), label='dev')
     #plt.plot(proj_sep, ss.stel.esd_pointmass(proj_sep), label='point')

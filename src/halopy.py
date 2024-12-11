@@ -7,12 +7,12 @@ from scipy.interpolate import interp1d
 
 class constants:
     """Useful constants"""
-    G = 4.301e-9 #km^2 Mpc M_sun^-1 s^-2 gravitational constant
-    H0 = 100. #h km s-1 Mpc-1 hubble constant at present
+    G   = 4.301e-9 #km^2 Mpc M_sun^-1 s^-2 gravitational constant
+    H0  = 100. #h km s-1 Mpc-1 hubble constant at present
 
 class halo(constants):
     """Useful functions for weak lensing signal modelling"""
-    def __init__(self,log_mtot, con_par, omg_m=0.3, beta=None, Rmin=0.001, Rmax=5, Rbins=80):
+    def __init__(self,log_mtot, con_par, omg_m=0.3, beta=None, Rmin=0.0001, Rmax=5, Rbins=80):
         self.m_tot = 10**log_mtot # total mass of the halo
         self.c = con_par # concentration parameter
         self.omg_m = omg_m
@@ -34,8 +34,11 @@ class halo(constants):
 
         if beta is not None :
             self.beta  = beta
-            r_s = self.r_200/self.c
-            self.rho0_gnfw = self.m_tot/(4*np.pi*quad(lambda r: r**2/((r/r_s)**self.beta * (1 + r/r_s)**(3 - self.beta)), 0.0, self.r_200)[0])
+            self.r_s = self.r_200/self.c
+            self.delta_c = (200*self.c**3)/(3*quad(lambda x: x**(2-self.beta)*(1+x)**(self.beta -3), 0.0, self.c)[0])
+            
+            self.rho0_gnfw = self.delta_c * self.rho_crt * self.omg_m             
+            #self.rho0_gnfw = self.m_tot/(4*np.pi*quad(lambda r: r**2/((r/r_s)**self.beta * (1 + r/r_s)**(3 - self.beta)), 0.0, self.r_200)[0])
 
     def nfw(self,r):
         """given r, this gives nfw profile as per the instantiated parameters"""
@@ -108,11 +111,16 @@ class halo(constants):
 
     def avg_sigma_gnfw(self,r):
         """projected average profile of generalized NFW"""
-        if not self.init_spl_avg_sigma_gnfw:
-            self.get_spl_avg_sigma_gnfw()
+        if not self.init_spl_sigma_gnfw:
+            self.get_spl_sigma_gnfw()
         if np.isscalar(r):
             r = np.array([r])
-        return 10**self.spl_avg_sigma_gnfw(np.log10(r))
+        _xx = r
+        Sigmaarr = _xx*0.0
+        for ii, x in enumerate(_xx):
+            Sigmaarr[ii] = 2 * np.pi * quad((lambda t :t * 10**self.spl_sigma_gnfw(np.log10(t))), 0, x)[0]
+            
+        return Sigmaarr/(np.pi*r**2)
 
 
     def sigma_gnfw(self,r):
@@ -123,25 +131,16 @@ class halo(constants):
             r = np.array([r])
         return 10**self.spl_sigma_gnfw(np.log10(r))
 
-    def get_spl_avg_sigma_gnfw(self):
-        """puts a log log interpolation scheme for the average sigma"""
-        if not self.init_spl_sigma_gnfw:
-            self.get_spl_sigma_gnfw()
- 
-        extra =  quad(lambda Rp: Rp*self.num_sigma(Rp, self.gnfw), 0.0, self.spl_esd_rmin)[0]
-
-        xx = np.logspace(np.log10(self.spl_esd_rmin), np.log10(self.spl_esd_rmax), self.spl_esd_rbins)
-        yy = np.log10(self.num_avg_sigma(xx, self.spl_sigma_gnfw, extra))
-        self.init_spl_avg_sigma_gnfw = True
-        self.spl_avg_sigma_gnfw = interp1d(np.log10(xx), yy, kind='cubic')
-        return 0
-
     def get_spl_sigma_gnfw(self):
         """puts a log log interpolation scheme for the sigma"""
         xx = np.logspace(np.log10(self.spl_esd_rmin), np.log10(self.spl_esd_rmax), self.spl_esd_rbins)
-        yy = np.log10(self.num_sigma(xx, self.gnfw))
+        _xx = xx/self.r_s
+        Sigmaarr = _xx*0.0
+        for ii, x in enumerate(_xx):
+            Sigmaarr[ii] = 2 * self.delta_c * self.rho_crt * self.omg_m * self.r_s * x**(1-self.beta) * quad((lambda theta : np.sin(theta)*(np.sin(theta) + x)**(self.beta -3)), 0, np.pi/2)[0]
+ 
+        self.spl_sigma_gnfw = interp1d(np.log10(xx), np.log10(Sigmaarr), kind='cubic', fill_value = (np.log10(Sigmaarr[0]), -np.inf), bounds_error=False)
         self.init_spl_sigma_gnfw = True
-        self.spl_sigma_gnfw = interp1d(np.log10(xx), yy, kind='cubic', fill_value = (np.log10(yy[0]), -np.inf))
         return 0
 
     def num_sigma(self, Rarr, func):
@@ -167,7 +166,7 @@ class halo(constants):
 
 if __name__ == "__main__":
     plt.subplot(2,2,1)
-    rbin = np.logspace(np.log10(0.007),np.log10(0.8), int(1e6))
+    rbin = np.logspace(np.log10(0.004),np.log10(0.8), int(30))
     hp = halo(13,4)
     print(hp.r_200)
     yy = hp.esd_nfw(rbin)/(1e12)
@@ -176,7 +175,6 @@ if __name__ == "__main__":
 
 
     hp = halo(13, 4, beta=1)
-    print(hp.r_200)
     yy1 = hp.esd_gnfw(rbin)/(1e12)
     #yy1 = hp.avg_sigma_gnfw(rbin)/(1e12)
     plt.plot(rbin, yy1, '.')
