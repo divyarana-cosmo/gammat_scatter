@@ -97,6 +97,7 @@ class halo(constants):
 
     def gnfw(self,r):
         """given r, this gives generalized nfw profile as per the instantiated parameters"""
+        # following arxiv:0007354
         r_s = self.r_200/self.c
         value  = self.rho0_gnfw/((r/r_s)**self.beta*(1 + r/r_s)**(3 - self.beta))
         return value
