@@ -12,8 +12,8 @@ from scipy.interpolate import interp1d
 from colossus.cosmology import cosmology
 from colossus.halo import concentration
 
-Om0 =   0.308
-H0  =   67.7
+Om0 =   0.25
+H0  =   100
 params = {'flat': True, 'H0': H0, 'Om0': Om0, 'Ob0': 0.049, 'sigma8': 0.81, 'ns': 0.95}
 cosmo = cosmology.setCosmology('myCosmo', **params)
 
@@ -36,8 +36,8 @@ def model(x, rbins):
 
 def lnprior(x):
     logmstel, log_re, logmh, c = x
-    if 9.0<=logmstel<=11.5  and 0.001<log_re<0.2 and 9<=logmh<=16 and  c>0:
-        return 0.0 + np.log(gauss(c,mean=1.0, sigma=0.2))
+    if 7.0<=logmstel<=16  and np.log10(0.001)<log_re<np.log10(0.05) and 9<=logmh<=16 and  c>0:
+        return 0.0 + np.log(gauss(c,mean=1.0, sigma=0.16))
     return -np.inf
 
 def lnprob(x, rbins, data, icov):
@@ -56,7 +56,8 @@ def lnprob(x, rbins, data, icov):
     print( x,chisq)
     if chisq<0 or np.isnan(chisq):
         return -np.inf, 5*np.ones(2*len(data) + 1)
-    res = lp-chisq*0.5 #added 3 to scale micecat area to the whole euclid area 
+    res = lp-1.8*chisq*0.5 #added 3 to scale micecat area to the whole euclid area 
+    #res = lp-chisq*0.5 #added 3 to scale micecat area to the whole euclid area 
 
     return res,blob
 
@@ -93,12 +94,6 @@ if __name__ == "__main__":
     rbins, data, err, xdata, err    =   np.loadtxt('/home/rana/github_0/gammat_scatter/output/debug_z_0.1_0.4/dsigma_logMmin_%2.2f_logMmax_%2.2f.dat'%(logMmin, logMmax), unpack=1)
     cov     =   np.loadtxt('/home/rana/github_0/gammat_scatter/output/debug_z_0.1_0.4/cov_dsigma_logMmin_%2.2f_logMmax_%2.2f.dat'%(logMmin, logMmax))                  
 
-    _nanfix = sum(~np.isfinite(data))
-    rbins = rbins[_nanfix:]
-    data  = data[_nanfix:]
-    
-    cov   = cov[_nanfix:,_nanfix:]
-
     outputdir = 'output_mcmc' 
 
     pool = MPIPool()
@@ -111,11 +106,11 @@ if __name__ == "__main__":
     icov = hartlap_factor*icov
 
     ndim = 4
-    nwalkers = 128
+    nwalkers = 256
     
     np.random.seed(123)
-    p_logmstel  = np.random.uniform(9.5, 10.5, nwalkers) 
-    p_log_re    = np.random.uniform(0.001, 0.2, nwalkers)    
+    p_logmstel  = (logMmin + logMmax)*0.5 + 0.01*np.random.uniform(-1, 1, nwalkers) 
+    p_log_re    = np.random.uniform(np.log10(0.001), np.log10(0.05), nwalkers)    
     p_logmh     = np.random.uniform(9, 16, nwalkers)
     p_c         = np.random.uniform(0.8, 1.2, nwalkers)
 
@@ -126,99 +121,19 @@ if __name__ == "__main__":
     print("Running burn-in...")
     Ntotal = 4000
 
-    burnfile        =   './%s/burnfile_nfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
-    burnpredfile    =   './%s/burnpredfile_nfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
+    burnfile        =   './%s/burnfile_nfw_logMmin_%2.2f_logMmax_%2.2f.dat_full_desixeuclid'%(outputdir, logMmin, logMmax)
+    burnpredfile    =   './%s/burnpredfile_nfw_logMmin_%2.2f_logMmax_%2.2f.dat_full_desixeuclid'%(outputdir, logMmin, logMmax)
 
     pos = runchain(Ntotal,sampler, burnfile, burnpredfile, p_0)
     sampler.reset()
 
     print("Running production...")
     Ntotal = 4000
-    chainfile = './%s/chainfile_nfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
-    predfile  = './%s/predfile_nfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
+    chainfile = './%s/chainfile_nfw_logMmin_%2.2f_logMmax_%2.2f.dat_full_desixeuclid'%(outputdir, logMmin, logMmax)
+    predfile  = './%s/predfile_nfw_logMmin_%2.2f_logMmax_%2.2f.dat_full_desixeuclid'%(outputdir, logMmin, logMmax)
 
     pos = runchain(Ntotal,sampler, chainfile, predfile, pos)
 
     print("Execution completed")
     pool.close()
-
-
-
-
-
-    #rbin    = np.array([])    
-    #lzred   = np.array([])
-    #szred   = np.array([])
-    #etan    = np.array([])
-    
-    #cnt = 0
-    #for data in dat:
-    #    idx     = (0.01<data['proj_sep'].values[:]) & (data['proj_sep'].values[:]<0.5)
-    #    data    = data[idx]
-    #    rbin    = np.append(rbin, data['proj_sep'])
-    #    lzred   = np.append(lzred, data['lzred'])
-    #    szred   = np.append(szred, data['szred'])
-    #    etan    = np.append(etan,  data['etan_obs'])
-    #    cnt+=1
-    #    print("chunk number", cnt)
-
-
-    #data    = pd.read_csv(outputfilename, delim_whitespace=1, usecols=['proj_sep', 'lzred', 'szred', 'etan_obs'])
-    #idx     = (0.01<data['proj_sep'].values[:]) & (data['proj_sep'].values[:]<0.5)
-    #data    = data[idx]
-    #rbin    = data['proj_sep']
-    #lzred   = data['lzred']
-    #szred   = data['szred']
-
-    #data    = data['etan_obs']
-    #gamma_s, gamma_dm, kappa_s, kappa_dm =  ss._get_esd(logmstel, logmh, lconc, Rarr)
-    #spl_gamma_s     =   interp1d(np.log10(Rarr), np.log10(gamma_s),  kind='cubic')      
-    #spl_gamma_dm    =   interp1d(np.log10(Rarr), np.log10(gamma_dm), kind='cubic')
-    #spl_kappa_s     =   interp1d(np.log10(Rarr), np.log10(kappa_s),  kind='cubic')
-    #spl_kappa_dm    =   interp1d(np.log10(Rarr), np.log10(kappa_dm), kind='cubic')
-    #print("interpolation done")
-
-
-    #hp   = halo(logmh, lconc, omg_m=Om0)
-    #stel = stellar(logmstel)
-
-    #gamma_s    = stel.esd_pointmass(rbin)     * inv_crit_arr
-    #gamma_dm   = hp.esd_nfw(rbin)             * inv_crit_arr
-    #kappa_s    = stel.sigma_pointmass(rbin)   * inv_crit_arr
-    #kappa_dm   = hp.sigma_nfw(rbin)           * inv_crit_arr
-
-#def model(x, rbin, lzred, szred):
-#    global cnt, inv_crit_arr
-#    logmstel, logmh, beta = x
-#    lconc    = concentration.concentration(10**logmh, '200m', np.median(lzred), model = 'diemer19')
-#    #logmstel, logmh, lconc = x
-#    if cnt==0:
-#        inv_crit_arr = ss._get_sigma_crit_inv(lzred, szred)
-#        cnt+=1
-#        
-#    print("val of cnt", cnt)
-#    hp             = halo(logmh, lconc, omg_m=Om0, beta=beta)
-#
-#    log_re      = (0.774 + 0.977 *(np.log10(10**logmh / 0.7) - 11.4)) #check arxiv:1811.04934
-#    log_re      = np.log10(10**log_re * 0.7/1e3) #h-1 kpc to h-1 Mpc
-#
-#    stel        = stellar(logmstel, log_re=log_re)
-#    esd_s       = stel.esd_deVaucouleurs(rbin)
-#    esd_dm      = hp.esd_gnfw(rbin)
-#    sigma_s     = stel.sigma_deVaucouleurs(rbin)
-#    sigma_dm    = hp.sigma_gnfw(rbin)
-#
-#    #Rarr = np.logspace(-3,1,100)
-#    #gamma_s, gamma_dm, kappa_s, kappa_dm =  ss._get_esd(logmstel, logmh, lconc, rbin)
-#    gamma_s     =   esd_s  * inv_crit_arr
-#    gamma_dm    =   esd_dm * inv_crit_arr
-#    kappa_s     =   sigma_s  * inv_crit_arr
-#    if np.any(np.isnan(kappa_s)):
-#        kappa_s[np.isnan(kappa_s)] = 0.0
-#    kappa_dm    =   sigma_dm * inv_crit_arr
-#
-#
-#    gtan = (gamma_s + gamma_dm)/(1 - (kappa_s + kappa_dm))
-#    return gtan
-
 

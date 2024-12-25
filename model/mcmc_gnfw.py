@@ -12,8 +12,8 @@ from scipy.interpolate import interp1d
 from colossus.cosmology import cosmology
 from colossus.halo import concentration
 
-Om0 =   0.308
-H0  =   67.7
+Om0 =   0.25
+H0  =   100
 params = {'flat': True, 'H0': H0, 'Om0': Om0, 'Ob0': 0.049, 'sigma8': 0.81, 'ns': 0.95}
 cosmo = cosmology.setCosmology('myCosmo', **params)
 
@@ -32,30 +32,32 @@ def model(x, rbins):
     stel        = stellar(logmstel, log_re=log_re)
     esd_s       = stel.esd_deVaucouleurs(rbins)
     esd_dm      = hp.esd_gnfw(rbins)
-    return esd_s, esd_dm
+    return esd_s/1e12, esd_dm/1e12
 
 def lnprior(x):
     logmstel, log_re, logmh, c, beta = x
-    if 8<=logmstel<=13  and 0.001<log_re<0.2 and 9<=logmh<=16 and 0<=beta<=5 and c>0:
-        return 0.0 + np.log(gauss(c,mean=1.0, sigma=0.2))
+    #if 7<=logmstel<=16  and np.log10(0.001)<log_re<np.log10(0.05) and 9<=logmh<=16 and 0<=beta<=5 and 0<c<5:
+    if 7<=logmstel<=16  and np.log10(0.001)<log_re<np.log10(0.05) and 9<=logmh<=16 and 0<=beta<=5 and c>0:
+        return 0.0 + np.log(gauss(c,mean=1.0, sigma=0.16))
     return -np.inf
 
 def lnprob(x, rbins, data, icov):
     lp = lnprior(x)
     if not np.isfinite(lp):
-       dirt = 5*np.ones(2*len(data))
+       dirt = 5*np.ones(2*len(data) + 1)
        return -np.inf,dirt
     mod = model(x, rbins)
     Delta = (mod[0] + mod[1]) - data
     chisq = np.dot(Delta, np.dot(icov, Delta))
 
     blob = np.append(mod[0],mod[1])
+    blob = np.append(blob, chisq)
 
-    print( 'log_Mstel, log_Mh, c, beta, chisq')
+    print( 'log_Mstel, log_re, log_Mh, c, beta, chisq')
     print( x,chisq)
     if chisq<0 or np.isnan(chisq):
-        return -np.inf, 5*np.ones(2*len(data))
-    res = lp-chisq*0.5 #added 3 to scale micecat area to the whole euclid area 
+        return -np.inf, 5*np.ones(2*len(data) + 1)
+    res = lp-1.8*chisq*0.5 #added 3 to scale micecat area to the whole euclid area 
 
     return res,blob
 
@@ -67,11 +69,10 @@ def runchain(Ntotal,sampler,chainf,blobf,pos):
     fblob=open(blobf,"w");
     iterno=1;
     # Store chainfile and prednfile in the same format as before
-    for result in sampler.sample(pos, iterations=Ntotal, store=0):
+    for result in sampler.sample(pos, iterations=Ntotal, store=1):
         posn,probn,staten,blobsn = result;
         for i in range(nwalkers):
             np.savetxt(fchain,posn[i],newline=' ');
-            np.savetxt(fchain,[-2.*probn[i]],newline=' ');
             np.savetxt(fchain,[sampler.acceptance_fraction[i],-2.*probn[i]],newline=' ');
             np.savetxt(fblob,blobsn[i],newline=' ');
             np.savetxt(fchain,blnk,fmt='%s');
@@ -88,7 +89,9 @@ if __name__ == "__main__":
     import sys
     logMmin =   float(sys.argv[1])
     logMmax =   float(sys.argv[2])
-    rbins, data    =   np.loadtxt('/home/rana/github_0/gammat_scatter/output/debug_z_0.1_0.4/dsigma_logMmin_%2.2f_logMmax_%2.2f.dat'%(logMmin, logMmax), unpack=1)
+
+    njacks = 100
+    rbins, data , err, xdata, err   =   np.loadtxt('/home/rana/github_0/gammat_scatter/output/debug_z_0.1_0.4/dsigma_logMmin_%2.2f_logMmax_%2.2f.dat'%(logMmin, logMmax), unpack=1)
     cov     =   np.loadtxt('/home/rana/github_0/gammat_scatter/output/debug_z_0.1_0.4/cov_dsigma_logMmin_%2.2f_logMmax_%2.2f.dat'%(logMmin, logMmax))                  
 
     outputdir = 'output_mcmc' 
@@ -105,17 +108,29 @@ if __name__ == "__main__":
         sys.exit(0)                 
         
     icov    =   np.linalg.inv(cov)
+    hartlap_factor = (njacks - len(data) - 2) * 1.0/(njacks - 1)
+    icov = hartlap_factor*icov
+
+    
+    from scipy.optimize import minimize
+    np.random.seed(42)
+    nll = lambda *args: -lnprob(*args)[0]
+    initial = np.array([(logMmin + logMmax)*0.5, -2, (logMmin + logMmax)*0.5 + 2, 1.0, 1.0]) 
+    soln = minimize(nll, initial, args=(rbins, data, icov))
+
+    logmstel, log_re, logmh, c, beta = soln.x    
+
 
 
     ndim = 5
-    nwalkers = 64
+    nwalkers = 256
     
     np.random.seed(123)
-    p_logmstel  = np.random.uniform(8, 13, nwalkers) 
-    p_log_re    = np.random.uniform(0.001, 0.2, nwalkers)    
-    p_logmh     = np.random.uniform(9, 16, nwalkers)
-    p_c         = np.random.uniform(0.8, 1.2, nwalkers)
-    p_beta      = np.random.uniform(0, 5, nwalkers)
+    p_logmstel  = logmstel  + 0.01*np.random.uniform(-1, 1, nwalkers) 
+    p_log_re    = log_re    + 0.01*np.random.uniform(-1, 1, nwalkers)     
+    p_logmh     = logmh     + 0.01*np.random.uniform(-1, 1, nwalkers) 
+    p_c         = c         + 0.01*np.random.uniform(-1, 1, nwalkers)  
+    p_beta      = beta      + 0.01*np.random.uniform(-1, 1, nwalkers)  
 
     p_0         = np.transpose([p_logmstel, p_log_re, p_logmh, p_c, p_beta])
     # Initialize the sampler
@@ -124,16 +139,16 @@ if __name__ == "__main__":
     print("Running burn-in...")
     Ntotal = 4000
 
-    burnfile        =   './%s/burnfile_gnfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
-    burnpredfile    =   './%s/burnpredfile_gnfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
+    burnfile        =   './%s/burnfile_gnfw_logMmin_%2.2f_logMmax_%2.2f.dat_full_desixeuclid'%(outputdir, logMmin, logMmax)
+    burnpredfile    =   './%s/burnpredfile_gnfw_logMmin_%2.2f_logMmax_%2.2f.dat_full_desixeuclid'%(outputdir, logMmin, logMmax)
 
     pos = runchain(Ntotal,sampler, burnfile, burnpredfile, p_0)
     sampler.reset()
 
     print("Running production...")
     Ntotal = 4000
-    chainfile = './%s/chainfile_gnfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
-    predfile  = './%s/predfile_gnfw_logMmin_%2.2f_logMmax_%2.2f.dat'%(outputdir, logMmin, logMmax)
+    chainfile = './%s/chainfile_gnfw_logMmin_%2.2f_logMmax_%2.2f.dat_full_desixeuclid'%(outputdir, logMmin, logMmax)
+    predfile  = './%s/predfile_gnfw_logMmin_%2.2f_logMmax_%2.2f.dat_full_desixeuclid'%(outputdir, logMmin, logMmax)
 
     pos = runchain(Ntotal,sampler, chainfile, predfile, pos)
 
