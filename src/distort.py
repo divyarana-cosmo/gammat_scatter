@@ -1,7 +1,5 @@
 # have to add the responsivity part
 # have to add the dsigma part
-
-
 import numpy as np
 import matplotlib.pyplot as plt
 #import galsim
