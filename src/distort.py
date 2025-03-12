@@ -1,8 +1,5 @@
-# have to add the responsivity part
-# have to add the dsigma part
 import numpy as np
 import matplotlib.pyplot as plt
-#import galsim
 from halopy import halo
 from stellarpy import stellar
 from colossus.cosmology import cosmology
@@ -10,12 +7,7 @@ from colossus.halo import concentration
 from astropy.cosmology import FlatLambdaCDM
 from scipy.integrate import quad
 from scipy.interpolate import interp1d
-#from get_data import lens_select
-from tqdm import tqdm
-import argparse
-import yaml
-#from mpi4py import MPI
-#from subprocess import  call
+
 
 class simshear():
     "simulated the shear for a given configuration of dark matter and stellar profiles"
@@ -31,10 +23,6 @@ class simshear():
         self.ns = ns
         self.cosmo_name ='my_cosmo'
         self.init_spl_sigma_crit_inv = False
-        #self.spl_Rmin = 0.001
-        #self.spl_Rmax = 10
-        #self.spl_Rbin = 80
-        #self.spl_Rarr = np.logspace(np.log10(self.spl_Rmin), np.log10(self.spl_Rmax), self.spl_Rbin)
         print("fixing cosmology \n")
 
     def get_xyz(self, ra,dec):
@@ -46,7 +34,6 @@ class simshear():
         return x,y,z  
 
     def _get_sigma_crit_inv(self, lzred, szred):
-    #def get_sigma_crit_inv(self, lzred, szred):
         "evaluates the lensing efficency geometrical factor"
         sigm_crit_inv = 0.0*szred + 0.0*lzred
         idx =  szred>lzred   # if sources are in foreground then lensing is zero
@@ -55,16 +42,11 @@ class simshear():
             szred = np.array([szred])
             idx = np.array([idx])
             sigm_crit_inv = np.array([sigm_crit_inv])
-
         # some important constants for the sigma crit computations
         gee = 4.301e-9 #km^2 Mpc M_sun^-1 s^-2 gravitational constant
         cee = 3e5 #km s^-1
         # sigma_crit_calculations for a given lense-source pair
         sigm_crit_inv = self.Astropy_cosmo.angular_diameter_distance(lzred).value * self.Astropy_cosmo.angular_diameter_distance_z1z2(lzred, szred).value * 1.0/self.Astropy_cosmo.angular_diameter_distance(szred).value
-
-        # If you want to work with comoving cooredinates
-        #sigm_crit_inv = self.Astropy_cosmo.angular_diameter_distance(lzred).value * self.Astropy_cosmo.angular_diameter_distance_z1z2(lzred, szred).value * (1.0 + lzred)**2 * 1.0/self.Astropy_cosmo.angular_diameter_distance(szred).value
-
         sigm_crit_inv[~idx]=0.0 
         sigm_crit_inv = sigm_crit_inv * 4*np.pi*gee*1.0/cee**2
         return sigm_crit_inv
@@ -76,26 +58,13 @@ class simshear():
         return interp1d(xx, yy, kind='cubic')
 
     def _get_esd(self, logmstel, logre, logmh, lconc, proj_sep):
-    #    self._spl_get_esd(logmstel, logmh, lconc)
-
         self.hp    = halo(logmh, lconc, omg_m=self.omg_m)
-        #log_re     = np.log10(10**logre/1e3) #h-1 kpc to h-1 Mpc
         self.stel  = stellar(logmstel, log_re = logre)
-
-        #print('ESD spline ready')
-        esd_s       =  -999 + 0.0*proj_sep      
-        esd_dm      =  -999 + 0.0*proj_sep
-        sigma_s     =  -999 + 0.0*proj_sep
-        sigma_dm    =  -999 + 0.0*proj_sep
-        #idx =   (proj_sep > self.spl_Rmin) & (proj_sep < self.spl_Rmax)
-        esd_s              = self.stel.esd_deVaucouleurs(proj_sep)   
-        esd_dm             = self.hp.esd_nfw(proj_sep)           
-        sigma_s            = self.stel.sigma_deVaucouleurs(proj_sep) 
-        sigma_dm           = self.hp.sigma_nfw(proj_sep)         
-
+        esd_s      = self.stel.esd_deVaucouleurs(proj_sep)   
+        esd_dm     = self.hp.esd_nfw(proj_sep)           
+        sigma_s    = self.stel.sigma_deVaucouleurs(proj_sep) 
+        sigma_dm   = self.hp.sigma_nfw(proj_sep)         
         return esd_s, esd_dm, sigma_s, sigma_dm 
-
-
 
     def _get_g(self, logmstel, logre, logmh, lconc, lzred, szred, proj_sep):
         if not self.init_spl_sigma_crit_inv:
@@ -108,51 +77,35 @@ class simshear():
 
         get_sigma_crit_inv = self.interp_get_sigma_crit_inv(szred) 
         esd_s, esd_dm, sigma_s, sigma_dm =  self._get_esd(logmstel, logre, logmh, lconc, proj_sep)
-        gamma_s     =  -999 + 0.0*esd_s    
-        gamma_dm    =  -999 + 0.0*esd_dm   
-        kappa_s     =  -999 + 0.0*sigma_s  
-        kappa_dm    =  -999 + 0.0*sigma_dm 
-
-        idx = (esd_s != -999) & (esd_dm != -999) & (sigma_s != -999) & (sigma_dm != -999)
         #considering only tangential shear and adding both contributions
-        gamma_s [idx]    =   esd_s [idx]    * get_sigma_crit_inv[idx] 
-        gamma_dm[idx]    =   esd_dm[idx]    * get_sigma_crit_inv[idx]
-        kappa_s [idx]    =   sigma_s [idx]  * get_sigma_crit_inv[idx]
-        kappa_dm[idx]    =   sigma_dm[idx]  * get_sigma_crit_inv[idx]
+        gamma_s     =   esd_s     * get_sigma_crit_inv 
+        gamma_dm    =   esd_dm    * get_sigma_crit_inv
+        kappa_s     =   sigma_s   * get_sigma_crit_inv
+        kappa_dm    =   sigma_dm  * get_sigma_crit_inv
         return gamma_s, gamma_dm, kappa_s, kappa_dm
 
     def get_g(self, lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, use_shear=False, no_shear=False):
         "computes the g1 and g2 components for the reduced shear"
         lx, ly, lz = self.get_xyz(lra, ldec) 
         sx, sy, sz = self.get_xyz(sra, sdec) 
-
-        #projected separation on the lense plane in physical
+        #projected separation on the lense plane in physical units
         proj_sep = self.Astropy_cosmo.angular_diameter_distance(lzred).value * np.sqrt((sx-lx)**2 + (sy-ly)**2 + (sz-lz)**2) # in h-1 Mpc
-
-        #if you want to use the comoving distance
-        #proj_sep = self.Astropy_cosmo.comoving_distance(lzred).value * np.sqrt((sx-lx)**2 + (sy-ly)**2 + (sz-lz)**2) # in h-1 Mpc
-
-        #considering only tangential shear and adding both contributions
+       #considering only tangential shear and adding both contributions
         gamma_s, gamma_dm, kappa_s, kappa_dm = self._get_g(logmstel, logre, logmh, lconc, lzred, szred, proj_sep)
         sflag = (gamma_s != -999) & (gamma_dm != -999) & (kappa_s != -999) & (kappa_dm != -999)
-        #if np.any(np.isnan(kappa_s))>0:
-        #    kappa_s[np.isnan(kappa_s)] = 0.0
-
         gamma = gamma_s + gamma_dm
         kappa = kappa_s + kappa_dm
-        
         if use_shear:
             g    = gamma        # shear
             g_b  = gamma_s      # shear
             g_dm = gamma_dm     # shear
         else:
-            g    = gamma/(1.0 - kappa) # reduced shear
-            g_b  = gamma_s/(1.0 - kappa_s) # reduced shear
-            g_dm = gamma_dm/(1.0 - kappa_dm) # reduced shear
-        
-        
-        # phi to get the compute the tangential shear
+            g    = gamma/(1.0 - kappa)          # reduced shear
+            g_b  = gamma_s/(1.0 - kappa_s)      # reduced shear
+            g_dm = gamma_dm/(1.0 - kappa_dm)    # reduced shear
 
+        sflag = sflag & (np.abs(kappa)<0.5) & (np.abs(g)<1)  #weak lensing flag 
+        # phi to get the compute the tangential shear
         lra  = lra*np.pi/180
         ldec = ldec*np.pi/180
         sra  = sra*np.pi/180
@@ -160,17 +113,11 @@ class simshear():
 
         c_sra_lra = np.cos(sra)*np.cos(lra) + np.sin(lra)*np.sin(sra)
         s_sra_lra = np.sin(sra)*np.cos(lra) - np.cos(sra)*np.sin(lra)
-        
         #angular separation between lens-source pairs
         c_theta = lx*sx + ly*sy + lz*sz
         s_theta = np.sqrt(1-c_theta**2)
-
-        sflag = sflag & (np.abs(kappa)<0.5) & (np.abs(g)<1)  #weak lensing flag 
-        #sflag = sflag & (np.abs(s_theta)>np.sin(np.pi/180 * 1/3600)) & (np.abs(kappa)<0.5) & (np.abs(g)<1)  #weak lensing flag and proximity flag
-
         c_phi   =  np.cos(ldec)*s_sra_lra*1.0/s_theta
         s_phi   = (-np.sin(ldec)*np.cos(sdec) + np.cos(ldec)*c_sra_lra*np.sin(sdec))*1.0/s_theta
-        
         # tangential shear
         g_1     = - g*(2*c_phi**2 - 1)
         g_2     = - g*(2*c_phi * s_phi)
@@ -178,23 +125,15 @@ class simshear():
             g       = 0.0*g_1
             g_1     = 0.0*g_1
             g_2     = 0.0*g_1
-
         return g_1, g_2, g, kappa, c_phi, s_phi, proj_sep, sflag, g_b, g_dm
 
 
     def shear_src(self, lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, intse1, intse2, use_shear=False, no_shear=False):
-        se1 = intse1
-        se2 = intse2
         "apply shear on to the source galaxies with given intrinsic shapes"
-        #self.conc       = lconc
-        #self.hp         = halo(logmh, self.conc, omg_m=self.omg_m)
-        #self.stel       = stellar(logmstel, log_re=log_re)
-
+        se1 = intse1;   se2 = intse2
         if not self.init_spl_sigma_crit_inv:
             self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(lzred)
-            #self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(szred)
             self.init_spl_sigma_crit_inv = True
-
         g_1, g_2, gtan, kappa, c_phi, s_phi, proj_sep, sflag, g_b, g_dm = self.get_g(lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, use_shear=use_shear, no_shear=no_shear)
 
         g   = g_1 + 1j* g_2
@@ -216,9 +155,6 @@ if __name__ == "__main__":
     
     from time import time
     begin = time()
-    #gamma_s, gamma_dm, kappa_s, kappa_dm = ss._get_esd(logmstel=11, logre=-2, logmh=13, lconc=4, proj_sep=proj_sep)
-    #print(gamma_s)
-    #print(gamma_dm)
     gamma_s, gamma_dm, kappa_s, kappa_dm = ss._get_g(logmstel=10, logre=-3, logmh=12, lconc=5.98, lzred=0.3, szred=0.8 + 0.0*proj_sep, proj_sep=proj_sep)
     
     g_s = gamma_s/(1-kappa_s)
@@ -245,58 +181,10 @@ if __name__ == "__main__":
     plt.plot(proj_sep, esd_dm, '.')
     plt.plot(proj_sep, esd_s+esd_dm,'.')
 
-    #plt.plot(proj_sep, gamma_s, label='DEV')
-    #plt.plot(proj_sep, gamma_dm, label='NFW') 
-    #plt.plot(proj_sep, (gamma_dm + gamma_s), label='Total') 
- 
-    #plt.plot(proj_sep, ss.stel.esd_deVaucouleurs(proj_sep), label='dev')
-    #plt.plot(proj_sep, ss.stel.esd_pointmass(proj_sep), label='point')
-    #plt.plot(proj_sep, ss.hp.esd_nfw(proj_sep), label='nfw') 
     plt.xscale('log')
     plt.yscale('log')
     plt.legend()
 
-
-    #plt.subplot(2,2,2)
-    #plt.plot(proj_sep, ss.stel.esd_deVaucouleurs(proj_sep), label='dev')
-    #plt.plot(proj_sep, ss.stel.esd_pointmass(proj_sep), label='point')
-    #plt.plot(proj_sep, ss.hp.esd_nfw(proj_sep), label='nfw') 
-    #plt.xscale('log')
-    #plt.yscale('log')
-    #plt.legend()
-
     plt.savefig('test.png', dpi=300)
-
-
-
-
-
-            
-        #esd_s [idx]         = 10**self.spl_esd_s   (np.log10(proj_sep[idx]))  
-        #esd_dm[idx]         = 10**self.spl_esd_dm  (np.log10(proj_sep[idx]))  
-        #sigma_s [idx]       = 10**self.spl_sigma_s (np.log10(proj_sep[idx]))
-        #sigma_dm[idx]       = 10**self.spl_sigma_dm(np.log10(proj_sep[idx]))         
-
-        #esd_s       = 10**self.spl_esd_s   (np.log10(proj_sep))  
-        #esd_dm      = 10**self.spl_esd_dm  (np.log10(proj_sep))  
-        #sigma_s     = 10**self.spl_sigma_s (np.log10(proj_sep))
-        #sigma_dm    = 10**self.spl_sigma_dm(np.log10(proj_sep))         
-
-
-    #def _spl_get_esd(self, logmstel, logmh, lconc):
-    #    self.hp             = halo(logmh, lconc, omg_m=self.omg_m)
-    #    self.stel           = stellar(logmstel)
-    #    #self.spl_Rarr       = np.logspace(-3,1,100)
-    #    _esd_s              = self.stel.esd_deVaucouleurs(self.spl_Rarr)   
-    #    _esd_dm             = self.hp.esd_nfw(self.spl_Rarr)           
-    #    _sigma_s            = self.stel.sigma_deVaucouleurs(self.spl_Rarr) 
-    #    _sigma_dm           = self.hp.sigma_nfw(self.spl_Rarr)         
-
-    #    self.spl_esd_s      = interp1d(np.log10(self.spl_Rarr), np.log10(_esd_s),       kind='cubic')  
-    #    self.spl_esd_dm     = interp1d(np.log10(self.spl_Rarr), np.log10(_esd_dm),      kind='cubic')  
-    #    self.spl_sigma_s    = interp1d(np.log10(self.spl_Rarr), np.log10(_sigma_s),     kind='cubic')  
-    #    self.spl_sigma_dm   = interp1d(np.log10(self.spl_Rarr), np.log10(_sigma_dm),    kind='cubic')
-
-    #    return
 
 
