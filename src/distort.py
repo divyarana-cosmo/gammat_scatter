@@ -18,6 +18,13 @@ class simshear():
         self.omg_m = Om0
         params = dict(H0 = H0, Om0 = Om0, Ob0 = Ob0, Tcmb0 = Tcmb0, Neff = Neff)
         self.Astropy_cosmo = FlatLambdaCDM(**params)
+
+        spl_zred_arr    = np.linspace(0, szredmax, 100)
+        spl_d_com_arr   = self.Astropy_cosmo.comoving_distance(spl_zred_arr).value
+        self.cosmo_comoving_distance = interp1d(spl_zred_arr, spl_d_com_arr, kind='cubic')
+        spl_d_ang_arr   = self.Astropy_cosmo.angular_diameter_distance(spl_zred_arr).value
+        self.cosmo_angular_diameter_distance = interp1d(spl_zred_arr, spl_d_ang_arr, kind='cubic')
+
         colossus_cosmo = cosmology.fromAstropy(self.Astropy_cosmo, sigma8 = sigma8, ns = ns, cosmo_name='my_cosmo')
         self.sigma8 = sigma8
         self.ns = ns
@@ -46,9 +53,14 @@ class simshear():
         gee = 4.301e-9 #km^2 Mpc M_sun^-1 s^-2 gravitational constant
         cee = 3e5 #km s^-1
         # sigma_crit_calculations for a given lense-source pair
-        sigm_crit_inv = self.Astropy_cosmo.angular_diameter_distance(lzred).value * self.Astropy_cosmo.angular_diameter_distance_z1z2(lzred, szred).value * 1.0/self.Astropy_cosmo.angular_diameter_distance(szred).value
+        #in physical units
+        sigma_crit_inv = self.cosmo_comoving_distance(lzred)*(self.cosmo_comoving_distance(szred) - self.cosmo_comoving_distance(lzred))
+        sigma_crit_inv /=self.cosmo_comoving_distance(szred)
+        sigma_crit_inv /=(1+lzred)
+        print(sigma_crit_inv)
         sigm_crit_inv[~idx]=0.0 
         sigm_crit_inv = sigm_crit_inv * 4*np.pi*gee*1.0/cee**2
+        print(lzred, szred,sigm_crit_inv)
         return sigm_crit_inv
 
 
@@ -67,15 +79,16 @@ class simshear():
         return esd_s, esd_dm, sigma_s, sigma_dm 
 
     def _get_g(self, logmstel, logre, logmh, lconc, lzred, szred, proj_sep):
-        if not self.init_spl_sigma_crit_inv:
-            self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(lzred)
-            self.init_spl_sigma_crit_inv = True
-        if not np.isscalar(lzred) and not np.isscalar(szred):
-            get_sigma_crit_inv =   self._get_sigma_crit_inv(lzred, szred)
-        else:
-            get_sigma_crit_inv = self.interp_get_sigma_crit_inv(szred) 
+        #if not self.init_spl_sigma_crit_inv:
+        #    self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(lzred)
+        #    self.init_spl_sigma_crit_inv = True
+        #if not np.isscalar(lzred) and not np.isscalar(szred):
+        #    get_sigma_crit_inv =   self._get_sigma_crit_inv(lzred, szred)
+        #else:
+        #    get_sigma_crit_inv = self.interp_get_sigma_crit_inv(szred) 
 
-        get_sigma_crit_inv = self.interp_get_sigma_crit_inv(szred) 
+        #get_sigma_crit_inv = self.interp_get_sigma_crit_inv(szred) 
+        get_sigma_crit_inv = self._get_sigma_crit_inv(lzred, szred) 
         esd_s, esd_dm, sigma_s, sigma_dm =  self._get_esd(logmstel, logre, logmh, lconc, proj_sep)
         #considering only tangential shear and adding both contributions
         gamma_s     =   esd_s     * get_sigma_crit_inv 
@@ -89,7 +102,7 @@ class simshear():
         lx, ly, lz = self.get_xyz(lra, ldec) 
         sx, sy, sz = self.get_xyz(sra, sdec) 
         #projected separation on the lense plane in physical units
-        proj_sep = self.Astropy_cosmo.angular_diameter_distance(lzred).value * np.sqrt((sx-lx)**2 + (sy-ly)**2 + (sz-lz)**2) # in h-1 Mpc
+        proj_sep = self.cosmo_angular_diameter_distance(lzred) * np.sqrt((sx-lx)**2 + (sy-ly)**2 + (sz-lz)**2) # in h-1 Mpc
        #considering only tangential shear and adding both contributions
         gamma_s, gamma_dm, kappa_s, kappa_dm = self._get_g(logmstel, logre, logmh, lconc, lzred, szred, proj_sep)
         sflag = (gamma_s != -999) & (gamma_dm != -999) & (kappa_s != -999) & (kappa_dm != -999)
@@ -155,36 +168,37 @@ if __name__ == "__main__":
     
     from time import time
     begin = time()
-    gamma_s, gamma_dm, kappa_s, kappa_dm = ss._get_g(logmstel=10, logre=-3, logmh=12, lconc=5.98, lzred=0.3, szred=0.8 + 0.0*proj_sep, proj_sep=proj_sep)
-    
-    g_s = gamma_s/(1-kappa_s)
-    g_dm = gamma_dm/(1-kappa_dm)
-    g_tot = (gamma_s + gamma_dm)/(1-kappa_s-kappa_dm)
+    #gamma_s, gamma_dm, kappa_s, kappa_dm = ss._get_g(logmstel=10, logre=-3, logmh=12, lconc=5.98, lzred=0.3, szred=0.8 + 0.0*proj_sep, proj_sep=proj_sep)
+    #
+    #g_s = gamma_s/(1-kappa_s)
+    #g_dm = gamma_dm/(1-kappa_dm)
+    #g_tot = (gamma_s + gamma_dm)/(1-kappa_s-kappa_dm)
     print( ss._get_sigma_crit_inv(lzred=0.5, szred=1.0))
-    sigcrit_inv = ss._get_sigma_crit_inv(lzred=0.5, szred=1.0)
+    print(ss.cosmo_comoving_distance(1.0))
+    #sigcrit_inv = ss._get_sigma_crit_inv(lzred=0.5, szred=1.0)
    
-    plt.subplot(2,2,1)
-    plt.plot(proj_sep, g_s/(sigcrit_inv*1e12))
-    plt.plot(proj_sep, g_dm/(sigcrit_inv*1e12))
-    plt.plot(proj_sep, g_tot/(sigcrit_inv*1e12))
+    #plt.subplot(2,2,1)
+    #plt.plot(proj_sep, g_s/(sigcrit_inv*1e12))
+    #plt.plot(proj_sep, g_dm/(sigcrit_inv*1e12))
+    #plt.plot(proj_sep, g_tot/(sigcrit_inv*1e12))
 
 
-    from halopy import halo
-    from stellarpy import stellar
+    #from halopy import halo
+    #from stellarpy import stellar
 
-    hp = halo(log_mtot = 12, con_par=5.98, omg_m=0.25)
-    stel = stellar(log_mstel=10, log_re=-3)
+    #hp = halo(log_mtot = 12, con_par=5.98, omg_m=0.25)
+    #stel = stellar(log_mstel=10, log_re=-3)
 
-    esd_s              = stel.esd_deVaucouleurs(proj_sep)/1e12   
-    esd_dm             = hp.esd_nfw(proj_sep)/1e12           
-    plt.plot(proj_sep, esd_s, '.')
-    plt.plot(proj_sep, esd_dm, '.')
-    plt.plot(proj_sep, esd_s+esd_dm,'.')
+    #esd_s              = stel.esd_deVaucouleurs(proj_sep)/1e12   
+    #esd_dm             = hp.esd_nfw(proj_sep)/1e12           
+    #plt.plot(proj_sep, esd_s, '.')
+    #plt.plot(proj_sep, esd_dm, '.')
+    #plt.plot(proj_sep, esd_s+esd_dm,'.')
 
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.legend()
+    #plt.xscale('log')
+    #plt.yscale('log')
+    #plt.legend()
 
-    plt.savefig('test.png', dpi=300)
+    #plt.savefig('test.png', dpi=300)
 
 
