@@ -42,13 +42,13 @@ class simshear():
 
     def _get_sigma_crit_inv(self, lzred, szred):
         "evaluates the lensing efficency geometrical factor"
-        sigm_crit_inv = 0.0*szred + 0.0*lzred
+        sigma_crit_inv = 0.0*szred + 0.0*lzred
         idx =  szred>lzred   # if sources are in foreground then lensing is zero
         if np.isscalar(idx):
             lzred = np.array([lzred])
             szred = np.array([szred])
             idx = np.array([idx])
-            sigm_crit_inv = np.array([sigm_crit_inv])
+            sigma_crit_inv = np.array([sigma_crit_inv])
         # some important constants for the sigma crit computations
         gee = 4.301e-9 #km^2 Mpc M_sun^-1 s^-2 gravitational constant
         cee = 3e5 #km s^-1
@@ -57,11 +57,9 @@ class simshear():
         sigma_crit_inv = self.cosmo_comoving_distance(lzred)*(self.cosmo_comoving_distance(szred) - self.cosmo_comoving_distance(lzred))
         sigma_crit_inv /=self.cosmo_comoving_distance(szred)
         sigma_crit_inv /=(1+lzred)
-        print(sigma_crit_inv)
-        sigm_crit_inv[~idx]=0.0 
-        sigm_crit_inv = sigm_crit_inv * 4*np.pi*gee*1.0/cee**2
-        print(lzred, szred,sigm_crit_inv)
-        return sigm_crit_inv
+        sigma_crit_inv[~idx]=0.0 
+        sigma_crit_inv = sigma_crit_inv * 4*np.pi*gee*1.0/cee**2
+        return sigma_crit_inv
 
 
     def _interp_get_sigma_crit_inv(self, lzred):
@@ -173,7 +171,7 @@ if __name__ == "__main__":
     #g_s = gamma_s/(1-kappa_s)
     #g_dm = gamma_dm/(1-kappa_dm)
     #g_tot = (gamma_s + gamma_dm)/(1-kappa_s-kappa_dm)
-    print( ss._get_sigma_crit_inv(lzred=0.5, szred=1.0))
+    print( ss._get_sigma_crit_inv(lzred=0.5, szred=0.5 + np.linspace(0.1,0.3,10)))
     print(ss.cosmo_comoving_distance(1.0))
     #sigcrit_inv = ss._get_sigma_crit_inv(lzred=0.5, szred=1.0)
    
