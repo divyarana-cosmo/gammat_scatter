@@ -301,7 +301,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--config", help="Configuration file")
     parser.add_argument("--outdir", help="Output filename with pairs information", default="debug")
-    parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=123)
+    parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=111111001)
     parser.add_argument("--no_shape_noise", help="for removing shape noise-testing purpose", type=bool, default=False)
     parser.add_argument("--no_shear", help="for removing shear-testing purpose", type=bool, default=False)
     parser.add_argument("--test_case", help="testing the ideal case", type=bool, default=False)

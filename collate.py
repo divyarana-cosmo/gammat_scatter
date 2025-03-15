@@ -1,77 +1,69 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from glob import glob
-import sys
-import pandas as pd
 
 
-logMmin =   float(sys.argv[1])
-logMmax =   float(sys.argv[2])
-
-flist   =   glob('/home/rana/github_0/gammat_scatter/output/debug_z_0.1_0.4/simed_sources.dat_lmstelmin_%2.2f_lmstelmax_%2.2f_with_shape_noise_w_jacks_jk_*'%(logMmin, logMmax))
-Njacks  =   int(len(flist))
+Njacks =100
 
 
-data    = np.array([])
-xdata    = np.array([])
-rbins   = np.array([])
-#23-sumd_dsigma_num 24-sumd_dsigma_den
-for cnt in range(Njacks):
-    num     = 0.0
-    den     = 0.0
-    xnum    = 0.0
- 
-    for nn,fil in enumerate(flist):
-        if nn==cnt:
-            continue
-        dat    =   pd.read_csv(fil, delim_whitespace=1)
-        num    += dat['23-sumd_dsigma_num']
-        den    += dat['24-sumd_dsigma_den']
-        xnum   += (dat['16-dsigmax'] * dat['24-sumd_dsigma_den'])
+logMstelarr = [9.0, 9.5, 10.0,10.5]
+#logMstelarr = [10.0,10.5]
+for logMstelmin, logMstelmax in zip(logMstelarr[:-1], logMstelarr[1:]):
+    print(logMstelmin, logMstelmax)
+    dsigmaarr = np.array([])
+    xdsigmaarr = np.array([])
+    for jk in range(Njacks):
+        num=0; xnum=0; den=0
+        for ii in range(Njacks):
+            if ii==jk :
+                continue
+            outdir = 'output/debug_z_0.1_0.4/'
+            file = 'simed_sources.dat_lmstelmin_%2.2f_lmstelmax_%2.2f_with_shape_noise_w_jacks_jk_%d'%(logMstelmin, logMstelmax, ii)
+            data = np.loadtxt(outdir + file, skiprows=1)
+            #0-rmin/2+rmax/2 1-gammat 2-gammatsq 3-sigma_gammat 4-SN_Errgammat 5-gammax 6-gammaxsq 7-sigma_gammax 8-SN_Errgammax 9-gammat_inp 10-gammat_inp_bary 11-gammat_inp_dm 12-sumd_wls 13-dsigma 14-dsigmasq 15-SN_Errdsigmat 16-dsigmax 17-dsigmaxsq 18-SN_Errdsigmax 19-dsigmat_inp 20-dsigmat_inp_bary 21-dsigmat_inp_dm 22-sumd_dsigma_wls 23-sumd_dsigma_num 24-sumd_dsigma_den
+            
+            num +=data[:,13]*data[:,22]
+            xnum+=data[:,16]*data[:,22]
+            den +=data[:,22]
+            rbin = data[:,0]*1e3
+        dsigmaarr  = np.append(dsigmaarr,num/den)
+        xdsigmaarr = np.append(xdsigmaarr,xnum/den)
 
-        rbins               = dat['0-rmin/2+rmax/2'].values
+    dsigmaarr   = dsigmaarr.reshape(Njacks,-1)
+    xdsigmaarr  = xdsigmaarr.reshape(Njacks,-1)
+    dsigma      = np.mean(dsigmaarr,axis=0)        
+    xdsigma     = np.mean(xdsigmaarr,axis=0)        
     
-    data  = np.append(data,num/den)
-    xdata = np.append(xdata,xnum/den)
+    cov = np.zeros((len(rbin), len(rbin)))
+    xcov = np.zeros((len(rbin), len(rbin)))
+    # calculating the covariances
+    for ii in range(len(rbin)):
+        for jj in range(len(rbin)):
+            cov[ii,jj] = np.mean((dsigmaarr[:,ii] - dsigma[ii])*(dsigmaarr[:,jj] - dsigma[jj]))
+            xcov[ii,jj] = np.mean((xdsigmaarr[:,ii] - xdsigma[ii])*(xdsigmaarr[:,jj] - xdsigma[jj]))
+    
+    cov *=(Njacks -1)
+    xcov *=(Njacks -1)
+    dsigmaerr   = np.diag(cov)**0.5        
+    xdsigmaerr  = np.diag(xcov)**0.5        
+    
+    # saving the output
+    np.savetxt(outdir + './dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMstelmin, logMstelmax), np.transpose([rbin/1e3, dsigma, dsigmaerr, xdsigma, xdsigmaerr]), header='Rp[h-1 Mpc] dsigma dsigmaerr xdsigma xdsigmaerr')
+    np.savetxt(outdir + './cov_dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMstelmin, logMstelmax), cov)
+    np.savetxt(outdir + './xcov_dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMstelmin, logMstelmax), xcov)
 
+    plt.subplot(2,2,1)
+    plt.errorbar(rbin, dsigma, yerr=dsigmaerr, fmt='.', capsize=3)
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.subplot(2,2,2)
+    icov  = np.linalg.inv(xcov)*(Njacks - len(rbin) -2)/(Njacks -1)
+    chisq = np.dot(xdsigma, np.dot(icov, xdsigma))
+    #chisq = sum(xdsigma**2 / xdsigmaerr**2)#np.dot(xdsigma, np.dot(icov, xdsigma))
+    from scipy.stats import chi2
+    pval = chi2.sf(chisq,len(rbin))
+    plt.errorbar(rbin, xdsigma*rbin/1e3, yerr=xdsigmaerr*rbin/1e3, fmt='.', capsize=3, label='%2.2f'%pval)
+    plt.axhline(0.0, color='black')
+    plt.xscale('log')
+    plt.legend()
 
-
-data = data.reshape(Njacks,len(rbins))
-xdata = xdata.reshape(Njacks,len(rbins))
-
-
-dsigma      =   np.mean(data, axis=0)
-xdsigma      =   np.mean(xdata, axis=0)
-cov         =   np.zeros((len(rbins), len(rbins)))
-xcov         =   np.zeros((len(rbins), len(rbins)))
-
-for ii in range(len(rbins)):
-    for jj in range(len(rbins)):
-        cov[ii,jj] = np.mean((data[:,ii]-dsigma[ii]) * (data[:,jj]-dsigma[jj]))
-        xcov[ii,jj] = np.mean((xdata[:,ii]-xdsigma[ii]) * (xdata[:,jj]-xdsigma[jj]))
-
-cov = cov * (Njacks - 1)
-dsigmaerr = np.diag(cov)**0.5
-xcov = xcov * (Njacks - 1)
-xdsigmaerr = np.diag(xcov)**0.5
-
-
-np.savetxt('output/debug_z_0.1_0.4/dsigma_logMmin_%2.2f_logMmax_%2.2f.dat'%(logMmin, logMmax), np.transpose([rbins, dsigma, dsigmaerr, xdsigma, xdsigmaerr]))
-np.savetxt('output/debug_z_0.1_0.4/cov_dsigma_logMmin_%2.2f_logMmax_%2.2f.dat'%(logMmin, logMmax), cov)
-
-
-#plotting
-
-
-plt.subplot(2,2,1)
-plt.errorbar(rbins, dsigma, yerr=dsigmaerr, fmt='.', capsize=3)
-plt.xscale('log')
-plt.yscale('log')
-
-plt.subplot(2,2,2)
-plt.errorbar(rbins, xdsigma, yerr=xdsigmaerr, fmt='.', capsize=3)
-plt.axhline(0.0, color='black')
-plt.xscale('log')
-
-plt.savefig('output/debug_z_0.1_0.4/dsigma_logMmin_%2.2f_logMmax_%2.2f.dat.png'%(logMmin, logMmax),dpi=300)
-
+plt.savefig('test.png', dpi=300)
