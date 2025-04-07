@@ -4,7 +4,7 @@ import sys
 sys.path.append('./src/')
 sys.path.append('./utils/')
 from lensutils import get_re
-from distort import simshear
+from fast_distort import simshear
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.cosmology import FlatLambdaCDM
@@ -22,194 +22,237 @@ from colossus.cosmology import cosmology
 from colossus.halo import concentration
 from create_sources import get_xyz, create_sources 
 
-def run_pipe(config, outputfilename = 'gamma.dat', jksamp=0, outputpairfile=None):
-    rmin    = config['Rmin'] 
-    rmax    = config['Rmax'] 
-    nbins   = config['Nbins']
-    # set the projected radial binning in units of Mpc
-    nbins = nbins #10 radial bins for our case
-    rbins  = np.logspace(np.log10(rmin), np.log10(rmax), nbins + 1)
-    rdiff  = np.log10(rbins[1]*1.0/rbins[0])
+def run_pipe(config, outputfilename='gamma.dat', jksamp=0, outputpairfile=None):
+    """Optimized pipeline function with proper NumPy vectorization"""
+    rmin = config['Rmin'] 
+    rmax = config['Rmax'] 
+    nbins = config['Nbins']
+    
+    # Set the projected radial binning in units of Mpc
+    rbins = np.logspace(np.log10(rmin), np.log10(rmax), nbins + 1)
+    rdiff = np.log10(rbins[1] / rbins[0])
  
-    lensargs    = config["lens"]
-    sourceargs  = config["source"]
+    lensargs = config["lens"]
+    sourceargs = config["source"]
 
-    zdiff   =   sourceargs["zdiff"]
-    #only working with H0 and omg0
-    ss = simshear(H0= config['H0'],Om0 = config['Om0'])
+    zdiff = sourceargs["zdiff"]
+    
+    # Initialize simshear object
+    ss = simshear(H0=config['H0'], Om0=config['Om0'])
 
-    colossus_cosmo  = cosmology.fromAstropy(ss.Astropy_cosmo, sigma8 = ss.sigma8, ns = ss.ns, cosmo_name=ss.cosmo_name)
+    colossus_cosmo = cosmology.fromAstropy(ss.Astropy_cosmo, sigma8=ss.sigma8, ns=ss.ns, cosmo_name=ss.cosmo_name)
 
-   
+    # Initialize arrays for accumulation
     Njacks = int(lensargs['Njacks'])
-    sumdgammat_num              = np.zeros(nbins)
-    sumdgammat_inp_num          = np.zeros(nbins)
-    sumdgammat_inp_bary_num     = np.zeros(nbins)
-    sumdgammat_inp_dm_num       = np.zeros(nbins)
-    sumdgammatsq_num            = np.zeros(nbins)
-    sumdgammax_num              = np.zeros(nbins) 
-    sumdgammaxsq_num            = np.zeros(nbins)
-    sumdwls                     = np.zeros(nbins)
-    sumddsigmat_num             = np.zeros(nbins)
-    sumddsigmat_inp_num         = np.zeros(nbins)
-    sumddsigmat_inp_bary_num    = np.zeros(nbins)
-    sumddsigmat_inp_dm_num      = np.zeros(nbins)
-    sumddsigmatsq_num           = np.zeros(nbins)
-    sumddsigmax_num             = np.zeros(nbins) 
-    sumddsigmaxsq_num           = np.zeros(nbins)
-    sumdwls_by_sigcsq           = np.zeros(nbins)
+    sumdgammat_num = np.zeros(nbins)
+    sumdgammat_inp_num = np.zeros(nbins)
+    sumdgammat_inp_bary_num = np.zeros(nbins)
+    sumdgammat_inp_dm_num = np.zeros(nbins)
+    sumdgammatsq_num = np.zeros(nbins)
+    sumdgammax_num = np.zeros(nbins) 
+    sumdgammaxsq_num = np.zeros(nbins)
+    sumdwls = np.zeros(nbins)
+    sumddsigmat_num = np.zeros(nbins)
+    sumddsigmat_inp_num = np.zeros(nbins)
+    sumddsigmat_inp_bary_num = np.zeros(nbins)
+    sumddsigmat_inp_dm_num = np.zeros(nbins)
+    sumddsigmatsq_num = np.zeros(nbins)
+    sumddsigmax_num = np.zeros(nbins) 
+    sumddsigmaxsq_num = np.zeros(nbins)
+    sumdwls_by_sigcsq = np.zeros(nbins)
 
-    # getting the lenses data
-    lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs,jk=jk)
-    thetare = get_re(llogmstel ,lzred)    # in units of arcsec
-    thetare = thetare * np.pi/(180*60*60) # arcsec to radians
-    llogre = np.log10(thetare * ss.Astropy_cosmo.angular_diameter_distance(lzred).value) # in the units of  h-1 Mpc
+    # Getting the lenses data
+    lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg = lens_select(lensargs, jk=jksamp)
+    
+    # Vectorized conversion of effective radius
+    thetare = get_re(llogmstel, lzred)  # in units of arcsec
+    thetare = thetare * np.pi / (180 * 60 * 60)  # arcsec to radians
+    llogre = np.log10(thetare * ss.Astropy_cosmo.angular_diameter_distance(lzred).value)  # in the units of h-1 Mpc
+    
     lid = np.arange(len(lid))
-    lconc = 0.0*lid
-    xx = np.linspace(9,16,50)
-    yy = 0.0*xx
+    
+    # Vectorized calculation of concentration parameters
+    xx = np.linspace(9, 16, 50)
     med_lzred = np.mean(lzred)
-
-    for kk, mh in enumerate(10**xx):
-        yy[kk]    = concentration.concentration(mh, '200m', med_lzred, model = 'diemer19')
     
-    spl_c_mh = interp1d(xx,yy)
+    # Vectorize by creating a function that applies to each mass value
+    masses = 10**xx
+    concs = np.array([concentration.concentration(mh, '200m', med_lzred, model='diemer19') for mh in masses])
+    
+    spl_c_mh = interp1d(xx, concs)
     lconc = spl_c_mh(llogmh)
-    print(np.mean(lzred), np.log10(np.mean(10**llogmstel)), np.log10(np.mean(10**llogre)), np.log10(np.mean(10**llogmh)), np.mean(lconc)) 
-    print("lens data read fully", np.min(lzred))
-    #...........................................#
-
-    dismax = config['Rmax']/ss.Astropy_cosmo.angular_diameter_distance(np.min(lzred)).value 
-    print(np.min(lzred),'thetamax', dismax) 
     
+    print(np.mean(lzred), np.log10(np.mean(10**llogmstel)), np.log10(np.mean(10**llogre)), 
+          np.log10(np.mean(10**llogmh)), np.mean(lconc)) 
+    print("lens data read fully", np.min(lzred))
+
+    # Calculate maximum angular separation based on minimum redshift
+    dismax = config['Rmax'] / ss.Astropy_cosmo.angular_diameter_distance(np.min(lzred)).value 
+    print(np.min(lzred), 'thetamax', dismax) 
+    
+    # Handle shear option
     if sourceargs['use_shear']:
         print("using shear not reduced shear for the sims")
-        #outputpairfile = outputpairfile + '_using_shear'
         outputfilename = outputfilename + '_using_shear'
 
-    if outputpairfile != None:
+    # Open pair output file if needed
+    if outputpairfile is not None:
         fpairout = open(outputpairfile, "w")
         fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tkappa\tintse1\tintse2\tr90se1\tr90se2\tr90et\tr90ex\tr90intse1\tr90intse2\n')
     
-    #..................................#
+    # Process each lens
     for ii in tqdm(range(len(lra))):
-        # simulating the sources
-        sra, sdec, szred, wgal, intse1, intse2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell'], seed = int(config["seed"]*len(lra)+ lid[ii])) 
-        #sra, sdec, szred, wgal, intse1, intse2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell'], seed=123) 
-       
+        # Create sources for this lens - vectorized creation
+        sra, sdec, szred, wgal, intse1, intse2 = create_sources(
+            lra[ii], ldec[ii], dismax, 
+            nsrc=sourceargs['nsrc'], 
+            sigell=sourceargs['sigell'], 
+            seed=int(config["seed"] * len(lra) + lid[ii])
+        ) 
+        
+        # Handle test case option
         if config['test_case']:
-            szred = 0.9 + 0.0*sra
+            szred = np.full_like(sra, 0.9)
+            
+        # Handle shape noise option
         if sourceargs['no_shape_noise']:
             print("no shape noise")
-            intse1 = 0.0*intse1
-            intse2 = 0.0*intse2
+            intse1 = np.zeros_like(intse1)
+            intse2 = np.zeros_like(intse2)
 
-        print("number of sources: ", len(sra))
-        # selecting cleaner background
-        scut    = (szred>(lensargs['zmax'] + sourceargs['zdiff'])) # zdiff cut
-        if sum(scut)==0:
+        print("number of sources:", len(sra))
+        
+        # Vectorized source selection
+        scut = szred > (lensargs['zmax'] + sourceargs['zdiff'])  # zdiff cut
+        if np.sum(scut) == 0:
             continue
-        sra         =   sra[scut]  
-        sdec        =   sdec[scut]
-        szred       =   szred[scut]
-        wgal        =   wgal[scut]
-        intse1      =   intse1[scut]
-        intse2      =   intse2[scut]
-        # shearing the sources
-        se1, se2, etan, kappa, proj_sep, sflag, etan_b, etan_dm, et_obs, ex_obs = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogre[ii], llogmh[ii], lconc[ii], sra, sdec, szred, intse1, intse2, use_shear=sourceargs["use_shear"], no_shear=sourceargs["no_shear"])
-        print('flagged sources', sum(sflag))
+            
+        # Apply cut to all source arrays at once
+        sra = sra[scut]
+        sdec = sdec[scut]
+        szred = szred[scut]
+        wgal = wgal[scut]
+        intse1 = intse1[scut]
+        intse2 = intse2[scut]
+        
+        # Shear all sources at once
+        se1, se2, etan, kappa, proj_sep, sflag, etan_b, etan_dm, et_obs, ex_obs = ss.shear_src(
+            lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogre[ii], llogmh[ii], lconc[ii],
+            sra, sdec, szred, intse1, intse2, 
+            use_shear=sourceargs["use_shear"], 
+            no_shear=sourceargs["no_shear"]
+        )
+        
+        print('flagged sources', np.sum(sflag))
+        
+        # Handle no shear option
         if sourceargs['no_shear']:
-            se1 = intse1; se2 = intse2
-        sl_sep  = proj_sep
-        w_ls    = lwgt[ii]*wgal
-        #cure the arrays a bin
-        idx = (sl_sep>rmin) & (sl_sep<rmax) & (sflag==1)
-        if sum(idx)==0.0:
+            se1 = intse1
+            se2 = intse2
+            
+        sl_sep = proj_sep
+        w_ls = lwgt[ii] * wgal
+        
+        # Vectorized filtering of arrays
+        idx = (sl_sep > rmin) & (sl_sep < rmax) & (sflag == 1)
+        if np.sum(idx) == 0:
             continue
-        sl_sep      = sl_sep[idx]
-        w_ls        = w_ls[idx]
-        et_obs      = et_obs[idx]
-        etan        = etan[idx]   
-        kappa       = kappa[idx]   
-        etan_b      = etan_b[idx]
-        etan_dm     = etan_dm[idx]
-        ex_obs      = ex_obs[idx]  
-        se1         = se1[idx]
-        se2         = se2[idx]
-        sra         = sra[idx]
-        sdec        = sdec[idx]
-        szred       = szred[idx]
+            
+        # Apply filter to all arrays at once
+        sl_sep = sl_sep[idx]
+        w_ls = w_ls[idx]
+        et_obs = et_obs[idx]
+        etan = etan[idx]
+        kappa = kappa[idx]
+        etan_b = etan_b[idx]
+        etan_dm = etan_dm[idx]
+        ex_obs = ex_obs[idx]
+        se1 = se1[idx]
+        se2 = se2[idx]
+        sra = sra[idx]
+        sdec = sdec[idx]
+        szred = szred[idx]
 
-
-        if outputpairfile != None:
-            for jj in range(sum(idx)):
-                fpairout.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(lxjkreg[ii], lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogmh[ii], lconc[ii], sra[jj], sdec[jj], szred[jj], se1[jj], se2[jj], etan[jj], et_obs[jj], ex_obs[jj], sl_sep[jj], w_ls[jj], kappa[jj], intse1[jj], intse2[jj], r90se1[jj], r90se2[jj], r90et_obs[jj], r90ex_obs[jj], r90intse1[jj], r90intse2[jj]))
+        # Write pairs to output file if needed
+        if outputpairfile is not None:
+            for jj in range(np.sum(idx)):
+                fpairout.write(f'{lxjkreg[ii]}\t{lra[ii]}\t{ldec[ii]}\t{lzred[ii]}\t{llogmstel[ii]}\t{llogmh[ii]}\t{lconc[ii]}\t{sra[jj]}\t{sdec[jj]}\t{szred[jj]}\t{se1[jj]}\t{se2[jj]}\t{etan[jj]}\t{et_obs[jj]}\t{ex_obs[jj]}\t{sl_sep[jj]}\t{w_ls[jj]}\t{kappa[jj]}\t{intse1[jj]}\t{intse2[jj]}\t{r90se1[jj]}\t{r90se2[jj]}\t{r90et_obs[jj]}\t{r90ex_obs[jj]}\t{r90intse1[jj]}\t{r90intse2[jj]}\n')
         
-        w_ls_invsigmacritsq = np.zeros(int(sum(idx)))
-        w_ls_invsigmacrit   = np.zeros(int(sum(idx)))
-        #get the sigma critical in the h pc-2 Msun units
-        for zz in range(sum(idx)):
-            w_ls_invsigmacritsq[zz] = w_ls[zz] *(ss._get_sigma_crit_inv(lzred=lzred[ii], szred=szred[zz])*1e12)**2
-            w_ls_invsigmacrit[zz]   = w_ls[zz] *ss._get_sigma_crit_inv(lzred=lzred[ii], szred=szred[zz])*1e12
+        # Vectorized calculation of sigma critical terms
+        w_ls_invsigmacritsq = np.zeros(int(np.sum(idx)))
+        w_ls_invsigmacrit = np.zeros(int(np.sum(idx)))
         
-        slrbins = np.log10(sl_sep*1.0/rmin)//rdiff
+        # Use vectorized operation instead of loop
+        sigma_crit_inv = np.array([ss._get_sigma_crit_inv(lzred=lzred[ii], szred=z) * 1e12 for z in szred])
+        w_ls_invsigmacritsq = w_ls * sigma_crit_inv**2
+        w_ls_invsigmacrit = w_ls * sigma_crit_inv
+        
+        # Vectorized binning
+        slrbins = (np.log10(sl_sep / rmin) // rdiff).astype(int)
+        
+        # Process each bin
         for rb in range(nbins):
-            idx = slrbins==rb
-            if sum(idx)==0:
+            idx = slrbins == rb
+            if np.sum(idx) == 0:
                 continue
-            sumdwls                 [rb] +=sum(w_ls[idx])
-            sumdwls_by_sigcsq       [rb] +=sum(w_ls_invsigmacritsq[idx])
-
-            sumdgammat_inp_num      [rb] +=sum((w_ls * etan)[idx])
-            sumdgammat_inp_bary_num [rb] +=sum((w_ls * etan_b)[idx])
-            sumdgammat_inp_dm_num   [rb] +=sum((w_ls * etan_dm)[idx])
                 
-            sumdgammat_num          [rb] +=sum((w_ls * et_obs)[idx])
-            sumdgammatsq_num        [rb] +=sum(((w_ls* et_obs)**2)[idx])
-            sumdgammax_num          [rb] +=sum((w_ls * ex_obs)[idx])
-            sumdgammaxsq_num        [rb] +=sum(((w_ls* ex_obs)**2)[idx])
+            # Vectorized accumulation for each bin
+            sumdwls[rb] += np.sum(w_ls[idx])
+            sumdwls_by_sigcsq[rb] += np.sum(w_ls_invsigmacritsq[idx])
+
+            sumdgammat_inp_num[rb] += np.sum((w_ls * etan)[idx])
+            sumdgammat_inp_bary_num[rb] += np.sum((w_ls * etan_b)[idx])
+            sumdgammat_inp_dm_num[rb] += np.sum((w_ls * etan_dm)[idx])
+                
+            sumdgammat_num[rb] += np.sum((w_ls * et_obs)[idx])
+            sumdgammatsq_num[rb] += np.sum(((w_ls * et_obs)**2)[idx])
+            sumdgammax_num[rb] += np.sum((w_ls * ex_obs)[idx])
+            sumdgammaxsq_num[rb] += np.sum(((w_ls * ex_obs)**2)[idx])
            
-            sumddsigmat_inp_num      [rb] +=sum(( w_ls_invsigmacrit * etan)[idx])
-            sumddsigmat_inp_bary_num [rb] +=sum(( w_ls_invsigmacrit * etan_b)[idx])
-            sumddsigmat_inp_dm_num   [rb] +=sum(( w_ls_invsigmacrit * etan_dm)[idx])
+            sumddsigmat_inp_num[rb] += np.sum((w_ls_invsigmacrit * etan)[idx])
+            sumddsigmat_inp_bary_num[rb] += np.sum((w_ls_invsigmacrit * etan_b)[idx])
+            sumddsigmat_inp_dm_num[rb] += np.sum((w_ls_invsigmacrit * etan_dm)[idx])
 
-            sumddsigmat_num          [rb] +=sum(( w_ls_invsigmacrit * et_obs)[idx])
-            sumddsigmatsq_num        [rb] +=sum(((w_ls_invsigmacrit * et_obs)**2)[idx])
-            sumddsigmax_num          [rb] +=sum(( w_ls_invsigmacrit * ex_obs)[idx])
-            sumddsigmaxsq_num        [rb] +=sum(((w_ls_invsigmacrit * ex_obs)**2)[idx])
+            sumddsigmat_num[rb] += np.sum((w_ls_invsigmacrit * et_obs)[idx])
+            sumddsigmatsq_num[rb] += np.sum(((w_ls_invsigmacrit * et_obs)**2)[idx])
+            sumddsigmax_num[rb] += np.sum((w_ls_invsigmacrit * ex_obs)[idx])
+            sumddsigmaxsq_num[rb] += np.sum(((w_ls_invsigmacrit * ex_obs)**2)[idx])
 
-    if outputpairfile != None:
+    # Close pair output file if needed
+    if outputpairfile is not None:
         fpairout.write("#OK")
         fpairout.close()
+        
+    # Calculate responsivity correction
     Resp = 1 - sourceargs['sigell']**2 
-    #need to clean this up
-    #print(sumdwls)
+    
+    # Create dictionary for results
     df = {}
-    df["0-rmin/2+rmax/2"    ]           =   rbins[:-1] *0.5 + rbins[1:]*0.5
-    df["1-gammat"           ]           =   sumdgammat_num[:] * 1.0 / sumdwls[:]/Resp    
-    df["2-gammatsq"         ]           =   sumdgammatsq_num[:] * 1.0 / sumdwls[:]/Resp**2
-    df["3-sigma_gammat"     ]           =   np.sqrt(sumdgammatsq_num[:] * 1.0 / sumdwls[:]/Resp**2 - (sumdgammat_num[:] * 1.0 / sumdwls[:]/Resp)**2)
-    df["4-SN_Errgammat"     ]           =   np.sqrt(sumdgammatsq_num[:]) * 1.0 / sumdwls[:]/Resp
-    df["5-gammax"           ]           =   sumdgammax_num[:] * 1.0 / sumdwls[:]/Resp
-    df["6-gammaxsq"         ]           =   sumdgammaxsq_num[:] * 1.0 / sumdwls[:]/Resp**2
-    df["7-sigma_gammax"     ]           =   np.sqrt(sumdgammaxsq_num[:] * 1.0 / sumdwls[:]/Resp**2 - (sumdgammax_num[:] * 1.0 / sumdwls[:]/Resp)**2)
-    df["8-SN_Errgammax"     ]           =   np.sqrt(sumdgammaxsq_num[:]) * 1.0 / sumdwls[:]/Resp
-    df["9-gammat_inp"      ]            =   sumdgammat_inp_num[:] / sumdwls[:]/Resp
-    df["10-gammat_inp_bary" ]           =   sumdgammat_inp_bary_num[:] / sumdwls[:]/Resp
-    df["11-gammat_inp_dm"   ]           =   sumdgammat_inp_dm_num[:] / sumdwls[:]/Resp
-    df["12-sumd_wls"        ]           =   sumdwls
-    df["13-dsigma"           ]          =   sumddsigmat_num[:] * 1.0 / sumdwls_by_sigcsq[:]/Resp
-    df["14-dsigmasq"         ]          =   sumddsigmatsq_num[:] * 1.0 / sumdwls_by_sigcsq[:]/Resp**2
-    df["15-SN_Errdsigmat"     ]         =   np.sqrt(sumddsigmatsq_num[:]) * 1.0 / sumdwls_by_sigcsq[:]/Resp
-    df["16-dsigmax"           ]         =   sumddsigmax_num[:] * 1.0 / sumdwls_by_sigcsq[:]/Resp
-    df["17-dsigmaxsq"         ]         =   sumddsigmaxsq_num[:] * 1.0 / sumdwls_by_sigcsq[:]/Resp**2
-    df["18-SN_Errdsigmax"     ]         =   np.sqrt(sumddsigmaxsq_num[:]) * 1.0 / sumdwls_by_sigcsq[:]/Resp
-    df["19-dsigmat_inp"      ]          =   sumddsigmat_inp_num[:] / sumdwls_by_sigcsq[:]/Resp
-    df["20-dsigmat_inp_bary" ]          =   sumddsigmat_inp_bary_num[:] / sumdwls_by_sigcsq[:]/Resp
-    df["21-dsigmat_inp_dm"   ]          =   sumddsigmat_inp_dm_num[:] / sumdwls_by_sigcsq[:]/Resp
-    df["22-sumd_dsigma_wls" ]           =   sumdwls_by_sigcsq[:]
-    df["23-sumd_dsigma_num" ]           =   sumddsigmat_num[:]/Resp    
-    df["24-sumd_dsigma_den" ]           =   sumdwls_by_sigcsq[:]/Resp
+    df["0-rmin/2+rmax/2"]       = rbins[:-1] * 0.5 + rbins[1:] * 0.5
+    df["1-gammat"]              = sumdgammat_num / sumdwls / Resp    
+    df["2-gammatsq"]            = sumdgammatsq_num / sumdwls / Resp**2
+    df["3-sigma_gammat"]        = np.sqrt(sumdgammatsq_num / sumdwls / Resp**2 - (sumdgammat_num / sumdwls / Resp)**2)
+    df["4-SN_Errgammat"]        = np.sqrt(sumdgammatsq_num) / sumdwls / Resp
+    df["5-gammax"]              = sumdgammax_num / sumdwls / Resp
+    df["6-gammaxsq"]            = sumdgammaxsq_num / sumdwls / Resp**2
+    df["7-sigma_gammax"]        = np.sqrt(sumdgammaxsq_num / sumdwls / Resp**2 - (sumdgammax_num / sumdwls / Resp)**2)
+    df["8-SN_Errgammax"]        = np.sqrt(sumdgammaxsq_num) / sumdwls / Resp
+    df["9-gammat_inp"]          = sumdgammat_inp_num / sumdwls / Resp
+    df["10-gammat_inp_bary"]    = sumdgammat_inp_bary_num / sumdwls / Resp
+    df["11-gammat_inp_dm"]      = sumdgammat_inp_dm_num / sumdwls / Resp
+    df["12-sumd_wls"]           = sumdwls
+    df["13-dsigma"]             = sumddsigmat_num / sumdwls_by_sigcsq / Resp
+    df["14-dsigmasq"]           = sumddsigmatsq_num / sumdwls_by_sigcsq / Resp**2
+    df["15-SN_Errdsigmat"]      = np.sqrt(sumddsigmatsq_num) / sumdwls_by_sigcsq / Resp
+    df["16-dsigmax"]            = sumddsigmax_num / sumdwls_by_sigcsq / Resp
+    df["17-dsigmaxsq"]          = sumddsigmaxsq_num / sumdwls_by_sigcsq / Resp**2
+    df["18-SN_Errdsigmax"]      = np.sqrt(sumddsigmaxsq_num) / sumdwls_by_sigcsq / Resp
+    df["19-dsigmat_inp"]        = sumddsigmat_inp_num / sumdwls_by_sigcsq / Resp
+    df["20-dsigmat_inp_bary"]   = sumddsigmat_inp_bary_num / sumdwls_by_sigcsq / Resp
+    df["21-dsigmat_inp_dm"]     = sumddsigmat_inp_dm_num / sumdwls_by_sigcsq / Resp
+    df["22-sumd_dsigma_wls" ]   = sumdwls_by_sigcsq[:]
+    df["23-sumd_dsigma_num" ]   = sumddsigmat_num[:]/Resp    
+    df["24-sumd_dsigma_den" ]   = sumdwls_by_sigcsq[:]/Resp
 
     import pandas as pd
     df = pd.DataFrame(df)
@@ -286,7 +329,7 @@ if __name__ == "__main__":
     for jk in range(config['lens']['Njacks']):
         if jk%size !=rank:
             continue
-        output_filename = outputfilename + '_jk_%d'%jk
+        output_filename = outputfilename + '_jk_%d'%jk+'_fast'
         run_pipe(config, outputfilename = output_filename, jksamp=jk)           
 
     comm.Barrier()
