@@ -12,7 +12,6 @@ from scipy.interpolate import interp1d
 class simshear():
     "simulated the shear for a given configuration of dark matter and stellar profiles"
     def __init__(self, H0=100, Om0=0.25, Ob0=0.044, Tcmb0=2.7255, Neff=3.046, sigma8=0.8, ns=0.95, lzredmin=0.0, lzredmax=1.0, szredmax=4.0):
-
         "initialize the parameters"
         #fixing the cosmology
         self.omg_m = Om0
@@ -68,6 +67,7 @@ class simshear():
         return interp1d(xx, yy, kind='cubic')
 
     def _get_esd(self, logmstel, logre, logmh, lconc, proj_sep):
+        "provides the esd and sigma in comoving units"
         self.hp    = halo(logmh, lconc, omg_m=self.omg_m)
         self.stel  = stellar(logmstel, log_re = logre)
         esd_s      = self.stel.esd_deVaucouleurs(proj_sep)   
@@ -77,22 +77,14 @@ class simshear():
         return esd_s, esd_dm, sigma_s, sigma_dm 
 
     def _get_g(self, logmstel, logre, logmh, lconc, lzred, szred, proj_sep):
-        #if not self.init_spl_sigma_crit_inv:
-        #    self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(lzred)
-        #    self.init_spl_sigma_crit_inv = True
-        #if not np.isscalar(lzred) and not np.isscalar(szred):
-        #    get_sigma_crit_inv =   self._get_sigma_crit_inv(lzred, szred)
-        #else:
-        #    get_sigma_crit_inv = self.interp_get_sigma_crit_inv(szred) 
-
-        #get_sigma_crit_inv = self.interp_get_sigma_crit_inv(szred) 
         get_sigma_crit_inv = self._get_sigma_crit_inv(lzred, szred) 
-        esd_s, esd_dm, sigma_s, sigma_dm =  self._get_esd(logmstel, logre, logmh, lconc, proj_sep)
+        # we are working in physical units
+        esd_s, esd_dm, sigma_s, sigma_dm =  self._get_esd(logmstel, logre +np.log10(1+lzred), logmh, lconc, proj_sep*(1+lzred))
         #considering only tangential shear and adding both contributions
-        gamma_s     =   esd_s     * get_sigma_crit_inv 
-        gamma_dm    =   esd_dm    * get_sigma_crit_inv
-        kappa_s     =   sigma_s   * get_sigma_crit_inv
-        kappa_dm    =   sigma_dm  * get_sigma_crit_inv
+        gamma_s     =   (1+lzred)**2    *   esd_s     * get_sigma_crit_inv 
+        gamma_dm    =   (1+lzred)**2    *   esd_dm    * get_sigma_crit_inv
+        kappa_s     =   (1+lzred)**2    *   sigma_s   * get_sigma_crit_inv
+        kappa_dm    =   (1+lzred)**2    *   sigma_dm  * get_sigma_crit_inv
         return gamma_s, gamma_dm, kappa_s, kappa_dm
 
     def get_g(self, lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, use_shear=False, no_shear=False):
@@ -199,4 +191,12 @@ if __name__ == "__main__":
 
     #plt.savefig('test.png', dpi=300)
 
+#if not self.init_spl_sigma_crit_inv:
+        #    self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(lzred)
+        #    self.init_spl_sigma_crit_inv = True
+        #if not np.isscalar(lzred) and not np.isscalar(szred):
+        #    get_sigma_crit_inv =   self._get_sigma_crit_inv(lzred, szred)
+        #else:
+        #    get_sigma_crit_inv = self.interp_get_sigma_crit_inv(szred) 
 
+        #get_sigma_crit_inv = self.interp_get_sigma_crit_inv(szred)
