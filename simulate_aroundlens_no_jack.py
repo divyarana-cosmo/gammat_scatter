@@ -162,7 +162,7 @@ def run_pipe(config, outputfilename = 'gamma.dat', outputpairfile=None):
     lzredmax = np.max(lzred)
 
     print("lens data read fully")
-    llogre = get_re(llogmstel ,lzred, ss.Astropy_cosmo) # in the units of  h-1 Mpc
+    llogre = get_re(llogmstel ,lzrde) # in the units of  h-1 Mpc
     dismax = config['Rmax']/ss.Astropy_cosmo.angular_diameter_distance(np.min(lzred)).value
 
     if sourceargs['use_shear']:

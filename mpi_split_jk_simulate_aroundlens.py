@@ -20,68 +20,17 @@ from subprocess import  call
 from scipy import stats
 from colossus.cosmology import cosmology
 from colossus.halo import concentration
-
-def get_xyz(ra, dec):
-    ra = ra*np.pi/180.
-    dec = dec*np.pi/180.
-    x = np.cos(dec)*np.cos(ra)
-    y = np.cos(dec)*np.sin(ra)
-    z = np.sin(dec)
-    return x, y, z
-
-
-def get_interp_szred():
-    "assigns redshifts respecting the distribution"
-    z0 = 0.9/(2)**0.5
-    f = lambda zred: (zred/z0)**2 * np.exp(-(zred/z0)**(3/2)) #taken from euclid prep 2020 page 22
-    zmin = 0.0
-    zmax = 3
-    zarr = np.linspace(zmin, zmax, 20)
-    xx  = 0.0 * zarr
-    for ii in range(len(xx)):
-        xx[ii] = quad(f, zmin, zarr[ii])[0]/quad(f, zmin, zmax)[0]
-    proj = interp1d(xx,zarr)
-    return proj
-
-interp_szred = get_interp_szred()
-
-def create_sources(ra, dec, dismax, nsrc=30, sigell=0.27, mask=None, seed=123): #mask application for future
-    "creates source around lens given angles in degrees"
-    ramin = (ra - dismax*180/np.pi )*np.pi/180
-    ramax = (ra + dismax*180/np.pi)*np.pi/180
-    thetamax =(90 - (dec - dismax*180/np.pi))*np.pi/180
-    thetamin =(90 - (dec + dismax*180/np.pi))*np.pi/180
-
-    area    = (ramax - ramin) * (np.cos(thetamin) - np.cos(thetamax))* (180*60/np.pi)**2
-    size    = round(nsrc * area)      # area of square in deg^2 --> arcmin^2
-    #add the possion galaxy number density 
-    rng     =   np.random.default_rng(seed) # fixing the seed of the random number generator
-
-    size    =   rng.poisson(size) # number of sources
-    cdec    =   rng.uniform(np.cos(thetamax), np.cos(thetamin), size=size)     
-    sdec    =   (90.0 - np.arccos(cdec)*180/np.pi)
-    sra     =   rng.uniform(ramin, ramax, size=size)*180/np.pi
-    lx,ly,lz = get_xyz(ra, dec)
-    sx,sy,sz = get_xyz(sra, sdec)
-    #annulus aperture
-    sep     =  ((sx-lx)**2 + (sy-ly)**2 + (sz-lz)**2)**0.5
-    idx     =   (sep < dismax)
-    sra     = sra[idx]
-    sdec    = sdec[idx]
-
-    # putting the interpolation for source redshift assignment
-    szred   =   interp_szred(rng.random(size=len(sra)))
-    se1     =   rng.normal(0.0, sigell, len(sra)) 
-    se2     =   rng.normal(0.0, sigell, len(sra))
-    wgal    =   sra/sra
-    return sra, sdec, szred, wgal, se1, se2
-
+from create_sources import get_xyz, create_sources 
 
 def run_pipe(config, outputfilename = 'gamma.dat', jksamp=0, outputpairfile=None):
     rmin    = config['Rmin'] 
     rmax    = config['Rmax'] 
     nbins   = config['Nbins']
-
+    # set the projected radial binning in units of Mpc
+    nbins = nbins #10 radial bins for our case
+    rbins  = np.logspace(np.log10(rmin), np.log10(rmax), nbins + 1)
+    rdiff  = np.log10(rbins[1]*1.0/rbins[0])
+ 
     lensargs    = config["lens"]
     sourceargs  = config["source"]
 
@@ -91,13 +40,7 @@ def run_pipe(config, outputfilename = 'gamma.dat', jksamp=0, outputpairfile=None
 
     colossus_cosmo  = cosmology.fromAstropy(ss.Astropy_cosmo, sigma8 = ss.sigma8, ns = ss.ns, cosmo_name=ss.cosmo_name)
 
-    # set the projected radial binning in units of Mpc
-    rmin  =  rmin
-    rmax  =  rmax
-    nbins = nbins #10 radial bins for our case
-    rbins  = np.logspace(np.log10(rmin), np.log10(rmax), nbins + 1)
-    rdiff  = np.log10(rbins[1]*1.0/rbins[0])
-    
+   
     Njacks = int(lensargs['Njacks'])
     sumdgammat_num              = np.zeros(nbins)
     sumdgammat_inp_num          = np.zeros(nbins)
@@ -107,78 +50,55 @@ def run_pipe(config, outputfilename = 'gamma.dat', jksamp=0, outputpairfile=None
     sumdgammax_num              = np.zeros(nbins) 
     sumdgammaxsq_num            = np.zeros(nbins)
     sumdwls                     = np.zeros(nbins)
-    sumddsigmat_num              = np.zeros(nbins)
-    sumddsigmat_inp_num          = np.zeros(nbins)
-    sumddsigmat_inp_bary_num     = np.zeros(nbins)
-    sumddsigmat_inp_dm_num       = np.zeros(nbins)
-    sumddsigmatsq_num            = np.zeros(nbins)
-    sumddsigmax_num              = np.zeros(nbins) 
-    sumddsigmaxsq_num            = np.zeros(nbins)
-    sumdwls_by_sigcsq                = np.zeros(nbins)
+    sumddsigmat_num             = np.zeros(nbins)
+    sumddsigmat_inp_num         = np.zeros(nbins)
+    sumddsigmat_inp_bary_num    = np.zeros(nbins)
+    sumddsigmat_inp_dm_num      = np.zeros(nbins)
+    sumddsigmatsq_num           = np.zeros(nbins)
+    sumddsigmax_num             = np.zeros(nbins) 
+    sumddsigmaxsq_num           = np.zeros(nbins)
+    sumdwls_by_sigcsq           = np.zeros(nbins)
 
     # getting the lenses data
-    lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs)
-    avg_logmstel    = np.log10(np.mean(10**llogmstel))
-    avg_logmh       = np.log10(np.mean(10**llogmh))   
-    avg_lzred       = np.mean(lzred)
-    print("lens data read fully")
+    lid, lra, ldec, lzred, lwgt, llogmstel, llogmh, lxjkreg   = lens_select(lensargs,jk=jk)
     thetare = get_re(llogmstel ,lzred)    # in units of arcsec
     thetare = thetare * np.pi/(180*60*60) # arcsec to radians
     llogre = np.log10(thetare * ss.Astropy_cosmo.angular_diameter_distance(lzred).value) # in the units of  h-1 Mpc
     lid = np.arange(len(lid))
-    # picking a particular jksamp
-    idx = (lxjkreg == jksamp) & (llogre != -999)
-    lra         = lra       [idx]
-    ldec        = ldec      [idx]
-    lzred       = lzred     [idx]
-    lwgt        = lwgt      [idx]
-    llogmstel   = llogmstel [idx]
-    llogmh      = llogmh    [idx]
-    lid         = lid       [idx]
-    llogre      = llogre    [idx]
-    #fixed position 
-    lra     = 130 + 0.0*lra
-    ldec    = 0.0 + 0.0*ldec
+    lconc = 0.0*lid
+    xx = np.linspace(9,16,50)
+    yy = 0.0*xx
+    med_lzred = np.mean(lzred)
 
-    if config['test_case']:
-        np.random.seed(123)
-        idx         = (np.random.uniform(size=len(lra))<0.05)
-        lra         = lra[idx]
-        ldec        = ldec[idx]
-        llogmh      = avg_logmh  + 0.0*llogmh[idx]
-        lconc       = concentration.concentration(10**avg_logmh, '200m', avg_lzred, model = 'diemer19') + 0.0*lzred
-        llogmstel   = avg_logmstel  + 0.0*llogmh
-    else:
-        lconc = 0.0*lid
-        xx = np.linspace(9,16,50)
-        yy = 0.0*xx
-        med_lzred = np.mean(lzred)
-
-        for kk, mh in enumerate(10**xx):
-            yy[kk]    = concentration.concentration(mh, '200m', med_lzred, model = 'diemer19')
-        
-        spl_c_mh = interp1d(xx,yy)
-        lconc = spl_c_mh(llogmh)
+    for kk, mh in enumerate(10**xx):
+        yy[kk]    = concentration.concentration(mh, '200m', med_lzred, model = 'diemer19')
     
-    print("lens data read fully")
+    spl_c_mh = interp1d(xx,yy)
+    lconc = spl_c_mh(llogmh)
+    print(np.mean(lzred), np.log10(np.mean(10**llogmstel)), np.log10(np.mean(10**llogre)), np.log10(np.mean(10**llogmh)), np.mean(lconc)) 
+    print("lens data read fully", np.min(lzred))
+    #...........................................#
+
     dismax = config['Rmax']/ss.Astropy_cosmo.angular_diameter_distance(np.min(lzred)).value 
+    print(np.min(lzred),'thetamax', dismax) 
     
     if sourceargs['use_shear']:
         print("using shear not reduced shear for the sims")
-        outputpairfile = outputpairfile + '_using_shear'
+        #outputpairfile = outputpairfile + '_using_shear'
         outputfilename = outputfilename + '_using_shear'
 
     if outputpairfile != None:
         fpairout = open(outputpairfile, "w")
         fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tkappa\tintse1\tintse2\tr90se1\tr90se2\tr90et\tr90ex\tr90intse1\tr90intse2\n')
-
+    
     #..................................#
     for ii in tqdm(range(len(lra))):
         # simulating the sources
         sra, sdec, szred, wgal, intse1, intse2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell'], seed = int(config["seed"]*len(lra)+ lid[ii])) 
+        #sra, sdec, szred, wgal, intse1, intse2 = create_sources(lra[ii], ldec[ii], dismax, nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell'], seed=123) 
        
         if config['test_case']:
-            szred = 0.8 + 0.0*sra
+            szred = 0.9 + 0.0*sra
         if sourceargs['no_shape_noise']:
             print("no shape noise")
             intse1 = 0.0*intse1
@@ -197,6 +117,7 @@ def run_pipe(config, outputfilename = 'gamma.dat', jksamp=0, outputpairfile=None
         intse2      =   intse2[scut]
         # shearing the sources
         se1, se2, etan, kappa, proj_sep, sflag, etan_b, etan_dm, et_obs, ex_obs = ss.shear_src(lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogre[ii], llogmh[ii], lconc[ii], sra, sdec, szred, intse1, intse2, use_shear=sourceargs["use_shear"], no_shear=sourceargs["no_shear"])
+        print('flagged sources', sum(sflag))
         if sourceargs['no_shear']:
             se1 = intse1; se2 = intse2
         sl_sep  = proj_sep
@@ -262,7 +183,7 @@ def run_pipe(config, outputfilename = 'gamma.dat', jksamp=0, outputpairfile=None
         fpairout.close()
     Resp = 1 - sourceargs['sigell']**2 
     #need to clean this up
-    print(sumdwls)
+    #print(sumdwls)
     df = {}
     df["0-rmin/2+rmax/2"    ]           =   rbins[:-1] *0.5 + rbins[1:]*0.5
     df["1-gammat"           ]           =   sumdgammat_num[:] * 1.0 / sumdwls[:]/Resp    
@@ -354,7 +275,6 @@ if __name__ == "__main__":
     if args.test_case:
         outputfilename = outputfilename + '_test_case'
     
-    np.random.seed(args.seed)
     outputfilename = outputfilename + '_w_jacks'
     print(config)
 
