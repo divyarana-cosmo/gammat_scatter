@@ -167,7 +167,7 @@ class simshear():
             g_dm = gamma_dm / denom_dm # reduced shear - dark matter
         
         # Update flags for weak lensing regime
-        sflag = sflag & (np.abs(kappa) < 0.5) & (np.abs(g) < 1)
+        sflag = sflag & (np.abs(kappa) < 0.2) & (np.abs(g) < 1)
         
         # Convert to radians for trigonometric calculations
         lra_rad = np.radians(lra)
