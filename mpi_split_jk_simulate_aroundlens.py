@@ -4,7 +4,7 @@ import sys
 sys.path.append('./src/')
 sys.path.append('./utils/')
 from lensutils import get_re
-from fast_distort import simshear
+from distort import simshear
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.cosmology import FlatLambdaCDM
@@ -85,7 +85,6 @@ def run_pipe(config, outputfilename='gamma.dat', jksamp=0, outputpairfile=None):
     print(np.mean(lzred), np.log10(np.mean(10**llogmstel)), np.log10(np.mean(10**llogre)), 
           np.log10(np.mean(10**llogmh)), np.mean(lconc)) 
     print("lens data read fully", np.min(lzred))
-
     # Calculate maximum angular separation based on minimum redshift
     dismax = config['Rmax'] / ss.Astropy_cosmo.angular_diameter_distance(np.min(lzred)).value 
     print(np.min(lzred), 'thetamax', dismax) 
@@ -265,7 +264,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--config", help="Configuration file")
     parser.add_argument("--outdir", help="Output filename with pairs information", default="debug")
-    parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=111111001)
+    parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=11111101101)
     parser.add_argument("--no_shape_noise", help="for removing shape noise-testing purpose", type=bool, default=False)
     parser.add_argument("--no_shear", help="for removing shear-testing purpose", type=bool, default=False)
     parser.add_argument("--test_case", help="testing the ideal case", type=bool, default=False)
