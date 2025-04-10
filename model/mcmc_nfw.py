@@ -63,12 +63,14 @@ def gauss(x,mean,sigma):
 
 def model(x, zred, rbins):
     logmstel, log_re, logmh, cfac = x
+    #going from physical to comoving
     rbins = rbins*(1+zred)
+    log_re = log_re + np.log10(1+zred)
     # we are evaluating at redshift of 0.3
     lconc   = 1.0#concentration.concentration(10**logmh, '200m', 0.2, model = 'diemer19')
     conc    =   cfac * lconc
     hp          = halo(logmh, conc, omg_m=Om0)
-    stel        = stellar(logmstel, log_re=log_re*(1+zred))
+    stel        = stellar(logmstel, log_re=log_re)
     sigma_s    = stel.sigma_deVaucouleurs(rbins) 
     sigma_dm   = hp.sigma_nfw(rbins)         
  
@@ -135,7 +137,8 @@ def run_mcmc(logMmin, logMmax, zred, pool):
     _cov     =   np.loadtxt('/home/rana/github_0/gammat_scatter/output/debug_z_0.1_0.4/cov_test_dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMmin, logMmax))                  
     
     #running with the first ten rbins
-    for Rmin in _rbins[:10]:
+    for Rmin in _rbins[:1]:
+    #for Rmin in _rbins[:10]:
         idx     =   (_rbins>Rmin) #& (rbins<0.3)
         rbins   =   _rbins[idx]
         data    =   _data[idx]
