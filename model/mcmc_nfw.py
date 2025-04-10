@@ -41,7 +41,7 @@ def model(x, zred, rbins):
  
     esd_s       = (1+zred)**2 * stel.esd_deVaucouleurs(rbins)
     esd_dm      = (1+zred)**2 * hp.esd_nfw(rbins)
-    return esd_s/1e12, esd_dm/1e12, sigma_s*get_sigma_crit_inv(0.2,0.8), sigma_dm*get_sigma_crit_inv(0.2,0.8)
+    return esd_s/1e12, esd_dm/1e12
 
 def lnprior(x):
     logmstel, log_re, logmh, c = x
