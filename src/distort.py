@@ -148,18 +148,18 @@ class simshear():
             denom_s = 1.0 - kappa_s
             denom_dm = 1.0 - kappa_dm
             
-            # Set small denominators to NaN to avoid numerical issues
-            mask = np.abs(denom) < 1e-10
-            if np.any(mask):
-                denom[mask] = np.nan
-                
-            mask_s = np.abs(denom_s) < 1e-10
-            if np.any(mask_s):
-                denom_s[mask_s] = np.nan
-                
-            mask_dm = np.abs(denom_dm) < 1e-10
-            if np.any(mask_dm):
-                denom_dm[mask_dm] = np.nan
+            ## Set small denominators to NaN to avoid numerical issues
+            #mask = np.abs(denom) < 1e-10
+            #if np.any(mask):
+            #    denom[mask] = np.nan
+            #    
+            #mask_s = np.abs(denom_s) < 1e-10
+            #if np.any(mask_s):
+            #    denom_s[mask_s] = np.nan
+            #    
+            #mask_dm = np.abs(denom_dm) < 1e-10
+            #if np.any(mask_dm):
+            #    denom_dm[mask_dm] = np.nan
             
             # Calculate reduced shear
             g = gamma / denom          # reduced shear
