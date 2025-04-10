@@ -100,7 +100,7 @@ class simshear():
         # Get sigma_crit_inv for all source-lens pairs at once
         get_sigma_crit_inv = self._get_sigma_crit_inv(lzred, szred) 
         
-        # Converting from comoving to physical units
+        # Converting from physical to comoving units
         physical_factor = (1 + lzred)
         physical_proj_sep = proj_sep * physical_factor
         physical_logre = logre + np.log10(physical_factor)
@@ -176,21 +176,26 @@ class simshear():
         sdec_rad = np.radians(sdec)
         
         # Vectorized calculations for angular quantities
-        c_sra_lra = np.cos(sra_rad) * np.cos(lra_rad) + np.sin(lra_rad) * np.sin(sra_rad)
-        s_sra_lra = np.sin(sra_rad) * np.cos(lra_rad) - np.cos(sra_rad) * np.sin(lra_rad)
+        c_sra_lra = np.clip(np.cos(sra_rad) * np.cos(lra_rad) + np.sin(lra_rad) * np.sin(sra_rad),-1,1)
+        s_sra_lra = np.clip(np.sin(sra_rad) * np.cos(lra_rad) - np.cos(sra_rad) * np.sin(lra_rad),-1,1)
         
         # Angular separation between lens-source pairs
-        c_theta = lx * sx + ly * sy + lz * sz
-        s_theta = np.sqrt(1 - c_theta**2)
-        
-        # Prevent division by zero
-        zero_mask = np.abs(s_theta) < 1e-10
-        if np.any(zero_mask):
-            s_theta[zero_mask] = 1e-10
-            
+        c_theta = np.clip(lx * sx + ly * sy + lz * sz, -1,1)
+        s_theta = np.clip(np.sqrt(1 - c_theta**2), -1,1)
+       
+        # Better handling of small angle cases
+        #zero_mask = np.abs(s_theta) < 1e-10
+        #if np.any(zero_mask):
+        ## For very small angles, set components directly rather than using an arbitrary small value
+        #    c_phi[zero_mask] = 1.0  # Assume aligned along x-axis
+        #    s_phi[zero_mask] = 0.0
+           
         # Vectorized calculation of cosine and sine of phi
         c_phi = np.cos(ldec_rad) * s_sra_lra / s_theta
         s_phi = (-np.sin(ldec_rad) * np.cos(sdec_rad) + np.cos(ldec_rad) * c_sra_lra * np.sin(sdec_rad)) / s_theta
+        
+        np.clip(c_phi, -1, 1) 
+        np.clip(s_phi, -1, 1) 
         
         # Tangential shear components
         g_1 = -g * (2 * c_phi**2 - 1)
@@ -239,8 +244,33 @@ class simshear():
             e[~idx] = (1 + g[~idx] * np.conj(es[~idx])) / (np.conj(es[~idx]) + np.conj(g[~idx]))
         
         # Calculate observed quantities
-        phase_factor = (2 * c_phi**2 - 1) - 1j * (2 * c_phi * s_phi)
-        etan_obs = -np.real(e * phase_factor)
-        ex_obs = -np.imag(e * phase_factor)
+        #phase_factor = (2 * c_phi**2 - 1) - 1j * (2 * c_phi * s_phi)
+        #etan_obs = -np.real(e * phase_factor)
+        #ex_obs = -np.imag(e * phase_factor)
+        etan_obs    = - np.real(e)*(2*c_phi**2 -1) - np.imag(e)*(2*c_phi * s_phi)
+        ex_obs      =  np.real(e)*(2*c_phi * s_phi) - np.imag(e)*(2*c_phi**2 -1)
+
+        #np.real(e) * phase_factor)
+        #ex_obs   = -np.imag(e * phase_factor)
         
         return np.real(e), np.imag(e), gtan, kappa, proj_sep, sflag, g_b, g_dm, etan_obs, ex_obs
+
+
+if __name__ == "__main__":
+    ss = simshear()
+    #lens test config
+    lra         = 130
+    ldec        = 0.0
+    lzred       = 0.2
+    logmstel    = 10.0
+    logre       = -2.5
+    logmh       = 12.0
+    lconc       = 10.5
+    
+    # source test config
+    sra     = np.array([130+5e-4])
+    sdec    = np.array([0.0])
+    szred   = np.array([0.8])
+    intse1  = np.array([0.0])
+    intse2  = np.array([0.0])
+    print(ss.shear_src(lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, intse1, intse2))
