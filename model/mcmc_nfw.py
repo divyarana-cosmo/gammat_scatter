@@ -19,41 +19,6 @@ Om0 =   0.25
 H0  =   100
 params = {'flat': True, 'H0': H0, 'Om0': Om0, 'Ob0': 0.049, 'sigma8': 0.81, 'ns': 0.95}
 cosmo = cosmology.setCosmology('myCosmo', **params)
-
-def get_sigma_crit_inv(lzred, szred):
-    "evaluates the lensing efficency geometrical factor"
-    sigma_crit_inv = 0.0*szred + 0.0*lzred
-    idx =  szred>lzred   # if sources are in foreground then lensing is zero
-    if np.isscalar(idx):
-        lzred = np.array([lzred])
-        szred = np.array([szred])
-        idx = np.array([idx])
-        sigma_crit_inv = np.array([sigma_crit_inv])
-    # some important constants for the sigma crit computations
-    gee = 4.301e-9 #km^2 Mpc M_sun^-1 s^-2 gravitational constant
-    cee = 3e5 #km s^-1
-    # sigma_crit_calculations for a given lense-source pair
-    #in physical units
-    from astropy.cosmology import FlatLambdaCDM
-    cosmo = FlatLambdaCDM(H0=100, Om0=0.25)
-    sigma_crit_inv = cosmo.comoving_distance(lzred).value*(cosmo.comoving_distance(szred).value - cosmo.comoving_distance(lzred).value)
-    sigma_crit_inv /=cosmo.comoving_distance(szred).value
-    sigma_crit_inv /=(1+lzred)
-    sigma_crit_inv[~idx]=0.0 
-    sigma_crit_inv = sigma_crit_inv * 4*np.pi*gee*1.0/cee**2
-    return sigma_crit_inv
-
-
-
-
-def get_avg_sigma_crit_inv(lzred, zmax, zdiff):
-    "assigns redshifts respecting the distribution"
-    z0 = 0.9/(2)**0.5
-    f = lambda zred: (zred/z0)**2 * np.exp(-(zred/z0)**(3/2)) #taken from euclid prep 2020 page 22
-    return 0
-    
-
-
  
 
 def gauss(x,mean,sigma):
@@ -137,8 +102,7 @@ def run_mcmc(logMmin, logMmax, zred, pool):
     _cov     =   np.loadtxt('/home/rana/github_0/gammat_scatter/output/debug_z_0.1_0.4/cov_test_dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMmin, logMmax))                  
     
     #running with the first ten rbins
-    for Rmin in _rbins[:1]:
-    #for Rmin in _rbins[:10]:
+    for Rmin in _rbins[:10]:
         idx     =   (_rbins>Rmin) #& (rbins<0.3)
         rbins   =   _rbins[idx]
         data    =   _data[idx]
@@ -193,4 +157,43 @@ if __name__ == "__main__":
     for logMmin, logMmax, zred  in zip(_logMmin,_logMmax,_lzred):
         run_mcmc(logMmin, logMmax, zred, pool=pool)
     pool.close()
+
+
+
+
+#
+#def get_sigma_crit_inv(lzred, szred):
+#    "evaluates the lensing efficency geometrical factor"
+#    sigma_crit_inv = 0.0*szred + 0.0*lzred
+#    idx =  szred>lzred   # if sources are in foreground then lensing is zero
+#    if np.isscalar(idx):
+#        lzred = np.array([lzred])
+#        szred = np.array([szred])
+#        idx = np.array([idx])
+#        sigma_crit_inv = np.array([sigma_crit_inv])
+#    # some important constants for the sigma crit computations
+#    gee = 4.301e-9 #km^2 Mpc M_sun^-1 s^-2 gravitational constant
+#    cee = 3e5 #km s^-1
+#    # sigma_crit_calculations for a given lense-source pair
+#    #in physical units
+#    from astropy.cosmology import FlatLambdaCDM
+#    cosmo = FlatLambdaCDM(H0=100, Om0=0.25)
+#    sigma_crit_inv = cosmo.comoving_distance(lzred).value*(cosmo.comoving_distance(szred).value - cosmo.comoving_distance(lzred).value)
+#    sigma_crit_inv /=cosmo.comoving_distance(szred).value
+#    sigma_crit_inv /=(1+lzred)
+#    sigma_crit_inv[~idx]=0.0 
+#    sigma_crit_inv = sigma_crit_inv * 4*np.pi*gee*1.0/cee**2
+#    return sigma_crit_inv
+#
+#
+#
+#
+#def get_avg_sigma_crit_inv(lzred, zmax, zdiff):
+#    "assigns redshifts respecting the distribution"
+#    z0 = 0.9/(2)**0.5
+#    f = lambda zred: (zred/z0)**2 * np.exp(-(zred/z0)**(3/2)) #taken from euclid prep 2020 page 22
+#    return 0
+    
+
+
 
