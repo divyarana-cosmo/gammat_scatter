@@ -71,8 +71,8 @@ class simshear():
         d_s = self.cosmo_comoving_distance(szred[valid_mask])
         
         # Calculate sigma_crit_inv in one operation
-        sigma_crit_inv[valid_mask] = (d_l * (d_s - d_l) / (d_s * (1 + lzred[valid_mask])) * 
-                                     (4 * np.pi * self.gee / self.cee**2))
+        sigma_crit_inv[valid_mask] = (d_l * (d_s - d_l) / (d_s ) * 
+                                     (4 * np.pi * self.gee * (1 + lzred[valid_mask])/ self.cee**2))
         
         return sigma_crit_inv
 
@@ -88,9 +88,11 @@ class simshear():
         self.stel = stellar(logmstel, log_re=logre)
         
         # Vectorized calculations for all separations at once
-        esd_s = self.stel.esd_deVaucouleurs(proj_sep)   
+        esd_s = self.stel.esd_pointmass(proj_sep)   
+        #esd_s = self.stel.esd_deVaucouleurs(proj_sep)   
         esd_dm = self.hp.esd_nfw(proj_sep)           
-        sigma_s = self.stel.sigma_deVaucouleurs(proj_sep) 
+        sigma_s = self.stel.sigma_pointmass(proj_sep) 
+        #sigma_s = self.stel.sigma_deVaucouleurs(proj_sep) 
         sigma_dm = self.hp.sigma_nfw(proj_sep)         
         
         return esd_s, esd_dm, sigma_s, sigma_dm 
@@ -101,7 +103,7 @@ class simshear():
         get_sigma_crit_inv = self._get_sigma_crit_inv(lzred, szred) 
         
         # Converting from physical to comoving units
-        physical_factor = (1 + lzred)
+        physical_factor = 1 
         physical_proj_sep = proj_sep * physical_factor
         physical_logre = logre + np.log10(physical_factor)
         
@@ -125,7 +127,7 @@ class simshear():
         
         # Vectorized calculation of projected separation
         sep_vector = np.sqrt((sx - lx)**2 + (sy - ly)**2 + (sz - lz)**2)
-        proj_sep = self.cosmo_angular_diameter_distance(lzred) * sep_vector
+        proj_sep = self.cosmo_comoving_distance(lzred) * sep_vector
         
         # Get gamma and kappa components for all pairs at once
         gamma_s, gamma_dm, kappa_s, kappa_dm = self._get_g(logmstel, logre, logmh, lconc, lzred, szred, proj_sep)
@@ -147,19 +149,6 @@ class simshear():
             denom = 1.0 - kappa
             denom_s = 1.0 - kappa_s
             denom_dm = 1.0 - kappa_dm
-            
-            ## Set small denominators to NaN to avoid numerical issues
-            #mask = np.abs(denom) < 1e-10
-            #if np.any(mask):
-            #    denom[mask] = np.nan
-            #    
-            #mask_s = np.abs(denom_s) < 1e-10
-            #if np.any(mask_s):
-            #    denom_s[mask_s] = np.nan
-            #    
-            #mask_dm = np.abs(denom_dm) < 1e-10
-            #if np.any(mask_dm):
-            #    denom_dm[mask_dm] = np.nan
             
             # Calculate reduced shear
             g = gamma / denom          # reduced shear
@@ -183,17 +172,9 @@ class simshear():
         c_theta = np.clip(lx * sx + ly * sy + lz * sz, -1,1)
         s_theta = np.clip(np.sqrt(1 - c_theta**2), -1,1)
        
-        # Better handling of small angle cases
-        #zero_mask = np.abs(s_theta) < 1e-10
-        #if np.any(zero_mask):
-        ## For very small angles, set components directly rather than using an arbitrary small value
-        #    c_phi[zero_mask] = 1.0  # Assume aligned along x-axis
-        #    s_phi[zero_mask] = 0.0
-           
         # Vectorized calculation of cosine and sine of phi
         c_phi = np.cos(ldec_rad) * s_sra_lra / s_theta
         s_phi = (-np.sin(ldec_rad) * np.cos(sdec_rad) + np.cos(ldec_rad) * c_sra_lra * np.sin(sdec_rad)) / s_theta
-        
         np.clip(c_phi, -1, 1) 
         np.clip(s_phi, -1, 1) 
         
@@ -244,15 +225,9 @@ class simshear():
             e[~idx] = (1 + g[~idx] * np.conj(es[~idx])) / (np.conj(es[~idx]) + np.conj(g[~idx]))
         
         # Calculate observed quantities
-        #phase_factor = (2 * c_phi**2 - 1) - 1j * (2 * c_phi * s_phi)
-        #etan_obs = -np.real(e * phase_factor)
-        #ex_obs = -np.imag(e * phase_factor)
         etan_obs    = - np.real(e)*(2*c_phi**2 -1) - np.imag(e)*(2*c_phi * s_phi)
         ex_obs      =  np.real(e)*(2*c_phi * s_phi) - np.imag(e)*(2*c_phi**2 -1)
 
-        #np.real(e) * phase_factor)
-        #ex_obs   = -np.imag(e * phase_factor)
-        
         return np.real(e), np.imag(e), gtan, kappa, proj_sep, sflag, g_b, g_dm, etan_obs, ex_obs
 
 
@@ -267,10 +242,31 @@ if __name__ == "__main__":
     logmh       = 12.0
     lconc       = 10.5
     
+    from astropy.cosmology import FlatLambdaCDM
+    cc = FlatLambdaCDM(H0 = 100, Om0 = 0.25)
+    rbins = np.logspace(-3,1,10)
+    thetabins = (180/np.pi) * rbins/cc.comoving_distance(lzred).value
     # source test config
-    sra     = np.array([130+1e-3*(180/np.pi)])
-    sdec    = np.array([0.0])
-    szred   = np.array([0.8])
-    intse1  = np.array([0.0])
-    intse2  = np.array([0.0])
-    print(ss.shear_src(lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, intse1, intse2))
+    sra     = 130 + thetabins
+    sdec    = 0.0*sra + thetabins
+
+    szred   = 0.8 + 0.0*sra
+    intse1  = 0.0*sra
+    intse2  = 0.0*sra
+
+    ereal, eimg, gtan, kappa, proj_sep, sflag, g_b, g_dm, etan_obs, ex_obs = ss.shear_src(lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, intse1, intse2, use_shear=True)
+
+    sigmacrit = 1/ss._get_sigma_crit_inv(lzred=0.2, szred=szred)
+    dsigma = etan_obs*sigmacrit/1e12
+    print(dsigma)
+    print(gtan*sigmacrit/1e12/ dsigma)
+    
+    plt.plot(rbins, dsigma)
+    stel = ss.stel.esd_deVaucouleurs(rbins)/1e12
+    dark = ss.hp.esd_nfw(rbins)/1e12
+    print(stel+dark)
+    plt.plot(rbins, stel)   
+    plt.plot(rbins, dark)   
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.savefig('test.png', dpi=300) 
