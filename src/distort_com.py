@@ -30,11 +30,12 @@ class simshear():
         self.gee = 4.301e-9  # km^2 Mpc M_sun^-1 s^-2 gravitational constant
         self.cee = 3e5       # km s^-1
 
-        colossus_cosmo = cosmology.fromAstropy(self.Astropy_cosmo, sigma8 = sigma8, ns = ns, cosmo_name='my_cosmo')
-        self.sigma8 = sigma8
-        self.ns = ns
+        #colossus_cosmo = cosmology.fromAstropy(self.Astropy_cosmo, sigma8 = sigma8, ns = ns, cosmo_name='my_cosmo')
+        #self.sigma8 = sigma8
+        #self.ns = ns
         self.cosmo_name = 'my_cosmo'
         self.init_spl_sigma_crit_inv = False
+        self.gmax = -1.0
         print("Cosmology initialized")
 
     def get_xyz(self, ra, dec):
@@ -76,11 +77,11 @@ class simshear():
         
         return sigma_crit_inv
 
-    def _interp_get_sigma_crit_inv(self, lzred):
-        """Create interpolator for sigma_crit_inv at a fixed lens redshift"""
-        xx = np.linspace(lzred + 1e-4, 4.0, 200)  # Increased resolution
-        yy = self._get_sigma_crit_inv(lzred, xx)
-        return interp1d(xx, yy, kind='cubic', bounds_error=False, fill_value=0.0)
+    #def _interp_get_sigma_crit_inv(self, lzred):
+    #    """Create interpolator for sigma_crit_inv at a fixed lens redshift"""
+    #    xx = np.linspace(lzred + 1e-4, 4.0, 200)  # Increased resolution
+    #    yy = self._get_sigma_crit_inv(lzred, xx)
+    #    return interp1d(xx, yy, kind='cubic', bounds_error=False, fill_value=0.0)
 
     def _get_esd(self, logmstel, logre, logmh, lconc, proj_sep):
         """Provides the ESD and sigma in comoving units - vectorized for multiple separations"""
@@ -102,20 +103,14 @@ class simshear():
         # Get sigma_crit_inv for all source-lens pairs at once
         get_sigma_crit_inv = self._get_sigma_crit_inv(lzred, szred) 
         
-        # Converting from physical to comoving units
-        physical_factor = 1 
-        physical_proj_sep = proj_sep * physical_factor
-        physical_logre = logre + np.log10(physical_factor)
-        
         # Get ESD and sigma for all separations at once
-        esd_s, esd_dm, sigma_s, sigma_dm = self._get_esd(logmstel, physical_logre, logmh, lconc, physical_proj_sep)
+        esd_s, esd_dm, sigma_s, sigma_dm = self._get_esd(logmstel, logre, logmh, lconc, proj_sep)
         
         # Vectorized calculation of gamma and kappa
-        factor = physical_factor**2 * get_sigma_crit_inv
-        gamma_s = esd_s * factor
-        gamma_dm = esd_dm * factor
-        kappa_s = sigma_s * factor
-        kappa_dm = sigma_dm * factor
+        gamma_s     = esd_s     * get_sigma_crit_inv
+        gamma_dm    = esd_dm    * get_sigma_crit_inv
+        kappa_s     = sigma_s   * get_sigma_crit_inv
+        kappa_dm    = sigma_dm  * get_sigma_crit_inv
         
         return gamma_s, gamma_dm, kappa_s, kappa_dm
 
@@ -136,8 +131,6 @@ class simshear():
         gamma = gamma_s + gamma_dm
         kappa = kappa_s + kappa_dm
         
-        # Initialize flags for valid calculations
-        sflag = (gamma_s != -999) & (gamma_dm != -999) & (kappa_s != -999) & (kappa_dm != -999)
         
         # Calculate reduced shear or use pure shear based on parameter
         if use_shear:
@@ -156,13 +149,13 @@ class simshear():
             g_dm = gamma_dm / denom_dm # reduced shear - dark matter
         
         # Update flags for weak lensing regime
-        sflag = sflag & (np.abs(kappa) < 0.2) & (np.abs(g) < 1)
+        sflag = (np.abs(kappa) < 0.3) & (np.abs(g) < 0.3)
         
         # Convert to radians for trigonometric calculations
-        lra_rad = np.radians(lra)
-        ldec_rad = np.radians(ldec)
-        sra_rad = np.radians(sra)
-        sdec_rad = np.radians(sdec)
+        lra_rad     = np.radians(lra)
+        ldec_rad    = np.radians(ldec)
+        sra_rad     = np.radians(sra)
+        sdec_rad    = np.radians(sdec)
         
         # Vectorized calculations for angular quantities
         c_sra_lra = np.clip(np.cos(sra_rad) * np.cos(lra_rad) + np.sin(lra_rad) * np.sin(sra_rad),-1,1)
@@ -193,13 +186,13 @@ class simshear():
     def shear_src(self, lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, intse1, intse2, use_shear=False, no_shear=False):
         """Apply shear to source galaxies with given intrinsic shapes - fully vectorized"""
         # Initialize output arrays
-        se1 = intse1.copy()
-        se2 = intse2.copy()
+        #se1 = intse1.copy()
+        #se2 = intse2.copy()
         
-        # Initialize the interpolator for sigma_crit_inv if needed
-        if not self.init_spl_sigma_crit_inv:
-            self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(lzred)
-            self.init_spl_sigma_crit_inv = True
+        ## Initialize the interpolator for sigma_crit_inv if needed
+        #if not self.init_spl_sigma_crit_inv:
+        #    self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(lzred)
+        #    self.init_spl_sigma_crit_inv = True
             
         # Get shear components for all sources at once
         g_1, g_2, gtan, kappa, c_phi, s_phi, proj_sep, sflag, g_b, g_dm = self.get_g(
@@ -207,14 +200,15 @@ class simshear():
         )
         
         # Convert to complex numbers for easier manipulation
-        g = g_1 + 1j * g_2
-        es = intse1 + 1j * intse2
+        g   = g_1 + 1j * g_2
+        es  = intse1 + 1j * intse2
         
         # Initialize output array
-        e = np.zeros_like(es, dtype=complex)
+        e   = np.zeros_like(es, dtype=complex)
         
         # Apply Seitz & Schneider (1995) shear transformation
         idx = np.abs(g) <= 1
+        self.gmax = np.max(np.append(np.abs(g[sflag]), self.gmax))
         
         # Vectorized calculation for |g| <= 1
         if np.any(idx):
@@ -225,7 +219,7 @@ class simshear():
             e[~idx] = (1 + g[~idx] * np.conj(es[~idx])) / (np.conj(es[~idx]) + np.conj(g[~idx]))
         
         # Calculate observed quantities
-        etan_obs    = - np.real(e)*(2*c_phi**2 -1) - np.imag(e)*(2*c_phi * s_phi)
+        etan_obs    = - np.real(e)*(2*c_phi**2 -1)  - np.imag(e)*(2*c_phi * s_phi)
         ex_obs      =  np.real(e)*(2*c_phi * s_phi) - np.imag(e)*(2*c_phi**2 -1)
 
         return np.real(e), np.imag(e), gtan, kappa, proj_sep, sflag, g_b, g_dm, etan_obs, ex_obs
