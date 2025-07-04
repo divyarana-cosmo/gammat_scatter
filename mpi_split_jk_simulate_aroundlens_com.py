@@ -32,10 +32,10 @@ def run_pipe(config, outputfilename='gamma.dat', jksamp=0, outputpairfile=None):
     rbins = np.logspace(np.log10(rmin), np.log10(rmax), nbins + 1)
     rdiff = np.log10(rbins[1] / rbins[0])
  
-    lensargs = config["lens"]
-    sourceargs = config["source"]
+    lensargs    = config["lens"]
+    sourceargs  = config["source"]
 
-    zdiff = sourceargs["zdiff"]
+    zdiff       = sourceargs["zdiff"]
     
     # Initialize simshear object
     ss = simshear(H0=config['H0'], Om0=config['Om0'])
@@ -43,7 +43,6 @@ def run_pipe(config, outputfilename='gamma.dat', jksamp=0, outputpairfile=None):
     #colossus_cosmo = cosmology.fromAstropy(ss.Astropy_cosmo, sigma8=ss.sigma8, ns=ss.ns, cosmo_name=ss.cosmo_name)
 
     # Initialize arrays for accumulation
-    Njacks = int(lensargs['Njacks'])
     sumdgammat_num              = np.zeros(nbins)
     sumdgammat_inp_num          = np.zeros(nbins)
     sumdgammat_inp_bary_num     = np.zeros(nbins)
@@ -64,6 +63,12 @@ def run_pipe(config, outputfilename='gamma.dat', jksamp=0, outputpairfile=None):
     # Getting the lenses data
     lensargs['H0']=config['H0']; lensargs['Om0']=config['Om0']
     lid, lra, ldec, lzred, lwgt, llogmstel, llogre, llogmh, lconc, lxjkreg = lens_select(lensargs, jk=jksamp)
+    print('zred', lzred)
+    print('logmstel', llogmstel)
+    print('llogre', llogre)
+    print('logmhzred', llogmh)
+    print('lconc', lconc)
+
 
     print("lens data read fully", np.min(lzred))
     # Calculate maximum angular separation based on minimum redshift
@@ -110,7 +115,7 @@ def run_pipe(config, outputfilename='gamma.dat', jksamp=0, outputpairfile=None):
         # Apply cut to all source arrays at once
         sra     = sra[scut]
         sdec    = sdec[scut]
-        szred   = szred[scut]
+        szred   = 0.8 + 0.0 * szred[scut]
         wgal    = wgal[scut]
         intse1  = intse1[scut]
         intse2  = intse2[scut]
@@ -158,10 +163,7 @@ def run_pipe(config, outputfilename='gamma.dat', jksamp=0, outputpairfile=None):
             for jj in range(np.sum(idx)):
                 fpairout.write(f'{lxjkreg[ii]}\t{lra[ii]}\t{ldec[ii]}\t{lzred[ii]}\t{llogmstel[ii]}\t{llogmh[ii]}\t{lconc[ii]}\t{sra[jj]}\t{sdec[jj]}\t{szred[jj]}\t{se1[jj]}\t{se2[jj]}\t{etan[jj]}\t{et_obs[jj]}\t{ex_obs[jj]}\t{sl_sep[jj]}\t{w_ls[jj]}\t{kappa[jj]}\t{intse1[jj]}\t{intse2[jj]}\t{r90se1[jj]}\t{r90se2[jj]}\t{r90et_obs[jj]}\t{r90ex_obs[jj]}\t{r90intse1[jj]}\t{r90intse2[jj]}\n')
         
-        # Vectorized calculation of sigma critical terms
-        w_ls_invsigmacritsq = np.zeros(int(np.sum(idx)))
-        w_ls_invsigmacrit   = np.zeros(int(np.sum(idx)))
-        
+       
         # Use vectorized operation instead of loop
         sigma_crit_inv = ss._get_sigma_crit_inv(lzred=lzred[ii], szred=szred) * 1e12
         w_ls_invsigmacritsq = w_ls * sigma_crit_inv**2
@@ -170,33 +172,27 @@ def run_pipe(config, outputfilename='gamma.dat', jksamp=0, outputpairfile=None):
         # Vectorized binning
         slrbins = (np.log10(sl_sep / rmin) // rdiff).astype(int)
         
-        # Process each bin
-        for rb in range(nbins):
-            idx = slrbins == rb
-            if np.sum(idx) == 0:
-                continue
-                
-            # Vectorized accumulation for each bin
-            sumdwls[rb]                     += np.sum(w_ls[idx])
-            sumdwls_by_sigcsq[rb]           += np.sum(w_ls_invsigmacritsq[idx])
+               
+        np.add.at(sumdwls                   ,slrbins    ,w_ls)
+        np.add.at(sumdwls_by_sigcsq         ,slrbins    ,w_ls_invsigmacritsq)
 
-            sumdgammat_inp_num[rb]          += np.sum((w_ls * etan)[idx])
-            sumdgammat_inp_bary_num[rb]     += np.sum((w_ls * etan_b)[idx])
-            sumdgammat_inp_dm_num[rb]       += np.sum((w_ls * etan_dm)[idx])
-                
-            sumdgammat_num[rb]              += np.sum((w_ls * et_obs)[idx])
-            sumdgammatsq_num[rb]            += np.sum(((w_ls * et_obs)**2)[idx])
-            sumdgammax_num[rb]              += np.sum((w_ls * ex_obs)[idx])
-            sumdgammaxsq_num[rb]            += np.sum(((w_ls * ex_obs)**2)[idx])
-           
-            sumddsigmat_inp_num[rb]         += np.sum((w_ls_invsigmacrit * etan)[idx])
-            sumddsigmat_inp_bary_num[rb]    += np.sum((w_ls_invsigmacrit * etan_b)[idx])
-            sumddsigmat_inp_dm_num[rb]      += np.sum((w_ls_invsigmacrit * etan_dm)[idx])
+        np.add.at(sumdgammat_inp_num        ,slrbins    ,w_ls * etan)
+        np.add.at(sumdgammat_inp_bary_num   ,slrbins    ,w_ls * etan_b)
+        np.add.at(sumdgammat_inp_dm_num     ,slrbins    ,w_ls * etan_dm)
+        
+        np.add.at(sumdgammat_num            ,slrbins    ,w_ls * et_obs)
+        np.add.at(sumdgammatsq_num          ,slrbins    ,(w_ls * et_obs)**2)
+        np.add.at(sumdgammax_num            ,slrbins    ,w_ls * ex_obs)
+        np.add.at(sumdgammaxsq_num          ,slrbins    ,(w_ls * ex_obs)**2)
 
-            sumddsigmat_num[rb]             += np.sum((w_ls_invsigmacrit * et_obs)[idx])
-            sumddsigmatsq_num[rb]           += np.sum(((w_ls_invsigmacrit * et_obs)**2)[idx])
-            sumddsigmax_num[rb]             += np.sum((w_ls_invsigmacrit * ex_obs)[idx])
-            sumddsigmaxsq_num[rb]           += np.sum(((w_ls_invsigmacrit * ex_obs)**2)[idx])
+        np.add.at(sumddsigmat_inp_num       ,slrbins    ,w_ls_invsigmacrit * etan)
+        np.add.at(sumddsigmat_inp_bary_num  ,slrbins    ,w_ls_invsigmacrit * etan_b)
+        np.add.at(sumddsigmat_inp_dm_num    ,slrbins    ,w_ls_invsigmacrit * etan_dm)
+
+        np.add.at(sumddsigmat_num           ,slrbins    ,w_ls_invsigmacrit * et_obs)
+        np.add.at(sumddsigmatsq_num         ,slrbins    ,(w_ls_invsigmacrit * et_obs)**2)
+        np.add.at(sumddsigmax_num           ,slrbins    ,w_ls_invsigmacrit * ex_obs)
+        np.add.at(sumddsigmaxsq_num         ,slrbins    ,(w_ls_invsigmacrit * ex_obs)**2)
 
     # Close pair output file if needed
     if outputpairfile is not None:
