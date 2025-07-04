@@ -11,7 +11,8 @@ from scipy.interpolate import interp1d
 
 class simshear():
     """Simulates the shear for a given configuration of dark matter and stellar profiles with optimized vectorization"""
-    def __init__(self, H0=100, Om0=0.25, Ob0=0.044, Tcmb0=2.7255, Neff=3.046, sigma8=0.8, ns=0.95, lzredmin=0.0, lzredmax=1.0, szredmax=4.0):
+    def __init__(self, H0=100, Om0=0.25, Ob0=0.044, Tcmb0=2.7255, Neff=3.046, sigma8=0.8, ns=0.95, szredmax=4.0, splzbins = 1000):
+
         """Initialize the parameters"""
         # Fixing the cosmology
         self.omg_m = Om0
@@ -19,23 +20,12 @@ class simshear():
         self.Astropy_cosmo = FlatLambdaCDM(**params)
 
         # Pre-compute interpolation tables for cosmological distances
-        spl_zred_arr = np.linspace(0, szredmax, 1000)  # Increased resolution
+        spl_zred_arr = np.linspace(0, szredmax, splzbins)  # Increased resolution
         spl_d_com_arr = self.Astropy_cosmo.comoving_distance(spl_zred_arr).value
-        self.cosmo_comoving_distance = interp1d(spl_zred_arr, spl_d_com_arr, kind='cubic', bounds_error=False, fill_value="extrapolate")
-        
-        spl_d_ang_arr = self.Astropy_cosmo.angular_diameter_distance(spl_zred_arr).value
-        self.cosmo_angular_diameter_distance = interp1d(spl_zred_arr, spl_d_ang_arr, kind='cubic', bounds_error=False, fill_value="extrapolate")
-
+        self.cosmo_comoving_distance = interp1d(spl_zred_arr, spl_d_com_arr, kind='cubic', bounds_error=False)
         # Constants for sigma_crit calculations
         self.gee = 4.301e-9  # km^2 Mpc M_sun^-1 s^-2 gravitational constant
         self.cee = 3e5       # km s^-1
-
-        #colossus_cosmo = cosmology.fromAstropy(self.Astropy_cosmo, sigma8 = sigma8, ns = ns, cosmo_name='my_cosmo')
-        #self.sigma8 = sigma8
-        #self.ns = ns
-        self.cosmo_name = 'my_cosmo'
-        self.init_spl_sigma_crit_inv = False
-        self.gmax = -1.0
         print("Cosmology initialized")
 
     def get_xyz(self, ra, dec):
@@ -72,16 +62,9 @@ class simshear():
         d_s = self.cosmo_comoving_distance(szred[valid_mask])
         
         # Calculate sigma_crit_inv in one operation
-        sigma_crit_inv[valid_mask] = (d_l * (d_s - d_l) / (d_s ) * 
-                                     (4 * np.pi * self.gee * (1 + lzred[valid_mask])/ self.cee**2))
+        sigma_crit_inv[valid_mask] = (d_l * (d_s - d_l) / (d_s )) * (4 * np.pi * self.gee * (1 + lzred[valid_mask])/ self.cee**2)
         
         return sigma_crit_inv
-
-    #def _interp_get_sigma_crit_inv(self, lzred):
-    #    """Create interpolator for sigma_crit_inv at a fixed lens redshift"""
-    #    xx = np.linspace(lzred + 1e-4, 4.0, 200)  # Increased resolution
-    #    yy = self._get_sigma_crit_inv(lzred, xx)
-    #    return interp1d(xx, yy, kind='cubic', bounds_error=False, fill_value=0.0)
 
     def _get_esd(self, logmstel, logre, logmh, lconc, proj_sep):
         """Provides the ESD and sigma in comoving units - vectorized for multiple separations"""
@@ -89,12 +72,10 @@ class simshear():
         self.stel = stellar(logmstel, log_re=logre)
         
         # Vectorized calculations for all separations at once
-        esd_s = self.stel.esd_pointmass(proj_sep)   
-        #esd_s = self.stel.esd_deVaucouleurs(proj_sep)   
-        esd_dm = self.hp.esd_nfw(proj_sep)           
-        sigma_s = self.stel.sigma_pointmass(proj_sep) 
-        #sigma_s = self.stel.sigma_deVaucouleurs(proj_sep) 
-        sigma_dm = self.hp.sigma_nfw(proj_sep)         
+        esd_s       = self.stel.esd_deVaucouleurs(proj_sep)   
+        esd_dm      = self.hp.esd_nfw(proj_sep)           
+        sigma_s     = self.stel.sigma_deVaucouleurs(proj_sep) 
+        sigma_dm    = self.hp.sigma_nfw(proj_sep)         
         
         return esd_s, esd_dm, sigma_s, sigma_dm 
 
@@ -121,8 +102,8 @@ class simshear():
         sx, sy, sz = self.get_xyz(sra, sdec)
         
         # Vectorized calculation of projected separation
-        sep_vector = np.sqrt((sx - lx)**2 + (sy - ly)**2 + (sz - lz)**2)
-        proj_sep = self.cosmo_comoving_distance(lzred) * sep_vector
+        sep_vector  = np.sqrt((sx - lx)**2 + (sy - ly)**2 + (sz - lz)**2)
+        proj_sep    = self.cosmo_comoving_distance(lzred) * sep_vector
         
         # Get gamma and kappa components for all pairs at once
         gamma_s, gamma_dm, kappa_s, kappa_dm = self._get_g(logmstel, logre, logmh, lconc, lzred, szred, proj_sep)
@@ -134,19 +115,19 @@ class simshear():
         
         # Calculate reduced shear or use pure shear based on parameter
         if use_shear:
-            g = gamma       # shear
-            g_b = gamma_s   # shear - baryonic
-            g_dm = gamma_dm # shear - dark matter
+            g       = gamma    # shear
+            g_b     = gamma_s  # shear - baryonic
+            g_dm    = gamma_dm # shear - dark matter
         else:
             # Vectorized division with clipping to avoid division by zero
-            denom = 1.0 - kappa
-            denom_s = 1.0 - kappa_s
-            denom_dm = 1.0 - kappa_dm
+            denom       = 1.0 - kappa
+            denom_s     = 1.0 - kappa_s
+            denom_dm    = 1.0 - kappa_dm
             
             # Calculate reduced shear
-            g = gamma / denom          # reduced shear
-            g_b = gamma_s / denom_s    # reduced shear - baryonic
-            g_dm = gamma_dm / denom_dm # reduced shear - dark matter
+            g       = gamma / denom       # reduced shear
+            g_b     = gamma_s / denom_s   # reduced shear - baryonic
+            g_dm    = gamma_dm / denom_dm # reduced shear - dark matter
         
         # Update flags for weak lensing regime
         sflag = (np.abs(kappa) < 0.3) & (np.abs(g) < 0.3)
@@ -158,19 +139,17 @@ class simshear():
         sdec_rad    = np.radians(sdec)
         
         # Vectorized calculations for angular quantities
-        c_sra_lra = np.clip(np.cos(sra_rad) * np.cos(lra_rad) + np.sin(lra_rad) * np.sin(sra_rad),-1,1)
-        s_sra_lra = np.clip(np.sin(sra_rad) * np.cos(lra_rad) - np.cos(sra_rad) * np.sin(lra_rad),-1,1)
+        c_sra_lra = np.cos(sra_rad) * np.cos(lra_rad) + np.sin(lra_rad) * np.sin(sra_rad)
+        s_sra_lra = np.sin(sra_rad) * np.cos(lra_rad) - np.cos(sra_rad) * np.sin(lra_rad)
         
         # Angular separation between lens-source pairs
         c_theta = np.clip(lx * sx + ly * sy + lz * sz, -1,1)
-        s_theta = np.clip(np.sqrt(1 - c_theta**2), -1,1)
+        s_theta = np.sqrt(1 - c_theta**2)
        
         # Vectorized calculation of cosine and sine of phi
         c_phi = np.cos(ldec_rad) * s_sra_lra / s_theta
         s_phi = (-np.sin(ldec_rad) * np.cos(sdec_rad) + np.cos(ldec_rad) * c_sra_lra * np.sin(sdec_rad)) / s_theta
-        np.clip(c_phi, -1, 1) 
-        np.clip(s_phi, -1, 1) 
-        
+       
         # Tangential shear components
         g_1 = -g * (2 * c_phi**2 - 1)
         g_2 = -g * (2 * c_phi * s_phi)
@@ -185,31 +164,20 @@ class simshear():
 
     def shear_src(self, lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, intse1, intse2, use_shear=False, no_shear=False):
         """Apply shear to source galaxies with given intrinsic shapes - fully vectorized"""
-        # Initialize output arrays
-        #se1 = intse1.copy()
-        #se2 = intse2.copy()
-        
-        ## Initialize the interpolator for sigma_crit_inv if needed
-        #if not self.init_spl_sigma_crit_inv:
-        #    self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(lzred)
-        #    self.init_spl_sigma_crit_inv = True
-            
         # Get shear components for all sources at once
         g_1, g_2, gtan, kappa, c_phi, s_phi, proj_sep, sflag, g_b, g_dm = self.get_g(
             lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, use_shear=use_shear, no_shear=no_shear
         )
         
         # Convert to complex numbers for easier manipulation
-        g   = g_1 + 1j * g_2
-        es  = intse1 + 1j * intse2
+        g   = g_1       + 1j * g_2
+        es  = intse1    + 1j * intse2
         
         # Initialize output array
         e   = np.zeros_like(es, dtype=complex)
         
         # Apply Seitz & Schneider (1995) shear transformation
         idx = np.abs(g) <= 1
-        self.gmax = np.max(np.append(np.abs(g[sflag]), self.gmax))
-        
         # Vectorized calculation for |g| <= 1
         if np.any(idx):
             e[idx] = (es[idx] + g[idx]) / (1.0 + np.conj(g[idx]) * es[idx])
@@ -231,14 +199,14 @@ if __name__ == "__main__":
     lra         = 130
     ldec        = 0.0
     lzred       = 0.2
-    logmstel    = 10.0
+    logmstel    = 10.15
     logre       = -2.5
-    logmh       = 12.0
-    lconc       = 10.5
+    logmh       = 12.09
+    lconc       = 9.68
     
     from astropy.cosmology import FlatLambdaCDM
     cc = FlatLambdaCDM(H0 = 100, Om0 = 0.25)
-    rbins = np.logspace(-3,1,10)
+    rbins = np.logspace(-3,1,5)
     thetabins = (180/np.pi) * rbins/cc.comoving_distance(lzred).value
     # source test config
     sra     = 130 + thetabins
@@ -248,19 +216,20 @@ if __name__ == "__main__":
     intse1  = 0.0*sra
     intse2  = 0.0*sra
 
-    ereal, eimg, gtan, kappa, proj_sep, sflag, g_b, g_dm, etan_obs, ex_obs = ss.shear_src(lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, intse1, intse2, use_shear=True)
+    ereal, eimg, gtan, kappa, proj_sep, sflag, g_b, g_dm, etan_obs, ex_obs = ss.shear_src(lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, intse1, intse2)
 
-    sigmacrit = 1/ss._get_sigma_crit_inv(lzred=0.2, szred=szred)
+    sigmacrit = 1/ss._get_sigma_crit_inv(lzred=lzred, szred=szred)
     dsigma = etan_obs*sigmacrit/1e12
-    print(dsigma)
-    print(gtan*sigmacrit/1e12/ dsigma)
+    #print(gtan*sigmacrit/1e12/ dsigma)
     
-    plt.plot(rbins, dsigma)
-    stel = ss.stel.esd_deVaucouleurs(rbins)/1e12
-    dark = ss.hp.esd_nfw(rbins)/1e12
-    print(stel+dark)
-    plt.plot(rbins, stel)   
-    plt.plot(rbins, dark)   
+    plt.subplot(2,2,1)
+    plt.plot(proj_sep, dsigma, '.')
+    stel = ss.stel.esd_deVaucouleurs(proj_sep)/1e12
+    dark = ss.hp.esd_nfw(proj_sep)/1e12
+    plt.plot(proj_sep, stel)   
+    plt.plot(proj_sep, dark)   
+    plt.plot(proj_sep, stel+dark)
     plt.xscale('log')
     plt.yscale('log')
+
     plt.savefig('test.png', dpi=300) 

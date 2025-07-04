@@ -76,12 +76,6 @@ class simshear():
         
         return sigma_crit_inv
 
-    def _interp_get_sigma_crit_inv(self, lzred):
-        """Create interpolator for sigma_crit_inv at a fixed lens redshift"""
-        xx = np.linspace(lzred + 1e-4, 4.0, 200)  # Increased resolution
-        yy = self._get_sigma_crit_inv(lzred, xx)
-        return interp1d(xx, yy, kind='cubic', bounds_error=False, fill_value=0.0)
-
     def _get_esd(self, logmstel, logre, logmh, lconc, proj_sep):
         """Provides the ESD and sigma in comoving units - vectorized for multiple separations"""
         self.hp = halo(logmh, lconc, omg_m=self.omg_m)
@@ -105,15 +99,15 @@ class simshear():
         physical_proj_sep = proj_sep * physical_factor
         physical_logre = logre + np.log10(physical_factor)
         
-        # Get ESD and sigma for all separations at once
+        # Get ESD and sigma for all separations at once in comoving units
         esd_s, esd_dm, sigma_s, sigma_dm = self._get_esd(logmstel, physical_logre, logmh, lconc, physical_proj_sep)
         
         # Vectorized calculation of gamma and kappa
         factor = physical_factor**2 * get_sigma_crit_inv
-        gamma_s = esd_s * factor
-        gamma_dm = esd_dm * factor
-        kappa_s = sigma_s * factor
-        kappa_dm = sigma_dm * factor
+        gamma_s     = esd_s     * factor
+        gamma_dm    = esd_dm    * factor
+        kappa_s     = sigma_s   * factor
+        kappa_dm    = sigma_dm  * factor
         
         return gamma_s, gamma_dm, kappa_s, kappa_dm
 
@@ -134,9 +128,6 @@ class simshear():
         gamma = gamma_s + gamma_dm
         kappa = kappa_s + kappa_dm
         
-        # Initialize flags for valid calculations
-        sflag = (gamma_s != -999) & (gamma_dm != -999) & (kappa_s != -999) & (kappa_dm != -999)
-        
         # Calculate reduced shear or use pure shear based on parameter
         if use_shear:
             g = gamma       # shear
@@ -148,26 +139,13 @@ class simshear():
             denom_s = 1.0 - kappa_s
             denom_dm = 1.0 - kappa_dm
             
-            ## Set small denominators to NaN to avoid numerical issues
-            #mask = np.abs(denom) < 1e-10
-            #if np.any(mask):
-            #    denom[mask] = np.nan
-            #    
-            #mask_s = np.abs(denom_s) < 1e-10
-            #if np.any(mask_s):
-            #    denom_s[mask_s] = np.nan
-            #    
-            #mask_dm = np.abs(denom_dm) < 1e-10
-            #if np.any(mask_dm):
-            #    denom_dm[mask_dm] = np.nan
-            
             # Calculate reduced shear
             g = gamma / denom          # reduced shear
             g_b = gamma_s / denom_s    # reduced shear - baryonic
             g_dm = gamma_dm / denom_dm # reduced shear - dark matter
         
         # Update flags for weak lensing regime
-        sflag = sflag & (np.abs(kappa) < 0.2) & (np.abs(g) < 1)
+        sflag = (np.abs(kappa) < 0.3) & (np.abs(g) < 0.3)
         
         # Convert to radians for trigonometric calculations
         lra_rad = np.radians(lra)
@@ -183,17 +161,9 @@ class simshear():
         c_theta = np.clip(lx * sx + ly * sy + lz * sz, -1,1)
         s_theta = np.clip(np.sqrt(1 - c_theta**2), -1,1)
        
-        # Better handling of small angle cases
-        #zero_mask = np.abs(s_theta) < 1e-10
-        #if np.any(zero_mask):
-        ## For very small angles, set components directly rather than using an arbitrary small value
-        #    c_phi[zero_mask] = 1.0  # Assume aligned along x-axis
-        #    s_phi[zero_mask] = 0.0
-           
         # Vectorized calculation of cosine and sine of phi
         c_phi = np.cos(ldec_rad) * s_sra_lra / s_theta
         s_phi = (-np.sin(ldec_rad) * np.cos(sdec_rad) + np.cos(ldec_rad) * c_sra_lra * np.sin(sdec_rad)) / s_theta
-        
         np.clip(c_phi, -1, 1) 
         np.clip(s_phi, -1, 1) 
         
@@ -215,11 +185,6 @@ class simshear():
         se1 = intse1.copy()
         se2 = intse2.copy()
         
-        # Initialize the interpolator for sigma_crit_inv if needed
-        if not self.init_spl_sigma_crit_inv:
-            self.interp_get_sigma_crit_inv = self._interp_get_sigma_crit_inv(lzred)
-            self.init_spl_sigma_crit_inv = True
-            
         # Get shear components for all sources at once
         g_1, g_2, gtan, kappa, c_phi, s_phi, proj_sep, sflag, g_b, g_dm = self.get_g(
             lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, use_shear=use_shear, no_shear=no_shear
