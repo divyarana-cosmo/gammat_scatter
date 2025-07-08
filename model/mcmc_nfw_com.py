@@ -29,18 +29,23 @@ cosmo = cosmology.setCosmology('myCosmo', **params)
 sys.path.append('/home/rana/github_0/gammat_scatter/')
 from get_data import lens_select
 
-def get_zlarr(lenstype, logMmin, logMmax, zmin, zmax):
+def get_zlarr(lenstype, logMmin, logMmax, zmin, zmax, Njacks):
     lensargs = {}
-    lensargs['type'] == lenstype
+    lensargs['type']        =   lenstype
     lensargs['logmstelmin'] =   logMmin
     lensargs['logmstelmax'] =   logMmax
     lensargs['zmin']        =   zmin
     lensargs['zmax']        =   zmax
+    lensargs['Njacks']      =   Njacks
+    lensargs['H0']          =   H0
+    lensargs['Om0']          =  Om0
+    
+    
 
     lid, lra, ldec, lzred, lwgt, llogmstel, llogre, llogmh, lconc, lxjkreg = lens_select(lensargs)
     return lzred
 
-def nzsrc(z):
+def nsrc(z):
     "assigns redshifts respecting the distribution"
     z0 = 0.9/(2)**0.5
     f = lambda zred: (zred/z0)**2 * np.exp(-(zred/z0)**(3/2)) #taken from euclid prep 2020 page 22
@@ -51,18 +56,27 @@ def nzsrc(z):
 
 ss = simshear(H0=100, Om0=0.25)
 
-def model(x, rbin, lzredarr, lzredmax, zdiff):
+def model(x, rbins, lzredarr, lzredmax, zdiff):
     logmstel, log_re, logmh, cfac = x
     #assigning the concentration from diemer-joyce relation 
     lconc   = concentration.concentration(10**logmh, '200m', np.median(lzredarr), model = 'diemer19')
-    esd_s, esd_dm, sigma_s, sigma_dm  = ss._get_esd(logmstel=logmstel, logre=log_re, logmh=logmh, lconc=lconc*cfac, proj_sep=rbin)
+    esd_s, esd_dm, sigma_s, sigma_dm  = ss._get_esd(logmstel=logmstel, logre=log_re, logmh=logmh, lconc=lconc*cfac, proj_sep=rbins)
 
-    ans = 0.0*rbin
-    norm = quad(nsrc, 0,3)[0] # could have done this analytically via feynman technique 
-    for ii, rr in enumerate(rbin):
+    ans = 0.0*rbins
+    _xx = np.linspace(0,3,501)
+    norm = np.sum(nsrc(_xx[1:]*0.5 + _xx[:-1]*0.5))*(_xx[1] - _xx[0]) # could have done this analytically via feynman technique 
+    for ii, rr in enumerate(rbins):
         sigma       =   sigma_s[ii] + sigma_dm[ii]
-        integrand   =   lambda xx: np.mean(1/(1-(sigma*ss._get_sigma_crit_inv(lzred=lzredarr, szred=np.array([xx])))))
-        ans[ii]     =  quad(integrand, lzredmax+zdiff, 3.0)[0]/norm
+        xzz        =   np.linspace(lzredmax+zdiff, 3.0,101)
+        
+        for zz in xzz:
+            ans[ii] += nsrc(zz) * np.mean(1/(1-(sigma*ss._get_sigma_crit_inv(lzred=lzredarr, szred= 0.0*lzredarr + zz))))
+        #print('dummy redshifts',zz)
+        
+        ans[ii] *=(xzz[1] - xzz[0])/norm
+
+        #integrand   =   lambda xx: nsrc(xx) * np.mean(1/(1-(sigma*ss._get_sigma_crit_inv(lzred=lzredarr, szred= 0.0*lzredarr + xx))))
+        #ans[ii]     =  quad(integrand, lzredmax+zdiff, 3.0)[0]/norm
 
     esd = (esd_s + esd_dm)*ans
     return esd/1e12
@@ -87,12 +101,15 @@ def lnprob(x, rbins, data, icov, lzredarr, lzredmax, zdiff):
     if not np.isfinite(lp):
        dirt = 5*np.ones(len(data) + 1)
        return -np.inf,dirt
-    esd =   model(x, rbin, lzredarr, lzredmax, zdiff):
+    import time
+    begin = time.time()
+    esd =   model(x, rbins, lzredarr, lzredmax, zdiff)
+    print('time_elaspsed', time.time() - begin)
+    exit()
     Delta = esd - data
     chisq = np.dot(Delta, np.dot(icov, Delta))
 
-    blob = np.append(esd)
-    blob = np.append(blob, chisq)
+    blob = np.append(esd, chisq)
 
     print( 'log_Mstel, log_re, log_Mh, cfac, chisq')
     print( x,chisq)
@@ -136,8 +153,14 @@ if __name__ == "__main__":
     logMmax = 11.0
     zmin    = 0.1
     zmax    = 0.4
+    Njacks  = 50
+    #getting the lense redshift array
+    lenstype    = 'test_desi'    
+    lzredarr    = get_zlarr(lenstype, logMmin, logMmax, zmin, zmax, Njacks)
+    lzredmax    = zmax
+    zdiff       = 1e-10
 
-    njacks = 50
+    njacks = Njacks
     rbins, data, err, xdata, err    =   np.loadtxt('/home/rana/github_0/gammat_scatter/output/test_desi_z_0.1_0.4/dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMmin, logMmax), unpack=1)
     cov     =   np.loadtxt('/home/rana/github_0/gammat_scatter/output/test_desi_z_0.1_0.4/cov_dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMmin, logMmax))                  
     
@@ -149,7 +172,7 @@ if __name__ == "__main__":
     icov            = hartlap_factor*icov
 
     ndim = 4
-    nwalkers = 256
+    nwalkers = 8
     
     np.random.seed(123)
     p_logmstel  = np.random.uniform(9.5, 11.0, nwalkers) 
@@ -159,12 +182,7 @@ if __name__ == "__main__":
 
     p_0         = np.transpose([p_logmstel, p_log_re, p_logmh, p_c])
 
-    #getting the lense redshift array
-    lenstype    = 'test_desi_runs'    
-    lzredarr    = get_zlarr(lenstype, logMmin, logMmax, zmin, zmax):
-    lzredmax    = zmax
-    zdiff       = 0.0  
-    # Initialize the sampler
+   # Initialize the sampler
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, pool=pool, args=[rbins,data,icov, lzredarr, lzredmax, zdiff])
 
     print("Running burn-in...")
