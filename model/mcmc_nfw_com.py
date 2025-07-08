@@ -20,6 +20,8 @@ from distort_com import simshear
 
 #integration
 from scipy.integrate import quad
+#interpolation
+from scipy.interpolate import interp1d
 
 Om0 =   0.25
 H0  =   100
@@ -54,31 +56,26 @@ def nsrc(z):
 #zmax = 3
 
 
-ss = simshear(H0=100, Om0=0.25)
 
-def model(x, rbins, lzredarr, lzredmax, zdiff):
+
+
+ss = simshear(H0=100, Om0=0.25)
+Norm = quad(nsrc, 0.0, 3.0)[0]
+
+def model(x, rbins, nlens, xzz, lzredmax, zdiff):
     logmstel, log_re, logmh, cfac = x
+    dz  = xzz[1] - xzz[0]
     #assigning the concentration from diemer-joyce relation 
-    lconc   = concentration.concentration(10**logmh, '200m', np.median(lzredarr), model = 'diemer19')
+    lconc   = concentration.concentration(10**logmh, '200m', np.sum(xzz*nlens*dz), model = 'diemer19')
     esd_s, esd_dm, sigma_s, sigma_dm  = ss._get_esd(logmstel=logmstel, logre=log_re, logmh=logmh, lconc=lconc*cfac, proj_sep=rbins)
 
     ans = 0.0*rbins
-    _xx = np.linspace(0,3,501)
-    norm = np.sum(nsrc(_xx[1:]*0.5 + _xx[:-1]*0.5))*(_xx[1] - _xx[0]) # could have done this analytically via feynman technique 
     for ii, rr in enumerate(rbins):
         sigma       =   sigma_s[ii] + sigma_dm[ii]
-        xzz        =   np.linspace(lzredmax+zdiff, 3.0,101)
-        
-        for zz in xzz:
-            ans[ii] += nsrc(zz) * np.mean(1/(1-(sigma*ss._get_sigma_crit_inv(lzred=lzredarr, szred= 0.0*lzredarr + zz))))
-        #print('dummy redshifts',zz)
-        
-        ans[ii] *=(xzz[1] - xzz[0])/norm
+        integrand   =   lambda xx: nsrc(xx) * sum(nlens * 1/(1-(sigma*ss._get_sigma_crit_inv(lzred=xzz, szred= 0.0*xzz + xx))))
+        ans[ii]     =  quad(integrand, lzredmax+zdiff, 3.0)[0]/Norm
 
-        #integrand   =   lambda xx: nsrc(xx) * np.mean(1/(1-(sigma*ss._get_sigma_crit_inv(lzred=lzredarr, szred= 0.0*lzredarr + xx))))
-        #ans[ii]     =  quad(integrand, lzredmax+zdiff, 3.0)[0]/norm
-
-    esd = (esd_s + esd_dm)*ans
+    esd = (esd_s + esd_dm)*ans*dz
     return esd/1e12
 
 
@@ -96,14 +93,14 @@ def lnprior(x):
         return 0.0 + np.log(gauss(c,mean=1.0, sigma=0.16))
     return -np.inf
 
-def lnprob(x, rbins, data, icov, lzredarr, lzredmax, zdiff):
+def lnprob(x, rbins, data, icov, nlens, xzz, lzredmax, zdiff):
     lp = lnprior(x)
     if not np.isfinite(lp):
        dirt = 5*np.ones(len(data) + 1)
        return -np.inf,dirt
     import time
     begin = time.time()
-    esd =   model(x, rbins, lzredarr, lzredmax, zdiff)
+    esd =   model(x, rbins, nlens, xzz, lzredmax, zdiff)
     print('time_elaspsed', time.time() - begin)
     exit()
     Delta = esd - data
@@ -113,7 +110,7 @@ def lnprob(x, rbins, data, icov, lzredarr, lzredmax, zdiff):
 
     print( 'log_Mstel, log_re, log_Mh, cfac, chisq')
     print( x,chisq)
-    if chisq<0 or np.isnan(chisq):
+    if chisq<0 or np.isnan(chisq) :
         return -np.inf, 5*np.ones(len(data) + 1)
     res = lp- chisq*0.5  
     return res,blob
@@ -157,6 +154,14 @@ if __name__ == "__main__":
     #getting the lense redshift array
     lenstype    = 'test_desi'    
     lzredarr    = get_zlarr(lenstype, logMmin, logMmax, zmin, zmax, Njacks)
+    
+    zzbins              = np.linspace(0,3,101)
+    nlens,binedgs       = np.histogram(lzredarr, bins=zzbins)
+    xzz         =   binedgs[1:]*0.5 + binedgs[:-1]*0.5
+    nlens       =   nlens/sum(nlens)
+    
+    del lzredarr
+
     lzredmax    = zmax
     zdiff       = 1e-10
 
@@ -183,7 +188,7 @@ if __name__ == "__main__":
     p_0         = np.transpose([p_logmstel, p_log_re, p_logmh, p_c])
 
    # Initialize the sampler
-    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, pool=pool, args=[rbins,data,icov, lzredarr, lzredmax, zdiff])
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, pool=pool, args=[rbins,data,icov, nlens, xzz, lzredmax, zdiff])
 
     print("Running burn-in...")
     Ntotal = 3000
