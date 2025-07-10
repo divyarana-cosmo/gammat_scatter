@@ -34,8 +34,9 @@ class model():
         self.zsrcmax  = zsrcmax
 
         # source redshift distribution normalization and 1/(1-kappa) averaging
-        self.Norm       = quad(self.nsrc, self.zsrcmin, self.zsrcmax)[0]
-        self.addon      = quad(self.nsrc, 0.0, self.zlmax+self.zdiff)[0]
+        self.Norm = quad(self.nsrc, self.zlmax + self.zdiff, self.zsrcmax)[0]
+        #self.Norm       = quad(self.nsrc, self.zsrcmin, self.zsrcmax)[0]
+        #self.addon      = quad(self.nsrc, 0.0, self.zlmax+self.zdiff)[0]
 
 
  
@@ -71,22 +72,57 @@ class model():
 
 
     def esd(self, x, rbins, reduced=True):
-        "predicts the total esd profile after adding baryon+dark-matter"
+        """
+        Predicts ESD profile (in M_sun/pc^2), optionally corrected for reduced shear.
+        If `reduced=True`, returns g * ?_crit (i.e., ??_reduced), using proper integration.
+        """
         logmstel, log_re, logmh, cfac = x
-        self.lconc   = cfac*concentration.concentration(10**logmh, '200m', self.mean_lzred, model = 'diemer19')
-
-        # we are getting the esd profiles.
-        self.esd_s, self.esd_dm, sigma_s, sigma_dm  = self.ss._get_esd(logmstel=logmstel, logre=log_re, logmh=logmh, lconc=self.lconc, proj_sep=rbins)
-        esd     =   self.esd_s + self.esd_dm
+        self.lconc = cfac * concentration.concentration(
+            10**logmh, '200m', self.mean_lzred, model='diemer19'
+        )
+    
+        # Get ESD and total projected density
+        self.esd_s, self.esd_dm, sigma_s, sigma_dm = self.ss._get_esd(
+            logmstel=logmstel,
+            logre=log_re,
+            logmh=logmh,
+            lconc=self.lconc,
+            proj_sep=rbins
+        )
+        sigma = sigma_s + sigma_dm           # Surface density ?(R)
+        delta_sigma = self.esd_s + self.esd_dm  # Excess surface density ??(R)
+    
         if not reduced:
-            return esd/1e12
-        sigma   =   sigma_s + sigma_dm
-        # we are averaging over the 1/(1-kappa) to correct for the reduced shear
-        for ii, rr in enumerate(rbins):
-            integrand   =   lambda xx: self.nsrc(xx) * sum(self.pzl * 1/(1-(sigma[ii]*self.ss._get_sigma_crit_inv(lzred=self.zlbins, szred= 0.0*self.zlbins + xx))))
+            return delta_sigma.copy() / 1e12  # Return ? × ?_crit
+    
+        # Discretize source redshifts
+        zsrc_vals = np.linspace(self.zlmax + self.zdiff, self.zsrcmax, 50)
+        nsrc_vals = np.array([self.nsrc(z) for z in zsrc_vals])
+        nsrc_vals /= np.trapz(nsrc_vals, zsrc_vals)  # normalize over allowed range
 
-            esd[ii]     *= ((self.addon + quad(integrand, self.zlmax+self.zdiff, self.zsrcmax)[0])/self.Norm)
-        return esd/1e12
+        # Prepare result array
+        ds_reduced = np.zeros_like(rbins)
+    
+        for i, R in enumerate(rbins):
+            numerator = 0.0
+            denominator = 0.0
+    
+            for zsrc, n_wt in zip(zsrc_vals, nsrc_vals):
+                # Compute ?_crit^-1 for all lens redshifts at this zsrc
+                sigma_crit_inv = self.ss._get_sigma_crit_inv(self.zlbins, np.full_like(self.zlbins, zsrc))
+                sigma_crit = 1.0 / sigma_crit_inv
+    
+                kappa = sigma[i] / sigma_crit
+                g_sigma_crit = delta_sigma[i] / (1.0 - kappa)
+    
+                avg_over_lens = np.sum(self.pzl * g_sigma_crit)
+                numerator += n_wt * avg_over_lens
+                denominator += n_wt
+    
+            ds_reduced[i] = numerator / denominator
+    
+        return ds_reduced / 1e12  # Convert to M_sun/pc²
+
 
 
 
@@ -100,7 +136,7 @@ if __name__ == "__main__":
     zlmin       =   0.1
     zlmax       =   0.4
     Njacks      =   50
-    zdiff       =   0.1
+    zdiff       =   0.0
 
     mm = model(H0, Om0, lenstype, logMmin, logMmax, zlmin, zlmax, Njacks, zdiff)
 
