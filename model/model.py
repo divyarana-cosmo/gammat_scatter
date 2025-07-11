@@ -6,9 +6,12 @@ from colossus.cosmology import cosmology
 from colossus.halo import concentration
 
 sys.path.append('/home/rana/github_0/gammat_scatter/src/')
+from stellarpy import stellar
 from distort_com import simshear
 #integration
 from scipy.integrate import quad
+#interpolation
+from scipy.interpolate import InterpolatedUnivariateSpline as ius
 #lens sample
 sys.path.append('/home/rana/github_0/gammat_scatter/')
 from get_data import lens_select
@@ -20,47 +23,52 @@ class model():
         "initialization parameters"
         self.H0         = H0
         self.Om0        = Om0
+        self.logMmin    = logMmin
+        self.logMmax    = logMmax
         params          = {'flat': True, 'H0': H0, 'Om0': Om0, 'Ob0': 0.049, 'sigma8': 0.81, 'ns': 0.95}
-        cosmo           = cosmology.setCosmology('myCosmo', **params)
+        self.cosmo      = cosmology.setCosmology('myCosmo', **params)
         self.ss         = simshear(H0=H0, Om0=Om0)
         
         # lense sample selection for redshift
-        self.get_pzl(lenstype, logMmin, logMmax, zlmin, zlmax, Njacks)
+        self.get_pzl()
+        self.precompute_esd_s()
 
 
         # setting the integration limits over source redshift
-        self.zdiff    = 1e-10+zdiff
-        self.zsrcmin  = zsrcmin
-        self.zsrcmax  = zsrcmax
+        self.zlmax      =   zlmax
+        self.zdiff      = 1e-10+zdiff
+        self.zsrcmin    = zsrcmin
+        self.zsrcmax    = zsrcmax
 
         # source redshift distribution normalization and 1/(1-kappa) averaging
         self.Norm = quad(self.nsrc, self.zlmax + self.zdiff, self.zsrcmax)[0]
 
 
  
-    def get_pzl(self, lenstype, logMmin, logMmax, zlmin, zlmax, Njacks, Nzlbins=101):
+    def get_pzl(self):
         "creates a probability distribution for the lens redshifts"
-        lensargs = {}
-        lensargs['type']        =   lenstype
-        lensargs['logmstelmin'] =   logMmin
-        lensargs['logmstelmax'] =   logMmax
-        lensargs['zmin']        =   zlmin
-        lensargs['zmax']        =   zlmax
-        lensargs['Njacks']      =   Njacks
-        lensargs['H0']          =   self.H0
-        lensargs['Om0']         =   self.Om0
-    
-        lid, lra, ldec, lzred, lwgt, llogmstel, llogre, llogmh, lconc, lxjkreg = lens_select(lensargs)
-        zzbins                  = np.linspace(zlmin, zlmax, Nzlbins)
-        nlens,binedgs           = np.histogram(lzred, bins=zzbins)
-        self.mean_lzred         = np.mean(lzred)
-        self.zlmax              = zlmax
-        del lid, lra, ldec, lzred, lwgt, llogmstel, llogre, llogmh, lconc, lxjkreg
-        gc.collect()
-        
-        self.zlbins             =   binedgs[1:]*0.5 + binedgs[:-1]*0.5
-        self.pzl                =   nlens/sum(nlens)
+        fpath = './precompute/'+'pzl_%s_%s.dat'%(self.logMmin, self.logMmax)
+        if not os.path.exists(fpath):
+            print('please run the precompute first')
+            exit()
+ 
+        self.zlbins, self.pzl, dummy = np.loadtxt(fpath, unpack=1) 
+        self.mean_lzred         =   sum(self.zlbins*self.pzl)
         return 0
+
+    def precompute_esd_s(self):
+        fpath = './precompute/'+'esd_s_%s_%s.dat'%(self.logMmin, self.logMmax)
+        if not os.path.exists(fpath):
+            print('please run the precompute first')
+            exit()
+        rarr, esdarr, sigarr    = np.loadtxt(fpath, unpack=1)
+        self.spl_log_esd_s      = ius(np.log10(rarr), np.log10(esdarr))
+        self.spl_log_sigma_s    = ius(np.log10(rarr), np.log10(sigarr))
+        del rarr, esdarr, sigarr
+        gc.collect()
+        print("putting splines on precomputations for stellar contribution done")
+        return 0    
+
 
     def nsrc(self,z):
         "assigns redshifts respecting the distribution"
@@ -71,16 +79,16 @@ class model():
 
     def esd(self, x, rbins, reduced=True):
         """
-        Predicts ESD profile (in M_sun/pc^2). If `reduced=True`, returns g * ?_crit using integrated correction.
+        Predicts ESD profile (in M_sun/pc^2). If `reduced=True`, returns g * sigma_crit using integrated correction.
         """
-        logmstel, log_re, logmh, cfac = x
+        logalpha, logmh, cfac = x
+        
+        cosmology.setCurrent(self.cosmo)
         self.lconc = cfac * concentration.concentration(10**logmh, '200m', self.mean_lzred, model='diemer19')
     
-        self.esd_s, self.esd_dm, sigma_s, sigma_dm = self.ss._get_esd(
-            logmstel=logmstel, logre=log_re, logmh=logmh, lconc=self.lconc, proj_sep=rbins
-        )
-        sigma = sigma_s + sigma_dm
-        delta_sigma = self.esd_s + self.esd_dm
+        self.esd_dm, sigma_dm = self.ss._get_esd_dm(logmh=logmh, lconc=self.lconc, proj_sep=rbins)
+        sigma       = 10**logalpha * 10**self.spl_log_sigma_s(np.log10(rbins))    + sigma_dm
+        delta_sigma = 10**logalpha * 10**self.spl_log_esd_s(np.log10(rbins))  + self.esd_dm
     
         if not reduced:
             return delta_sigma / 1e12
@@ -96,7 +104,7 @@ class model():
     
         # Compute reduced ESD for each R bin
         ds_reduced = np.array([
-            quad(integrand, zmin, self.zsrcmax, args=(i,), epsabs=1e-4, epsrel=1e-3)[0] / self.Norm
+            quad(integrand, zmin, self.zsrcmax, args=(i,), epsabs=1e-4, epsrel=1e-3, limit=70)[0] / self.Norm
             for i in range(len(rbins))
         ])
     
@@ -123,14 +131,19 @@ if __name__ == "__main__":
     logmh       =   12.42861652
     cfac        =   1.0
 
-    x = [logmstel, log_re, logmh, cfac]
+    logalpha       =   0.0
+    x = [logalpha, logmh, cfac]
     rbins = np.logspace(-3,0,20)
     import time
     begin = time.time()
     red_esd     = mm.esd( x, rbins)
+    print(time.time() - begin)
+    begin = time.time()
     gamma_esd   = mm.esd( x, rbins, reduced=False)
     print(time.time() - begin)
     import matplotlib.pyplot as plt
+    print(red_esd)
+    print(gamma_esd)
 
     plt.subplot(2,2,1)
     plt.plot(rbins, red_esd, label='$g$')
