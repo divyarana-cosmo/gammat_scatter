@@ -35,8 +35,6 @@ class model():
 
         # source redshift distribution normalization and 1/(1-kappa) averaging
         self.Norm = quad(self.nsrc, self.zlmax + self.zdiff, self.zsrcmax)[0]
-        #self.Norm       = quad(self.nsrc, self.zsrcmin, self.zsrcmax)[0]
-        #self.addon      = quad(self.nsrc, 0.0, self.zlmax+self.zdiff)[0]
 
 
  
@@ -73,56 +71,36 @@ class model():
 
     def esd(self, x, rbins, reduced=True):
         """
-        Predicts ESD profile (in M_sun/pc^2), optionally corrected for reduced shear.
-        If `reduced=True`, returns g * ?_crit (i.e., ??_reduced), using proper integration.
+        Predicts ESD profile (in M_sun/pc^2). If `reduced=True`, returns g * ?_crit using integrated correction.
         """
         logmstel, log_re, logmh, cfac = x
-        self.lconc = cfac * concentration.concentration(
-            10**logmh, '200m', self.mean_lzred, model='diemer19'
-        )
+        self.lconc = cfac * concentration.concentration(10**logmh, '200m', self.mean_lzred, model='diemer19')
     
-        # Get ESD and total projected density
         self.esd_s, self.esd_dm, sigma_s, sigma_dm = self.ss._get_esd(
-            logmstel=logmstel,
-            logre=log_re,
-            logmh=logmh,
-            lconc=self.lconc,
-            proj_sep=rbins
+            logmstel=logmstel, logre=log_re, logmh=logmh, lconc=self.lconc, proj_sep=rbins
         )
-        sigma = sigma_s + sigma_dm           # Surface density ?(R)
-        delta_sigma = self.esd_s + self.esd_dm  # Excess surface density ??(R)
+        sigma = sigma_s + sigma_dm
+        delta_sigma = self.esd_s + self.esd_dm
     
         if not reduced:
-            return delta_sigma.copy() / 1e12  # Return ? × ?_crit
+            return delta_sigma / 1e12
     
-        # Discretize source redshifts
-        zsrc_vals = np.linspace(self.zlmax + self.zdiff, self.zsrcmax, 50)
-        nsrc_vals = np.array([self.nsrc(z) for z in zsrc_vals])
-        nsrc_vals /= np.trapz(nsrc_vals, zsrc_vals)  # normalize over allowed range
-
-        # Prepare result array
-        ds_reduced = np.zeros_like(rbins)
+        # Normalize n(z) over valid source redshift range
+        zmin = self.zlmax + self.zdiff
+        def integrand(zs, i):
+            if zs <= zmin: return 0.0
+            nz = self.nsrc(zs)
+            siginv = self.ss._get_sigma_crit_inv(self.zlbins, zs)
+            gsc = delta_sigma[i] / (1 - sigma[i] * siginv)
+            return nz * np.dot(self.pzl, gsc)
     
-        for i, R in enumerate(rbins):
-            numerator = 0.0
-            denominator = 0.0
+        # Compute reduced ESD for each R bin
+        ds_reduced = np.array([
+            quad(integrand, zmin, self.zsrcmax, args=(i,), epsabs=1e-4, epsrel=1e-3)[0] / self.Norm
+            for i in range(len(rbins))
+        ])
     
-            for zsrc, n_wt in zip(zsrc_vals, nsrc_vals):
-                # Compute ?_crit^-1 for all lens redshifts at this zsrc
-                sigma_crit_inv = self.ss._get_sigma_crit_inv(self.zlbins, np.full_like(self.zlbins, zsrc))
-                sigma_crit = 1.0 / sigma_crit_inv
-    
-                kappa = sigma[i] / sigma_crit
-                g_sigma_crit = delta_sigma[i] / (1.0 - kappa)
-    
-                avg_over_lens = np.sum(self.pzl * g_sigma_crit)
-                numerator += n_wt * avg_over_lens
-                denominator += n_wt
-    
-            ds_reduced[i] = numerator / denominator
-    
-        return ds_reduced / 1e12  # Convert to M_sun/pc²
-
+        return ds_reduced / 1e12
 
 
 
