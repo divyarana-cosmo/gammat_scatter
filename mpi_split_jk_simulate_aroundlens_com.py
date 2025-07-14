@@ -3,14 +3,11 @@
 import sys
 sys.path.append('./src/')
 sys.path.append('./utils/')
-from lensutils import get_re
 from distort_com import simshear
+
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.cosmology import FlatLambdaCDM
-from scipy.integrate import quad
-from scipy.interpolate import interp1d
-from scipy.spatial import cKDTree
 from get_data import lens_select
 from tqdm import tqdm
 import argparse
@@ -63,12 +60,6 @@ def run_pipe(config, outputfilename='gamma.dat', jksamp=0, outputpairfile=None):
     # Getting the lenses data
     lensargs['H0']=config['H0']; lensargs['Om0']=config['Om0']
     lid, lra, ldec, lzred, lwgt, llogmstel, llogre, llogmh, lconc, lxjkreg = lens_select(lensargs, jk=jksamp)
-    print('zred', lzred)
-    print('logmstel', llogmstel)
-    print('llogre', llogre)
-    print('logmhzred', llogmh)
-    print('lconc', lconc)
-
 
     print("lens data read fully", np.min(lzred))
     # Calculate maximum angular separation based on minimum redshift
@@ -84,8 +75,9 @@ def run_pipe(config, outputfilename='gamma.dat', jksamp=0, outputpairfile=None):
     if outputpairfile is not None:
         fpairout = open(outputpairfile, "w")
         fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tkappa\tintse1\tintse2\tr90se1\tr90se2\tr90et\tr90ex\tr90intse1\tr90intse2\n')
-    
-    # Process each lens
+
+
+   # Process each lens
     for ii in tqdm(range(len(lra))):
         # Create sources for this lens - vectorized creation
         sra, sdec, szred, wgal, intse1, intse2 = create_sources(
@@ -115,7 +107,7 @@ def run_pipe(config, outputfilename='gamma.dat', jksamp=0, outputpairfile=None):
         # Apply cut to all source arrays at once
         sra     = sra[scut]
         sdec    = sdec[scut]
-        szred   = 0.8 + 0.0 * szred[scut]
+        szred   = szred[scut]
         wgal    = wgal[scut]
         intse1  = intse1[scut]
         intse2  = intse2[scut]
@@ -204,6 +196,8 @@ def run_pipe(config, outputfilename='gamma.dat', jksamp=0, outputpairfile=None):
     
     # Create dictionary for results
     df = {}
+    df["-2-rmin"]                   = rbins[:-1]
+    df["-1-rmax"]                   = rbins[1:]
     df["0-rmin/2+rmax/2"]           = rbins[:-1] * 0.5 + rbins[1:] * 0.5
     df["1-gammat"]                  = sumdgammat_num / sumdwls / Resp    
     df["2-gammatsq"]                = sumdgammatsq_num / sumdwls / Resp**2
@@ -260,12 +254,6 @@ if __name__ == "__main__":
 
     config["outputdir"] = config["outputdir"] 
 
-    #make the directory for the output
-    from subprocess import call
-    call("mkdir -p %s" % (config["outputdir"]), shell=1)
-
-    outputfilename = '%s/simed_sources.dat'%(config['outputdir'])
-
     if 'logmstelmin'not in config:
         config['lens']['logmstelmin'] = args.logmstelmin
     if 'logmstelmax'not in config:
@@ -277,6 +265,14 @@ if __name__ == "__main__":
     config['source']['use_shear']       = args.use_shear
     config['source']['no_shape_noise']  = args.no_shape_noise
     config['source']['no_shear']        = args.no_shear
+
+
+    config["outputdir"] += '_seed_%d'%config['seed']
+    outputfilename = '%s/simed_sources.dat'%(config['outputdir'])
+    #make the directory for the output
+    from subprocess import call
+    call("mkdir -p %s" % (config["outputdir"]), shell=1)
+
 
 
     outputfilename = outputfilename + '_lmstelmin_%2.2f_lmstelmax_%2.2f'%(args.logmstelmin, args.logmstelmax)
