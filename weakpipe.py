@@ -23,7 +23,7 @@ from scipy.integrate import quad
 
 
 class source_select():
-   def __init__(self,config, outputfilename='gamma.dat', jksamp=0, outputpairfile=None):
+   def __init__(self):
        #getting the source redshift interpolation for sampling
        self.get_interp_szred()
 
@@ -35,7 +35,6 @@ class source_select():
         z = np.sin(dec)
         return x, y, z
     
-    `
     def get_interp_szred(self):
         "assigns redshifts respecting the distribution"
         z0 = 0.9/(2)**0.5
@@ -167,13 +166,11 @@ class weakpipe():
             
             # Shear all sources at once
             se1, se2, etan, kappa, proj_sep, sflag, etan_b, etan_dm, et_obs, ex_obs = self.ss.shear_src(
-                lra, ldec, lzred[ii], llogmstel[ii], llogre[ii], llogmh[ii], lconc[ii],
-                sra, sdec, szred, intse1, intse2, 
-                use_shear=use_shear)
+                lra, ldec, self.lzred[ii], self.llogmstel[ii], self.llogre[ii], self.llogmh[ii], self.lconc[ii], sra, sdec, szred, intse1, intse2, use_shear=use_shear)
             
             print('flagged sources', np.sum(sflag))
             sl_sep  = proj_sep
-            w_ls    = lwgt[ii] * wgal
+            w_ls    = self.lwgt[ii] * wgal
             
             # Vectorized filtering of arrays
             idx = (sl_sep > self.Rmin) & (sl_sep < self.Rmax) & sflag
@@ -196,7 +193,7 @@ class weakpipe():
             szred   = szred[idx]
 
             # Write pairs to output file if needed
-            if outputpairfile is not None:
+            if self.outputpairfile :
                 for jj in range(np.sum(idx)):
                     self.fpairout.write(f'{lxjkreg[ii]}\t{lra[ii]}\t{ldec[ii]}\t{lzred[ii]}\t{llogmstel[ii]}\t{llogmh[ii]}\t{lconc[ii]}\t{sra[jj]}\t{sdec[jj]}\t{szred[jj]}\t{se1[jj]}\t{se2[jj]}\t{etan[jj]}\t{et_obs[jj]}\t{ex_obs[jj]}\t{sl_sep[jj]}\t{w_ls[jj]}\t{kappa[jj]}\t{intse1[jj]}\t{intse2[jj]}\t{r90se1[jj]}\t{r90se2[jj]}\t{r90et_obs[jj]}\t{r90ex_obs[jj]}\t{r90intse1[jj]}\t{r90intse2[jj]}\n')
             
