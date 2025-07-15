@@ -157,14 +157,17 @@ class simshear():
         
         # Angular separation between lens-source pairs
         c_theta = np.clip(lx * sx + ly * sy + lz * sz, -1,1)
-        s_theta = np.sqrt(1 - c_theta**2)
+        # Inputs: lx, ly, lz (lens), sx, sy, sz (source), all unit vectors
+        cx = ly * sz - lz * sy
+        cy = lz * sx - lx * sz
+        cz = lx * sy - ly * sx
+        s_theta = np.sqrt(cx**2 + cy**2 + cz**2)
        
         # Vectorized calculation of cosine and sine of phi
         c_phi = np.cos(ldec_rad) * s_sra_lra / s_theta
         s_phi = (-np.sin(ldec_rad) * np.cos(sdec_rad) + np.cos(ldec_rad) * c_sra_lra * np.sin(sdec_rad)) / s_theta
         c_2phi  = np.clip(2*c_phi**2 -1, -1, 1)
         s_2phi  = np.clip(2*c_phi * s_phi, -1, 1)
-        g =1.0 + 0.0*g 
         # Tangential shear components
         g_1 = -g * c_2phi 
         g_2 = -g * s_2phi 
@@ -233,7 +236,7 @@ if __name__ == "__main__":
 
     ereal, eimg, gtan, kappa, proj_sep, sflag, g_b, g_dm, etan_obs, ex_obs = ss.shear_src(lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, intse1, intse2, use_shear=True)
 
-
+    print(proj_sep)
     print('input', gtan)
     print('observed', etan_obs)
 
