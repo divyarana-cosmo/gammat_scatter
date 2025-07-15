@@ -40,13 +40,23 @@ class simshear():
         
         return x, y, z
 
+    def _get_sigma_crit_inv_scalar(self, lzred, szred):
+        # Vectorized computation for all valid pairs at once
+        d_l = self.cosmo_comoving_distance(lzred)
+        d_s = self.cosmo_comoving_distance(szred)
+        
+        # Calculate sigma_crit_inv in one operation
+        sigma_crit_inv = (d_l * (d_s - d_l) / (d_s )) * (4 * np.pi * self.gee * (1 + lzred)/ self.cee**2)
+        return sigma_crit_inv
+ 
+
     def _get_sigma_crit_inv(self, lzred, szred):
         """Evaluate the lensing efficiency geometrical factor - fully vectorized"""
         # Broadcast to handle scalar inputs
         if np.isscalar(lzred):
             lzred = np.full_like(szred, lzred)
         elif np.isscalar(szred):
-            szred = np.full_like(lzred, szred)
+            szred = np.full_like(lzred,szred)
             
         # Initialize output array
         sigma_crit_inv = np.zeros_like(szred, dtype=float)
@@ -57,26 +67,29 @@ class simshear():
         if not np.any(valid_mask):
             return sigma_crit_inv
             
-        # Vectorized computation for all valid pairs at once
-        d_l = self.cosmo_comoving_distance(lzred[valid_mask])
-        d_s = self.cosmo_comoving_distance(szred[valid_mask])
-        
-        # Calculate sigma_crit_inv in one operation
-        sigma_crit_inv[valid_mask] = (d_l * (d_s - d_l) / (d_s )) * (4 * np.pi * self.gee * (1 + lzred[valid_mask])/ self.cee**2)
-        
+        sigma_crit_inv = self._get_sigma_crit_inv_scalar(lzred[valid_mask], szred[valid_mask])
+       
         return sigma_crit_inv
+
+    def _get_esd_s(self,logmstel, logre,proj_sep):
+        self.stel = stellar(logmstel, log_re=logre)
+        esd_s       = self.stel.esd_deVaucouleurs(proj_sep)   
+        sigma_s     = self.stel.sigma_deVaucouleurs(proj_sep) 
+        return esd_s, sigma_s
+
+    def _get_esd_dm(self, logmh, lconc, proj_sep):
+        self.hp = halo(logmh, lconc, omg_m=self.omg_m)
+        # Vectorized calculations for all separations at once
+        esd_dm      = self.hp.esd_nfw(proj_sep)           
+        sigma_dm    = self.hp.sigma_nfw(proj_sep)         
+        return esd_dm, sigma_dm
+ 
 
     def _get_esd(self, logmstel, logre, logmh, lconc, proj_sep):
         """Provides the ESD and sigma in comoving units - vectorized for multiple separations"""
-        self.hp = halo(logmh, lconc, omg_m=self.omg_m)
-        self.stel = stellar(logmstel, log_re=logre)
-        
         # Vectorized calculations for all separations at once
-        esd_s       = self.stel.esd_deVaucouleurs(proj_sep)   
-        esd_dm      = self.hp.esd_nfw(proj_sep)           
-        sigma_s     = self.stel.sigma_deVaucouleurs(proj_sep) 
-        sigma_dm    = self.hp.sigma_nfw(proj_sep)         
-        
+        esd_s, sigma_s      =   self._get_esd_s(logmstel, logre, proj_sep)
+        esd_dm, sigma_dm    =   self._get_esd_dm(logmh, lconc, proj_sep)
         return esd_s, esd_dm, sigma_s, sigma_dm 
 
     def _get_g(self, logmstel, logre, logmh, lconc, lzred, szred, proj_sep):
@@ -130,7 +143,7 @@ class simshear():
             g_dm    = gamma_dm / denom_dm # reduced shear - dark matter
         
         # Update flags for weak lensing regime
-        sflag = (np.abs(kappa) < 0.3) & (np.abs(g) < 0.3)
+        sflag = (np.abs(kappa) < 1.0) & (np.abs(g) < 1.0)
         
         # Convert to radians for trigonometric calculations
         lra_rad     = np.radians(lra)
@@ -149,10 +162,12 @@ class simshear():
         # Vectorized calculation of cosine and sine of phi
         c_phi = np.cos(ldec_rad) * s_sra_lra / s_theta
         s_phi = (-np.sin(ldec_rad) * np.cos(sdec_rad) + np.cos(ldec_rad) * c_sra_lra * np.sin(sdec_rad)) / s_theta
-       
+        c_2phi  = np.clip(2*c_phi**2 -1, -1, 1)
+        s_2phi  = np.clip(2*c_phi * s_phi, -1, 1)
+        g =1.0 + 0.0*g 
         # Tangential shear components
-        g_1 = -g * (2 * c_phi**2 - 1)
-        g_2 = -g * (2 * c_phi * s_phi)
+        g_1 = -g * c_2phi 
+        g_2 = -g * s_2phi 
         
         # Handle no_shear option
         if no_shear:
@@ -160,12 +175,12 @@ class simshear():
             g_1 = np.zeros_like(g_1)
             g_2 = np.zeros_like(g_1)
             
-        return g_1, g_2, g, kappa, c_phi, s_phi, proj_sep, sflag, g_b, g_dm
+        return g_1, g_2, g, kappa, c_2phi, s_2phi, proj_sep, sflag, g_b, g_dm
 
-    def shear_src(self, lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, intse1, intse2, use_shear=False, no_shear=False):
+    def shear_src(self, lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, intse1, intse2, use_shear=False, no_shear= False):
         """Apply shear to source galaxies with given intrinsic shapes - fully vectorized"""
         # Get shear components for all sources at once
-        g_1, g_2, gtan, kappa, c_phi, s_phi, proj_sep, sflag, g_b, g_dm = self.get_g(
+        g_1, g_2, gtan, kappa, c_2phi, s_2phi, proj_sep, sflag, g_b, g_dm = self.get_g(
             lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, use_shear=use_shear, no_shear=no_shear
         )
         
@@ -174,7 +189,7 @@ class simshear():
         es  = intse1    + 1j * intse2
         
         # Initialize output array
-        e   = np.zeros_like(es, dtype=complex)
+        e   = 0.0*es
         
         # Apply Seitz & Schneider (1995) shear transformation
         idx = np.abs(g) <= 1
@@ -187,8 +202,8 @@ class simshear():
             e[~idx] = (1 + g[~idx] * np.conj(es[~idx])) / (np.conj(es[~idx]) + np.conj(g[~idx]))
         
         # Calculate observed quantities
-        etan_obs    = - np.real(e)*(2*c_phi**2 -1)  - np.imag(e)*(2*c_phi * s_phi)
-        ex_obs      =  np.real(e)*(2*c_phi * s_phi) - np.imag(e)*(2*c_phi**2 -1)
+        etan_obs    = - np.real(e)*c_2phi  - np.imag(e)*s_2phi
+        ex_obs      =   np.real(e)*s_2phi  - np.imag(e)*c_2phi
 
         return np.real(e), np.imag(e), gtan, kappa, proj_sep, sflag, g_b, g_dm, etan_obs, ex_obs
 
@@ -216,20 +231,24 @@ if __name__ == "__main__":
     intse1  = 0.0*sra
     intse2  = 0.0*sra
 
-    ereal, eimg, gtan, kappa, proj_sep, sflag, g_b, g_dm, etan_obs, ex_obs = ss.shear_src(lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, intse1, intse2)
+    ereal, eimg, gtan, kappa, proj_sep, sflag, g_b, g_dm, etan_obs, ex_obs = ss.shear_src(lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, intse1, intse2, use_shear=True)
 
-    sigmacrit = 1/ss._get_sigma_crit_inv(lzred=lzred, szred=szred)
-    dsigma = etan_obs*sigmacrit/1e12
-    #print(gtan*sigmacrit/1e12/ dsigma)
-    
-    plt.subplot(2,2,1)
-    plt.plot(proj_sep, dsigma, '.')
-    stel = ss.stel.esd_deVaucouleurs(proj_sep)/1e12
-    dark = ss.hp.esd_nfw(proj_sep)/1e12
-    plt.plot(proj_sep, stel)   
-    plt.plot(proj_sep, dark)   
-    plt.plot(proj_sep, stel+dark)
-    plt.xscale('log')
-    plt.yscale('log')
 
-    plt.savefig('test.png', dpi=300) 
+    print('input', gtan)
+    print('observed', etan_obs)
+
+    #sigmacrit = 1/ss._get_sigma_crit_inv(lzred=lzred, szred=szred)
+    #dsigma = etan_obs*sigmacrit/1e12
+    ##print(gtan*sigmacrit/1e12/ dsigma)
+    #
+    #plt.subplot(2,2,1)
+    #plt.plot(proj_sep, dsigma, '.')
+    #stel = ss.stel.esd_deVaucouleurs(proj_sep)/1e12
+    #dark = ss.hp.esd_nfw(proj_sep)/1e12
+    #plt.plot(proj_sep, stel)   
+    #plt.plot(proj_sep, dark)   
+    #plt.plot(proj_sep, stel+dark)
+    #plt.xscale('log')
+    #plt.yscale('log')
+
+    #plt.savefig('test.png', dpi=300) 
