@@ -130,7 +130,7 @@ class weakpipe():
         print(np.min(lzred), 'thetamax', self.dismax) 
         return 0
     
-    def weaklens_aroundlens(self, nsrc=30, sigell=0.26, zmax=0.4, zdiff=0.1, seed=123, use_shear=False,test_case=False):
+    def weaklens_aroundlens(self, nsrc=30, sigell=0.26, zmax=0.4, zdiff=0.1, seed=123, use_shear=False,test_case=False, no_shape_noise=False):
         lra = 130.0; ldec=0.0
         for ii in tqdm(range(len(self.lid))):
             # Create sources for this lens - vectorized creation
@@ -139,6 +139,9 @@ class weakpipe():
                         # Handle test case option
             if test_case:
                 szred = np.full_like(sra, 0.9)
+            if no_shape_noise:
+                print('no shapenoise putting the e1, and e2 to 0')
+                intse1 = 0.0*intse1; intse2 = 0.0*intse2
  
             print("number of sources:", len(sra))
             
@@ -158,7 +161,9 @@ class weakpipe():
             # Shear all sources at once
             se1, se2, etan, kappa, proj_sep, sflag, etan_b, etan_dm, et_obs, ex_obs = self.ss.shear_src(
                 lra, ldec, self.lzred[ii], self.llogmstel[ii], self.llogre[ii], self.llogmh[ii], self.lconc[ii], sra, sdec, szred, intse1, intse2, use_shear=use_shear)
-            
+            #print('input', 1e8*etan[:10])
+            #print('observed', 1e8*et_obs[:10])
+            #exit()
             print('flagged sources', np.sum(sflag))
             sl_sep  = proj_sep
             w_ls    = self.lwgt[ii] * wgal
@@ -261,8 +266,8 @@ class weakpipe():
 
          import pandas as pd
          df = pd.DataFrame(df)
-         df.to_csv(self.outputfilename, index=False, sep=' ')
+         df.to_csv(self.outputfilename, index=False, sep=' ',float_format='%e')
          return 0
 
 if __name__ == "__main__":
-
+    print("test")
