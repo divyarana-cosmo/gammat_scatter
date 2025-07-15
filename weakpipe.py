@@ -1,31 +1,18 @@
-# have to add the responsivity part
-# the psf of Euclid part -- airy disk or check the preparation paper
 import sys
 sys.path.append('./src/')
-sys.path.append('./utils/')
 from distort_com import simshear
-
 import numpy as np
-import matplotlib.pyplot as plt
-from astropy.cosmology import FlatLambdaCDM
-from get_data import lens_select
 from tqdm import tqdm
 import argparse
 import yaml
-from mpi4py import MPI
-from subprocess import  call
-from scipy import stats
-from colossus.cosmology import cosmology
-from colossus.halo import concentration
-from create_sources import get_xyz, create_sources 
 from scipy.interpolate import interp1d
 from scipy.integrate import quad
 
 
 class source_select():
-   def __init__(self):
-       #getting the source redshift interpolation for sampling
-       self.get_interp_szred()
+    def __init__(self):
+        #getting the source redshift interpolation for sampling
+        self.get_interp_szred()
 
     def get_xyz(self, ra, dec):
         ra = ra*np.pi/180.
@@ -66,8 +53,8 @@ class source_select():
         cdec    =   rng.uniform(np.cos(thetamax), np.cos(thetamin), size=size)     
         sdec    =   (90.0 - np.arccos(cdec)*180/np.pi)
         sra     =   rng.uniform(ramin, ramax, size=size)*180/np.pi
-        lx,ly,lz = get_xyz(ra, dec)
-        sx,sy,sz = get_xyz(sra, sdec)
+        lx,ly,lz = self.get_xyz(ra, dec)
+        sx,sy,sz = self.get_xyz(sra, sdec)
         #annulus aperture
         sep     =  ((sx-lx)**2 + (sy-ly)**2 + (sz-lz)**2)**0.5
         idx     =   (sep < dismax)
@@ -98,6 +85,8 @@ class weakpipe():
         self.ss             =   simshear(H0=H0, Om0=Om0)
         self.outputfilename =   outputfilename
         self.outputpairfile =   outputpairfile
+
+        self.init_array()
 
         # Open pair output file if needed
         if self.outputpairfile:
