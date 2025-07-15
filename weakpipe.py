@@ -227,13 +227,13 @@ class weakpipe():
             np.add.at(self.sumddsigmax_num           ,slrbins    ,w_ls_invsigmacrit * ex_obs)
             np.add.at(self.sumddsigmaxsq_num         ,slrbins    ,(w_ls_invsigmacrit * ex_obs)**2)
 
-            return 0
+        return 0
 
 
     def write2file(self):
          if outputpairfile is not None:
-             fpairout.write("#OK")
-             fpairout.close()
+             self.fpairout.write("#OK")
+             self.fpairout.close()
              
          # Calculate responsivity correction
          Resp = 1.0
