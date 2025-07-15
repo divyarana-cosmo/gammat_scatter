@@ -113,6 +113,7 @@ class weakpipe():
         self.sumddsigmax_num             = np.zeros(self.Nbins) 
         self.sumddsigmaxsq_num           = np.zeros(self.Nbins)
         self.sumdwls_by_sigcsq           = np.zeros(self.Nbins)
+        print('computation arrays are initialized')
         return 0
 
     def process_lensdata(self, lid, lzred, lwgt, llogmstel, llogre, llogmh, lconc):
