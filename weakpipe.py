@@ -19,7 +19,7 @@ from colossus.cosmology import cosmology
 from colossus.halo import concentration
 from create_sources import get_xyz, create_sources 
 from scipy.interpolate import interp1d
-
+from scipy.integrate import quad
 
 
 class source_select():
@@ -76,7 +76,7 @@ class source_select():
         sdec    = sdec[idx]
     
         # putting the interpolation for source redshift assignment
-        szred   =   interp_szred(rng.random(size=len(sra)))
+        szred   =   self.interp_szred(rng.random(size=len(sra)))
         se1     =   rng.normal(0.0, sigell, len(sra)) 
         se2     =   rng.normal(0.0, sigell, len(sra))
         wgal    =   sra/sra
@@ -87,45 +87,43 @@ class source_select():
 
 
 
-def weakpipe():
+class weakpipe():
     def __init__(self, H0=100, Om0=0.25, Rmin=0.004, Rmax=0.4, Nbins=10, outputfilename='dsigma.dat', outputpairfile=None):
-        self.rmin           =   Rmin 
-        self.rmax           =   Rmax 
-        self.nbins          =   Nbins
-        self.seed           =   seed
-        self.rbins          =   np.logspace(np.log10(rmin), np.log10(rmax), nbins + 1)
-        self.rdiff          =   np.log10(rbins[1] / rbins[0])
+        self.Rmin           =   Rmin 
+        self.Rmax           =   Rmax 
+        self.Nbins          =   Nbins
+        self.Rbins          =   np.logspace(np.log10(Rmin), np.log10(Rmax), Nbins + 1)
+        self.Rdiff          =   np.log10(self.Rbins[1] / self.Rbins[0])
  
-        self.selsrc         = source_select()
+        self.selsrc         =   source_select()
         self.ss             =   simshear(H0=H0, Om0=Om0)
-        self.use_shear      =   use_shear
         self.outputfilename =   outputfilename
 
         # Open pair output file if needed
         if outputpairfile is not None:
-            fpairout = open(self.outputfilename + '_pairs', "w")
-            fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tkappa\tintse1\tintse2\tr90se1\tr90se2\tr90et\tr90ex\tr90intse1\tr90intse2\n')
+            self.fpairout = open(self.outputfilename + '_pairs', "w")
+            self.fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tkappa\tintse1\tintse2\tr90se1\tr90se2\tr90et\tr90ex\tr90intse1\tr90intse2\n')
 
         
 
     def init_array(self):
         # Initialize arrays for accumulation
-        self.sumdgammat_num              = np.zeros(self.nbins)
-        self.sumdgammat_inp_num          = np.zeros(self.nbins)
-        self.sumdgammat_inp_bary_num     = np.zeros(self.nbins)
-        self.sumdgammat_inp_dm_num       = np.zeros(self.nbins)
-        self.sumdgammatsq_num            = np.zeros(self.nbins)
-        self.sumdgammax_num              = np.zeros(self.nbins) 
-        self.sumdgammaxsq_num            = np.zeros(self.nbins)
-        self.sumdwls                     = np.zeros(self.nbins)
-        self.sumddsigmat_num             = np.zeros(self.nbins)
-        self.sumddsigmat_inp_num         = np.zeros(self.nbins)
-        self.sumddsigmat_inp_bary_num    = np.zeros(self.nbins)
-        self.sumddsigmat_inp_dm_num      = np.zeros(self.nbins)
-        self.sumddsigmatsq_num           = np.zeros(self.nbins)
-        self.sumddsigmax_num             = np.zeros(self.nbins) 
-        self.sumddsigmaxsq_num           = np.zeros(self.nbins)
-        self.sumdwls_by_sigcsq           = np.zeros(self.nbins)
+        self.sumdgammat_num              = np.zeros(self.Nbins)
+        self.sumdgammat_inp_num          = np.zeros(self.Nbins)
+        self.sumdgammat_inp_bary_num     = np.zeros(self.Nbins)
+        self.sumdgammat_inp_dm_num       = np.zeros(self.Nbins)
+        self.sumdgammatsq_num            = np.zeros(self.Nbins)
+        self.sumdgammax_num              = np.zeros(self.Nbins) 
+        self.sumdgammaxsq_num            = np.zeros(self.Nbins)
+        self.sumdwls                     = np.zeros(self.Nbins)
+        self.sumddsigmat_num             = np.zeros(self.Nbins)
+        self.sumddsigmat_inp_num         = np.zeros(self.Nbins)
+        self.sumddsigmat_inp_bary_num    = np.zeros(self.Nbins)
+        self.sumddsigmat_inp_dm_num      = np.zeros(self.Nbins)
+        self.sumddsigmatsq_num           = np.zeros(self.Nbins)
+        self.sumddsigmax_num             = np.zeros(self.Nbins) 
+        self.sumddsigmaxsq_num           = np.zeros(self.Nbins)
+        self.sumdwls_by_sigcsq           = np.zeros(self.Nbins)
         return 0
 
     def process_lensdata(self, lid, lzred, lwgt, llogmstel, llogre, llogmh, lconc):
@@ -138,16 +136,16 @@ def weakpipe():
         self.lconc      =  lconc 
         print("lens data read fully", np.min(lzred))
         # Calculate maximum angular separation based on minimum redshift
-        self.dismax = self.rmax / ss.Astropy_cosmo.comoving_distance(np.min(lzred)).value 
-        print(np.min(lzred), 'thetamax', dismax) 
+        self.dismax = self.Rmax / self.ss.Astropy_cosmo.comoving_distance(np.min(lzred)).value 
+        print(np.min(lzred), 'thetamax', self.dismax) 
         return 0
     
     def weaklens_aroundlens(self, nsrc=30, sigell=0.26, zmax=0.4, zdiff=0.1, seed=123, using_shear=False,test_case=False):
         lra = 130.0; ldec=0.0
-        for ii in tqdm(range(len(self.lra))):
+        for ii in tqdm(range(len(self.lid))):
             # Create sources for this lens - vectorized creation
             sra, sdec, szred, wgal, intse1, intse2 = self.selsrc.create_sources(
-                lra, ldec, self.dismax, nsrc=nsrc, sigell=sigell, seed=int(seed + lid[ii])) 
+                lra, ldec, self.dismax, nsrc=nsrc, sigell=sigell, seed=int(seed + self.lid[ii])) 
                         # Handle test case option
             if test_case:
                 szred = np.full_like(sra, 0.9)
@@ -178,7 +176,7 @@ def weakpipe():
             w_ls    = lwgt[ii] * wgal
             
             # Vectorized filtering of arrays
-            idx = (sl_sep > rmin) & (sl_sep < rmax) & sflag
+            idx = (sl_sep > self.Rmin) & (sl_sep < self.Rmax) & sflag
             if np.sum(idx) == 0:
                 continue
                 
@@ -200,7 +198,7 @@ def weakpipe():
             # Write pairs to output file if needed
             if outputpairfile is not None:
                 for jj in range(np.sum(idx)):
-                    fpairout.write(f'{lxjkreg[ii]}\t{lra[ii]}\t{ldec[ii]}\t{lzred[ii]}\t{llogmstel[ii]}\t{llogmh[ii]}\t{lconc[ii]}\t{sra[jj]}\t{sdec[jj]}\t{szred[jj]}\t{se1[jj]}\t{se2[jj]}\t{etan[jj]}\t{et_obs[jj]}\t{ex_obs[jj]}\t{sl_sep[jj]}\t{w_ls[jj]}\t{kappa[jj]}\t{intse1[jj]}\t{intse2[jj]}\t{r90se1[jj]}\t{r90se2[jj]}\t{r90et_obs[jj]}\t{r90ex_obs[jj]}\t{r90intse1[jj]}\t{r90intse2[jj]}\n')
+                    self.fpairout.write(f'{lxjkreg[ii]}\t{lra[ii]}\t{ldec[ii]}\t{lzred[ii]}\t{llogmstel[ii]}\t{llogmh[ii]}\t{lconc[ii]}\t{sra[jj]}\t{sdec[jj]}\t{szred[jj]}\t{se1[jj]}\t{se2[jj]}\t{etan[jj]}\t{et_obs[jj]}\t{ex_obs[jj]}\t{sl_sep[jj]}\t{w_ls[jj]}\t{kappa[jj]}\t{intse1[jj]}\t{intse2[jj]}\t{r90se1[jj]}\t{r90se2[jj]}\t{r90et_obs[jj]}\t{r90ex_obs[jj]}\t{r90intse1[jj]}\t{r90intse2[jj]}\n')
             
        
             # Use vectorized operation instead of loop
@@ -209,7 +207,7 @@ def weakpipe():
             w_ls_invsigmacrit   = w_ls * sigma_crit_inv
             
             # Vectorized binning
-            slrbins = (np.log10(sl_sep / rmin) // rdiff).astype(int)
+            slrbins = (np.log10(sl_sep / self.Rmin) // self.Rdiff).astype(int)
                    
             np.add.at(self.sumdwls                   ,slrbins    ,w_ls)
             np.add.at(self.sumdwls_by_sigcsq         ,slrbins    ,w_ls_invsigmacritsq)
@@ -235,48 +233,48 @@ def weakpipe():
             return 0
 
 
-       def write2file(self):
-            if outputpairfile is not None:
-                fpairout.write("#OK")
-                fpairout.close()
-                
-            # Calculate responsivity correction
-            Resp = 1.0
-            # Create dictionary for results
-            df = {}
-            df["-2-rmin"]                   = self.rbins[:-1]
-            df["-1-rmax"]                   = self.rbins[1:]
-            df["0-rmin/2+rmax/2"]           = self.rbins[:-1] * 0.5 + self.rbins[1:] * 0.5
-            df["1-gammat"]                  = self.sumdgammat_num / self.sumdwls / Resp    
-            df["2-gammatsq"]                = self.sumdgammatsq_num / self.sumdwls / Resp**2
-            df["3-sigma_gammat"]            = np.sqrt(self.sumdgammatsq_num / self.sumdwls / Resp**2 - (self.sumdgammat_num / self.sumdwls / Resp)**2)
-            df["4-SN_Errgammat"]            = np.sqrt(self.sumdgammatsq_num) / self.sumdwls / Resp
-            df["5-gammax"]                  = self.sumdgammax_num / self.sumdwls / Resp
-            df["6-gammaxsq"]                = self.sumdgammaxsq_num / self.sumdwls / Resp**2
-            df["7-sigma_gammax"]            = np.sqrt(self.sumdgammaxsq_num / self.sumdwls / Resp**2 - (self.sumdgammax_num / self.sumdwls / Resp)**2)
-            df["8-SN_Errgammax"]            = np.sqrt(self.sumdgammaxsq_num) / self.sumdwls / Resp
-            df["9-gammat_inp"]              = self.sumdgammat_inp_num / self.sumdwls / Resp
-            df["10-gammat_inp_bary"]        = self.sumdgammat_inp_bary_num / self.sumdwls / Resp
-            df["11-gammat_inp_dm"]          = self.sumdgammat_inp_dm_num / self.sumdwls / Resp
-            df["12-sumd_wls"]               = self.sumdwls
-            df["13-dsigma"]                 = self.sumddsigmat_num / self.sumdwls_by_sigcsq / Resp
-            df["14-dsigmasq"]               = self.sumddsigmatsq_num / self.sumdwls_by_sigcsq / Resp**2
-            df["15-SN_Errdsigmat"]          = np.sqrt(sumddsigmatsq_num) / self.sumdwls_by_sigcsq / Resp
-            df["16-dsigmax"]                = self.sumddsigmax_num / self.sumdwls_by_sigcsq / Resp
-            df["17-dsigmaxsq"]              = self.sumddsigmaxsq_num / self.sumdwls_by_sigcsq / Resp**2
-            df["18-SN_Errdsigmax"]          = np.sqrt(self.sumddsigmaxsq_num) / self.sumdwls_by_sigcsq / Resp
-            df["19-dsigmat_inp"]            = self.sumddsigmat_inp_num / self.sumdwls_by_sigcsq / Resp
-            df["20-dsigmat_inp_bary"]       = self.sumddsigmat_inp_bary_num / self.sumdwls_by_sigcsq / Resp
-            df["21-dsigmat_inp_dm"]         = self.sumddsigmat_inp_dm_num / self.sumdwls_by_sigcsq / Resp
-            df["22-sumd_dsigma_wls" ]       = self.sumdwls_by_sigcsq
-            df["23-sumd_dsigma_num" ]       = self.sumddsigmat_num
-            df["24-sumd_dsigmax_num" ]      = self.sumddsigmax_num
-            df["25-sumd_dsigma_den" ]       = self.sumdwls_by_sigcsq*Resp
+    def write2file(self):
+         if outputpairfile is not None:
+             fpairout.write("#OK")
+             fpairout.close()
+             
+         # Calculate responsivity correction
+         Resp = 1.0
+         # Create dictionary for results
+         df = {}
+         df["-2-rmin"]                   = self.Rbins[:-1]
+         df["-1-rmax"]                   = self.Rbins[1:]
+         df["0-rmin/2+rmax/2"]           = self.Rbins[:-1] * 0.5 + self.Rbins[1:] * 0.5
+         df["1-gammat"]                  = self.sumdgammat_num / self.sumdwls / Resp    
+         df["2-gammatsq"]                = self.sumdgammatsq_num / self.sumdwls / Resp**2
+         df["3-sigma_gammat"]            = np.sqrt(self.sumdgammatsq_num / self.sumdwls / Resp**2 - (self.sumdgammat_num / self.sumdwls / Resp)**2)
+         df["4-SN_Errgammat"]            = np.sqrt(self.sumdgammatsq_num) / self.sumdwls / Resp
+         df["5-gammax"]                  = self.sumdgammax_num / self.sumdwls / Resp
+         df["6-gammaxsq"]                = self.sumdgammaxsq_num / self.sumdwls / Resp**2
+         df["7-sigma_gammax"]            = np.sqrt(self.sumdgammaxsq_num / self.sumdwls / Resp**2 - (self.sumdgammax_num / self.sumdwls / Resp)**2)
+         df["8-SN_Errgammax"]            = np.sqrt(self.sumdgammaxsq_num) / self.sumdwls / Resp
+         df["9-gammat_inp"]              = self.sumdgammat_inp_num / self.sumdwls / Resp
+         df["10-gammat_inp_bary"]        = self.sumdgammat_inp_bary_num / self.sumdwls / Resp
+         df["11-gammat_inp_dm"]          = self.sumdgammat_inp_dm_num / self.sumdwls / Resp
+         df["12-sumd_wls"]               = self.sumdwls
+         df["13-dsigma"]                 = self.sumddsigmat_num / self.sumdwls_by_sigcsq / Resp
+         df["14-dsigmasq"]               = self.sumddsigmatsq_num / self.sumdwls_by_sigcsq / Resp**2
+         df["15-SN_Errdsigmat"]          = np.sqrt(self.sumddsigmatsq_num) / self.sumdwls_by_sigcsq / Resp
+         df["16-dsigmax"]                = self.sumddsigmax_num / self.sumdwls_by_sigcsq / Resp
+         df["17-dsigmaxsq"]              = self.sumddsigmaxsq_num / self.sumdwls_by_sigcsq / Resp**2
+         df["18-SN_Errdsigmax"]          = np.sqrt(self.sumddsigmaxsq_num) / self.sumdwls_by_sigcsq / Resp
+         df["19-dsigmat_inp"]            = self.sumddsigmat_inp_num / self.sumdwls_by_sigcsq / Resp
+         df["20-dsigmat_inp_bary"]       = self.sumddsigmat_inp_bary_num / self.sumdwls_by_sigcsq / Resp
+         df["21-dsigmat_inp_dm"]         = self.sumddsigmat_inp_dm_num / self.sumdwls_by_sigcsq / Resp
+         df["22-sumd_dsigma_wls" ]       = self.sumdwls_by_sigcsq
+         df["23-sumd_dsigma_num" ]       = self.sumddsigmat_num
+         df["24-sumd_dsigmax_num" ]      = self.sumddsigmax_num
+         df["25-sumd_dsigma_den" ]       = self.sumdwls_by_sigcsq*Resp
 
-            import pandas as pd
-            df = pd.DataFrame(df)
-            df.to_csv(outputfilename, index=False, sep=' ')
-            return 0
+         import pandas as pd
+         df = pd.DataFrame(df)
+         df.to_csv(self.outputfilename, index=False, sep=' ')
+         return 0
 
 if __name__ == "__main__":
 
