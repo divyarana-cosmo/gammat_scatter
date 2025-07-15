@@ -24,41 +24,8 @@ from scipy.interpolate import interp1d
 
 class source_select():
    def __init__(self,config, outputfilename='gamma.dat', jksamp=0, outputpairfile=None):
-            # Handle test case option
-            if config['test_case']:
-                szred = np.full_like(sra, 0.9)
-                
-            # Handle shape noise option
-            if sourceargs['no_shape_noise']:
-                print("no shape noise")
-                intse1 = np.zeros_like(intse1)
-                intse2 = np.zeros_like(intse2)
-
-
-
-
-        self.rmin   = config['Rmin'] 
-        self.rmax   = config['Rmax'] 
-        self.nbins  = config['Nbins']
-        self.rbins  = np.logspace(np.log10(rmin), np.log10(rmax), nbins + 1)
-        self.rdiff  = np.log10(rbins[1] / rbins[0])
- 
-        #self.lensargs    = config["lens"]
-        #self.sourceargs  = config["source"]
-
-        self.zdiff       = sourceargs["zdiff"]
-        self.ss = simshear(H0=config['H0'], Om0=config['Om0'])
-
-
-        # Open pair output file if needed
-        if outputpairfile is not None:
-            fpairout = open(outputpairfile, "w")
-            fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tkappa\tintse1\tintse2\tr90se1\tr90se2\tr90et\tr90ex\tr90intse1\tr90intse2\n')
-
-        # Handle shear option
-        if sourceargs['use_shear']:
-            print("using shear not reduced shear for the sims")
-            outputfilename = outputfilename + '_using_shear'
+       #getting the source redshift interpolation for sampling
+       self.get_interp_szred()
 
     def get_xyz(self, ra, dec):
         ra = ra*np.pi/180.
@@ -79,12 +46,11 @@ class source_select():
         xx  = 0.0 * zarr
         for ii in range(len(xx)):
             xx[ii] = quad(f, zmin, zarr[ii])[0]/quad(f, zmin, zmax)[0]
-        proj = interp1d(xx,zarr)
-        return proj
+        self.interp_szred = interp1d(xx,zarr)
+        return 0
     
-    interp_szred = get_interp_szred()
     
-    def create_sources(self, ra, dec, dismax, nsrc=30, sigell=0.27, mask=None, seed=123): #mask application for future
+    def create_sources(self, ra, dec, dismax, nsrc=30, sigell=0.27, seed=123): #mask application for future
         "creates source around lens given angles in degrees"
         print('using seed - ', seed)
         ramin = (ra - dismax*180/np.pi )*np.pi/180
@@ -114,6 +80,7 @@ class source_select():
         se1     =   rng.normal(0.0, sigell, len(sra)) 
         se2     =   rng.normal(0.0, sigell, len(sra))
         wgal    =   sra/sra
+
         return sra, sdec, szred, wgal, se1, se2
 
 
@@ -121,7 +88,7 @@ class source_select():
 
 
 def weakpipe():
-    def __init__(self, H0=100, Om0=0.25, Rmin=0.004, Rmax=0.4, Nbins=10, outputfilename='dsigma.dat', seed=123, using_shear=False, outputpairfile=None):
+    def __init__(self, H0=100, Om0=0.25, Rmin=0.004, Rmax=0.4, Nbins=10, outputfilename='dsigma.dat', outputpairfile=None):
         self.rmin           =   Rmin 
         self.rmax           =   Rmax 
         self.nbins          =   Nbins
@@ -129,12 +96,10 @@ def weakpipe():
         self.rbins          =   np.logspace(np.log10(rmin), np.log10(rmax), nbins + 1)
         self.rdiff          =   np.log10(rbins[1] / rbins[0])
  
+        self.selsrc         = source_select()
         self.ss             =   simshear(H0=H0, Om0=Om0)
         self.use_shear      =   use_shear
         self.outputfilename =   outputfilename
-        if self.use_shear:
-            print("using shear not reduced shear for the sims")
-            self.outputfilename = self.outputfilename + '_using_shear'
 
         # Open pair output file if needed
         if outputpairfile is not None:
@@ -163,10 +128,8 @@ def weakpipe():
         self.sumdwls_by_sigcsq           = np.zeros(self.nbins)
         return 0
 
-    def process_lensdata(self,lid, lra, ldec, lzred, lwgt, llogmstel, llogre, llogmh, lconc):
+    def process_lensdata(self, lid, lzred, lwgt, llogmstel, llogre, llogmh, lconc):
         self.lid        =  lid
-        self.lra        =  lra 
-        self.ldec       =  ldec 
         self.lzred      =  lzred 
         self.lwgt       =  lwgt 
         self.llogmstel  =  llogmstel 
@@ -179,14 +142,16 @@ def weakpipe():
         print(np.min(lzred), 'thetamax', dismax) 
         return 0
     
-    def weaklens_aroundlens(self, nsrc=30, sigell=0.26, zlmax=0.4, zdiff=0.1):
-        selsrc = source_select()
-
+    def weaklens_aroundlens(self, nsrc=30, sigell=0.26, zmax=0.4, zdiff=0.1, seed=123, using_shear=False,test_case=False):
+        lra = 130.0; ldec=0.0
         for ii in tqdm(range(len(self.lra))):
             # Create sources for this lens - vectorized creation
-            sra, sdec, szred, wgal, intse1, intse2 = selsrc.create_sources(
-                self.lra[ii], self.ldec[ii], self.dismax, nsrc=nsrc, sigell=sigell, seed=int(self.seed + lid[ii])) 
-            
+            sra, sdec, szred, wgal, intse1, intse2 = self.selsrc.create_sources(
+                lra, ldec, self.dismax, nsrc=nsrc, sigell=sigell, seed=int(seed + lid[ii])) 
+                        # Handle test case option
+            if test_case:
+                szred = np.full_like(sra, 0.9)
+ 
             print("number of sources:", len(sra))
             
             # Vectorized source selection
@@ -204,17 +169,11 @@ def weakpipe():
             
             # Shear all sources at once
             se1, se2, etan, kappa, proj_sep, sflag, etan_b, etan_dm, et_obs, ex_obs = self.ss.shear_src(
-                lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogre[ii], llogmh[ii], lconc[ii],
+                lra, ldec, lzred[ii], llogmstel[ii], llogre[ii], llogmh[ii], lconc[ii],
                 sra, sdec, szred, intse1, intse2, 
-                use_shear=self.use_shear)
+                use_shear=use_shear)
             
             print('flagged sources', np.sum(sflag))
-            
-            # Handle no shear option
-            if self.no_shear:
-                se1 = intse1
-                se2 = intse2
-                
             sl_sep  = proj_sep
             w_ls    = lwgt[ii] * wgal
             
@@ -251,7 +210,6 @@ def weakpipe():
             
             # Vectorized binning
             slrbins = (np.log10(sl_sep / rmin) // rdiff).astype(int)
-            
                    
             np.add.at(self.sumdwls                   ,slrbins    ,w_ls)
             np.add.at(self.sumdwls_by_sigcsq         ,slrbins    ,w_ls_invsigmacritsq)
@@ -321,82 +279,4 @@ def weakpipe():
             return 0
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--config", help="Configuration file")
-    parser.add_argument("--outdir", help="Output filename with pairs information", default="debug")
-    parser.add_argument("--seed", help="seed for sampling the source intrinsic shapes", type=int, default=1)
-    parser.add_argument("--no_shape_noise", help="for removing shape noise-testing purpose", type=bool, default=False)
-    parser.add_argument("--no_shear", help="for removing shear-testing purpose", type=bool, default=False)
-    parser.add_argument("--test_case", help="testing the ideal case", type=bool, default=False)
-    parser.add_argument("--use_shear", help="use shear or reduced shear for simulations", type=bool, default=False)
-    parser.add_argument("--rot90", help="rotating intrinsic shapes by 90 degrees", type=bool, default=False)
-    parser.add_argument("--logmstelmin", help="log stellar mass minimum-lense selection", type=float, default=9.0)
-    parser.add_argument("--logmstelmax", help="log stellar mass maximum-lense selection", type=float, default=10.5)
-    #parser.add_argument("--ten_percent", help="using ten percent of the lense sample", type=bool, default=False)
-
-    parser.add_argument("--two_percent", help="using two percent of the lense sample", type=bool, default=False)
-
-    args = parser.parse_args()
-
-    with open(args.config, 'r') as ymlfile:
-        config = yaml.safe_load(ymlfile)
-
-
-    config["outputdir"] = config["outputdir"] 
-
-    if 'logmstelmin'not in config:
-        config['lens']['logmstelmin'] = args.logmstelmin
-    if 'logmstelmax'not in config:
-        config['lens']['logmstelmax'] = args.logmstelmax
-
-    config['test_case']                 = args.test_case
-    config['seed']                      = args.seed
-    config['lens']['two_percent']       = args.two_percent
-    config['source']['use_shear']       = args.use_shear
-    config['source']['no_shape_noise']  = args.no_shape_noise
-    config['source']['no_shear']        = args.no_shear
-
-
-    config["outputdir"] += '_seed_%d'%config['seed']
-    outputfilename = '%s/simed_sources.dat'%(config['outputdir'])
-    #make the directory for the output
-    from subprocess import call
-    call("mkdir -p %s" % (config["outputdir"]), shell=1)
-
-
-
-    outputfilename = outputfilename + '_lmstelmin_%2.2f_lmstelmax_%2.2f'%(args.logmstelmin, args.logmstelmax)
-
-    if args.no_shape_noise:
-        outputfilename = outputfilename + '_no_shape_noise'
-    else:
-        outputfilename = outputfilename + '_with_shape_noise'
-        if args.rot90:
-            outputfilename = outputfilename + '_with_90_rotation'
-
-    if args.no_shear:
-        outputfilename = outputfilename + '_no_shear'
-    if args.test_case:
-        outputfilename = outputfilename + '_test_case'
-    
-    outputfilename = outputfilename + '_w_jacks'
-    print(config)
-
-    comm = MPI.COMM_WORLD
-    rank = comm.rank
-    size = comm.size    
-
-
-    for jk in range(config['lens']['Njacks']):
-        if jk%size !=rank:
-            continue
-        output_filename = outputfilename + '_jk_%d'%jk+'_fast'
-        run_pipe(config, outputfilename = output_filename, jksamp=jk)           
-
-    comm.Barrier()
-
-
-
-
-
 
