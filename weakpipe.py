@@ -87,7 +87,7 @@ class source_select():
 
 
 class weakpipe():
-    def __init__(self, H0=100, Om0=0.25, Rmin=0.004, Rmax=0.4, Nbins=10, outputfilename='dsigma.dat', outputpairfile=None):
+    def __init__(self, H0=100, Om0=0.25, Rmin=0.004, Rmax=0.4, Nbins=10, outputfilename='dsigma.dat', outputpairfile=False):
         self.Rmin           =   Rmin 
         self.Rmax           =   Rmax 
         self.Nbins          =   Nbins
@@ -97,9 +97,10 @@ class weakpipe():
         self.selsrc         =   source_select()
         self.ss             =   simshear(H0=H0, Om0=Om0)
         self.outputfilename =   outputfilename
+        self.outputpairfile =   outputpairfile
 
         # Open pair output file if needed
-        if outputpairfile is not None:
+        if self.outputpairfile:
             self.fpairout = open(self.outputfilename + '_pairs', "w")
             self.fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tkappa\tintse1\tintse2\tr90se1\tr90se2\tr90et\tr90ex\tr90intse1\tr90intse2\n')
 
@@ -139,7 +140,7 @@ class weakpipe():
         print(np.min(lzred), 'thetamax', self.dismax) 
         return 0
     
-    def weaklens_aroundlens(self, nsrc=30, sigell=0.26, zmax=0.4, zdiff=0.1, seed=123, using_shear=False,test_case=False):
+    def weaklens_aroundlens(self, nsrc=30, sigell=0.26, zmax=0.4, zdiff=0.1, seed=123, use_shear=False,test_case=False):
         lra = 130.0; ldec=0.0
         for ii in tqdm(range(len(self.lid))):
             # Create sources for this lens - vectorized creation
@@ -199,7 +200,7 @@ class weakpipe():
             
        
             # Use vectorized operation instead of loop
-            sigma_crit_inv      = self.ss._get_sigma_crit_inv(lzred=lzred[ii], szred=szred) * 1e12
+            sigma_crit_inv      = self.ss._get_sigma_crit_inv(lzred=self.lzred[ii], szred=szred) * 1e12
             w_ls_invsigmacritsq = w_ls * sigma_crit_inv**2
             w_ls_invsigmacrit   = w_ls * sigma_crit_inv
             
@@ -231,7 +232,7 @@ class weakpipe():
 
 
     def write2file(self):
-         if outputpairfile is not None:
+         if self.outputpairfile:
              self.fpairout.write("#OK")
              self.fpairout.close()
              
