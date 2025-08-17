@@ -44,7 +44,7 @@ class model():
         self.Norm = quad(self.nsrc, self.zlmax + self.zdiff, self.zsrcmax)[0]
         
         # values for the spl
-        self.spl_rbins = np.logspace(-3, 0, 30)
+        self.spl_rbins = np.logspace(-3, 0, 101)
 
 
  
@@ -84,7 +84,7 @@ class model():
         logalpha, logmh, cfac = x
         rbins = self.spl_rbins
         
-        cosmology.setCurrent(self.cosmo)
+        #cosmology.setCurrent(self.cosmo)
         self.lconc = cfac #* concentration.concentration(10**logmh, '200m', self.mean_lzred, model='diemer19')
     
         self.esd_dm, self.sigma_dm = self.ss._get_esd_dm(logmh=logmh, lconc=self.lconc, proj_sep=rbins)
@@ -103,13 +103,20 @@ class model():
                 return nz * np.dot(self.pzl, siginv**(n))
 
             n=1
-            kappa = sigma *  quad(integrand_num, zmin, self.zsrcmax, args=(n,))[0] 
+            kappa1 = sigma *  quad(integrand_num, zmin, self.zsrcmax, args=(n,))[0]/ self.Norm
+            n=2
+            kappa2 = sigma**2 *  quad(integrand_num, zmin, self.zsrcmax, args=(n,))[0] / self.Norm
+            n=3
+            kappa3 = sigma**3 *  quad(integrand_num, zmin, self.zsrcmax, args=(n,))[0] / self.Norm
 
-            kappa = kappa / self.Norm#quad(integrand_den, zmin, self.zsrcmax)[0]
+
+            #kappa = kappa / self.Norm#quad(integrand_den, zmin, self.zsrcmax)[0]
             # Compute reduced ESD for each R bin
-            ds_reduced =  delta_sigma/(1-kappa)            
+            #ds_reduced =  delta_sigma/(1-kappa)            
+            ds_reduced =  delta_sigma * (1 + kappa1 + kappa2 + kappa3)            
             esd =  ds_reduced / 1e12
         
+
         return ius(np.log10(rbins), np.log10(esd))
 
 
@@ -119,18 +126,19 @@ class model():
         """
  
         loglogspl = self.set_esd_spl(x, reduced=reduced)
+        return 10**loglogspl(np.log10(rbins))
 
-        logrbins = np.log10(rbins)
-        yy      =   0.0*rbins
+        #logrbins = np.log10(rbins)
+        #yy      =   0.0*rbins
 
-        logrdiff = logrbins[1] - logrbins[0]
-        logrbins = np.append(logrbins-logrdiff, logrbins[-1] + logrdiff)
+        #logrdiff = logrbins[1] - logrbins[0]
+        #logrbins = np.append(logrbins-logrdiff, logrbins[-1] + logrdiff)
 
-        for ii,(rmin,rmax) in enumerate(zip(10**logrbins[:-1], 10**logrbins[1:])):
-            print(rmin, rmax)
-            yy[ii] = quad(lambda x: 10**loglogspl(np.log10(x)) * x, rmin, rmax)[0]*2/((rmax**2 - rmin**2))
-        
-        return yy
+        #for ii,(rmin,rmax) in enumerate(zip(10**logrbins[:-1], 10**logrbins[1:])):
+        #    #print(rmin, rmax)
+        #    yy[ii] = quad(lambda x: 10**loglogspl(np.log10(x)) * x, rmin, rmax)[0]*2/((rmax**2 - rmin**2))
+        #
+        #return yy
 
 if __name__ == "__main__":
     # for the test case 
@@ -172,6 +180,10 @@ if __name__ == "__main__":
     plt.subplot(2,2,1)
     plt.plot(rbins, red_esd, label='$g$')
     plt.plot(rbins, gamma_esd, label='$\gamma$')
+
+    plt.plot(mm.spl_rbins, mm.esd_s/1e12, '.')
+    plt.plot(mm.spl_rbins, mm.esd_dm/1e12, '.')
+
     plt.xlabel('$R_p$')
     plt.ylabel('$\Delta \Sigma$')
     plt.xscale('log')
