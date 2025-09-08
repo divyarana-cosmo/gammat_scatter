@@ -64,10 +64,10 @@ class model():
         if not os.path.exists(fpath):
             print('please run the precompute first')
             exit()
-        rarr, self.esd_s, self.sigma_s    = np.loadtxt(fpath, unpack=1)
+        self.rbins_esd_s, self.esd_s, self.sigma_s, self.esd_s_sigma_s    = np.loadtxt(fpath, unpack=1)
         #rarr, esdarr, sigarr    = np.loadtxt(fpath, unpack=1)
-        #self.spl_log_esd_s      = ius(np.log10(rarr), np.log10(esdarr))
-        #self.spl_log_sigma_s    = ius(np.log10(rarr), np.log10(sigarr))
+        #self.spl_log_esd_s      = ius(np.log10(self.rbins_esd_s), np.log10(esdarr))
+        #self.spl_log_sigma_s    = ius(np.log10(self.rbins_esd_s), np.log10(sigarr))
         #del rarr, esdarr, sigarr
         #gc.collect()
         print("putting splines on precomputations for stellar contribution done")
@@ -82,7 +82,8 @@ class model():
 
     def set_esd_spl(self,x, reduced=True):
         logalpha, logmh, cfac = x
-        rbins = self.spl_rbins
+        #rbins = self.spl_rbins
+        rbins = self.rbins_esd_s
         
         #cosmology.setCurrent(self.cosmo)
         self.lconc = cfac #* concentration.concentration(10**logmh, '200m', self.mean_lzred, model='diemer19')
@@ -90,9 +91,10 @@ class model():
         self.esd_dm, self.sigma_dm = self.ss._get_esd_dm(logmh=logmh, lconc=self.lconc, proj_sep=rbins)
         sigma       = 10**logalpha * self.sigma_s    + self.sigma_dm
         delta_sigma = 10**logalpha * self.esd_s      + self.esd_dm
+        esd_sigma   = 10**(2*logalpha) * self.esd_s_sigma_s +  10**logalpha * self.esd_s  * self.sigma_dm + self.esd_dm * 10**logalpha * self.sigma_s +  self.esd_dm * self.sigma_dm
     
         if not reduced:
-            esd = delta_sigma / 1e12
+            esd = delta_sigma #/ 1e12
         else: 
             # Normalize n(z) over valid source redshift range
             zmin = self.zlmax + self.zdiff
@@ -101,23 +103,21 @@ class model():
                 nz = self.nsrc(zs)
                 siginv = self.ss._get_sigma_crit_inv(self.zlbins, zs)
                 return nz * np.dot(self.pzl, siginv**(n))
-
-            n=1
-            kappa1 = sigma *  quad(integrand_num, zmin, self.zsrcmax, args=(n,))[0]/ self.Norm
-            n=2
-            kappa2 = sigma**2 *  quad(integrand_num, zmin, self.zsrcmax, args=(n,))[0] / self.Norm
-            n=3
-            kappa3 = sigma**3 *  quad(integrand_num, zmin, self.zsrcmax, args=(n,))[0] / self.Norm
-
+            
+            #kappa =0
+            #for ii in range(1,11):
+            #    kappa += sigma**ii *  quad(integrand_num, zmin, self.zsrcmax, args=(ii,))[0]
+            ii=1
+            avg_inv_sigc = quad(integrand_num, zmin, self.zsrcmax, args=(ii,))[0]/self.Norm
 
             #kappa = kappa / self.Norm#quad(integrand_den, zmin, self.zsrcmax)[0]
             # Compute reduced ESD for each R bin
             #ds_reduced =  delta_sigma/(1-kappa)            
-            ds_reduced =  delta_sigma * (1 + kappa1 + kappa2 + kappa3)            
-            esd =  ds_reduced / 1e12
+            ds_reduced =  delta_sigma  + esd_sigma * avg_inv_sigc
+            esd =  ds_reduced 
         
 
-        return ius(np.log10(rbins), np.log10(esd))
+        return ius(np.log10(rbins), np.log10(esd/1e12))
 
 
     def esd(self, x, rbins, reduced=True):
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     H0          =   100
     Om0         =   0.25
     lenstype    =   'desi'    
-    logMmin     =   9.5
+    logMmin     =   10.5
     logMmax     =   11.0
     zlmin       =   0.1
     zlmax       =   0.4
@@ -159,30 +159,31 @@ if __name__ == "__main__":
     logmh       =   12.42861652
     #cfac        =   1.0
     cfac        =   0.8
+    
+    for ll in [-0.1,0,0.1]:
+        logalpha       =   ll
+        x = [logalpha, logmh, cfac]
+        rbins = np.logspace(np.log10(0.002), np.log10(0.4),10)
+        import time
+        begin = time.time()
+        red_esd     = mm.esd( x, rbins)
+        print(time.time() - begin)
+        begin = time.time()
+        gamma_esd   = mm.esd( x, rbins, reduced=False)
+        print(time.time() - begin)
+        import matplotlib.pyplot as plt
+        #print(red_esd)
+        #print(gamma_esd)
 
-    logalpha       =   0.0
-    x = [logalpha, logmh, cfac]
-    rbins = np.logspace(np.log10(0.002), np.log10(0.4),10)
-    import time
-    begin = time.time()
-    red_esd     = mm.esd( x, rbins)
-    print(time.time() - begin)
-    begin = time.time()
-    gamma_esd   = mm.esd( x, rbins, reduced=False)
-    print(time.time() - begin)
-    import matplotlib.pyplot as plt
-    #print(red_esd)
-    #print(gamma_esd)
+        siginv = mm.ss._get_sigma_crit_inv(np.array([0.3]), 3.0)
+        #print(mm.esd_dm/1e12)
 
-    siginv = mm.ss._get_sigma_crit_inv(np.array([0.3]), 3.0)
-    #print(mm.esd_dm/1e12)
+        #plt.subplot(2,2,1)
+        plt.plot(rbins, red_esd, label='$g$')
+        plt.plot(rbins, gamma_esd, label='$\gamma$')
 
-    plt.subplot(2,2,1)
-    plt.plot(rbins, red_esd, label='$g$')
-    plt.plot(rbins, gamma_esd, label='$\gamma$')
-
-    plt.plot(mm.spl_rbins, mm.esd_s/1e12, '.')
-    plt.plot(mm.spl_rbins, mm.esd_dm/1e12, '.')
+    plt.plot(rbins, mm.esd_s/1e12, '.')
+    plt.plot(rbins, mm.esd_dm/1e12, '.')
 
     plt.xlabel('$R_p$')
     plt.ylabel('$\Delta \Sigma$')
