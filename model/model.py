@@ -81,6 +81,9 @@ class model():
         return f(z)
 
 
+
+
+
     def set_esd_spl(self, x, reduced=True):
         logalpha, logmh, cfac = x
         rbins = self.rbins_esd_s
@@ -96,39 +99,48 @@ class model():
         else:
             zmin = self.zlmax + self.zdiff
 
-            def integrand_kappa_power(zs, n):
-                """
-                Compute ⟨κ^n⟩ = ∫∫ p(z_l) n(z_s) [Σ/Σ_crit]^n dz_l dz_s
-                """
-                if zs <= zmin:
-                    return 0.0
-                nz = self.nsrc(zs) / self.Norm
-                siginv = self.ss._get_sigma_crit_inv(self.zlbins, zs)
+            # Precompute sigma^n for each order (shape: n_rbins)
+            # We'll compute this inside the loop for each n
 
-                # Average over lens redshifts: Σ^n × ⟨Σ_crit^(-n)⟩
-                avg_kappa_n = (sigma ** n) * np.dot(self.pzl, siginv ** n)
+            correction = np.zeros_like(sigma)
+            max_order = 5
 
-                return nz * avg_kappa_n
+            for n in range(1, max_order + 1):
 
-            # Start with correction = 0 (n=0 term is implicit in delta_sigma)
-            correction = 0.0
+                def integrand_kappa_power_n(zs):
+                    """
+                    Compute ⟨κ^n⟩ for all radial bins at once (but returns scalar for quad)
+                    We'll call this for each radial bin separately
+                    """
+                    if zs <= zmin:
+                        return 0.0
+                    nz = self.nsrc(zs) / self.Norm
+                    siginv = self.ss._get_sigma_crit_inv(self.zlbins, zs)
 
-            max_order = 5  # Adjust based on typical κ values
+                    # Average over lens redshifts: ⟨Σ_crit^(-n)⟩
+                    avg_siginv_n = np.dot(self.pzl, siginv ** n)
 
-            for n in range(1, max_order + 1):  # n starts from 1
-                kappa_n_avg = quad(integrand_kappa_power, zmin, self.zsrcmax, args=(n,),
-                                  epsabs=1e-10, epsrel=1e-8)[0]
+                    return nz * avg_siginv_n
+
+                # Integrate to get ⟨Σ_crit^(-n)⟩ averaged over sources
+                avg_siginv_n = quad(integrand_kappa_power_n, zmin, self.zsrcmax,
+                                   epsabs=1e-10, epsrel=1e-8)[0]
+
+                # Now multiply by Σ^n for each radial bin
+                kappa_n_avg = (sigma ** n) * avg_siginv_n
+
                 correction += kappa_n_avg
 
                 # Optional: check convergence
-                if np.all(np.abs(kappa_n_avg / correction) < 1e-4):
+                if n > 1 and np.all(np.abs(kappa_n_avg / correction) < 1e-4):
                     print(f"Series converged at order {n}")
                     break
 
-            # Apply correction: ΔΣ_reduced = ΔΣ × (1 + correction)
+            # Apply correction
             ds_reduced = delta_sigma * (1.0 + correction)
 
             return ds_reduced / 1e12
+
 
     def esd(self, x, rbins, reduced=True):
         """
