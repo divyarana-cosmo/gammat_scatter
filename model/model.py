@@ -91,7 +91,7 @@ class model():
         self.esd_dm, self.sigma_dm = self.ss._get_esd_dm(logmh=logmh, lconc=self.lconc, proj_sep=rbins)
         sigma       = 10**logalpha * self.sigma_s    + self.sigma_dm
         delta_sigma = 10**logalpha * self.esd_s      + self.esd_dm
-        esd_sigma   = 10**(2*logalpha) * self.esd_s_sigma_s +  10**logalpha * self.esd_s  * self.sigma_dm + self.esd_dm * 10**logalpha * self.sigma_s +  self.esd_dm * self.sigma_dm
+        #esd_sigma   = 10**(2*logalpha) * self.esd_s_sigma_s +  10**logalpha * self.esd_s  * self.sigma_dm + self.esd_dm * 10**logalpha * self.sigma_s +  self.esd_dm * self.sigma_dm
     
         if not reduced:
             esd = delta_sigma #/ 1e12
@@ -100,24 +100,26 @@ class model():
             zmin = self.zlmax + self.zdiff
             def integrand_num(zs,n):
                 if zs <= zmin: return 0.0
-                nz = self.nsrc(zs)
+                nz = self.nsrc(zs)/self.Norm
                 siginv = self.ss._get_sigma_crit_inv(self.zlbins, zs)
                 return nz * np.dot(self.pzl, siginv**(n))
             
-            #kappa =0
-            #for ii in range(1,11):
-            #    kappa += sigma**ii *  quad(integrand_num, zmin, self.zsrcmax, args=(ii,))[0]
-            ii=1
-            avg_inv_sigc = quad(integrand_num, zmin, self.zsrcmax, args=(ii,))[0]/self.Norm
+            kappa =0
+            for ii in range(1,2):
+                kappa += sigma**ii *  quad(integrand_num, zmin, self.zsrcmax, args=(ii,))[0]
+            #ii=1
+            #avg_inv_sigc = quad(integrand_num, zmin, self.zsrcmax, args=(ii,))[0]/self.Norm
 
-            #kappa = kappa / self.Norm#quad(integrand_den, zmin, self.zsrcmax)[0]
+            kappa = kappa #/ self.Norm#quad(integrand_den, zmin, self.zsrcmax)[0]
             # Compute reduced ESD for each R bin
-            #ds_reduced =  delta_sigma/(1-kappa)            
-            ds_reduced =  delta_sigma  + esd_sigma * avg_inv_sigc
+            ds_reduced =  delta_sigma/(1-kappa)            
+            #ds_reduced =  delta_sigma*(1  + sigma * avg_inv_sigc)
+            #ds_reduced =  delta_sigma / (1 - sigma * avg_inv_sigc)
             esd =  ds_reduced 
         
 
-        return ius(np.log10(rbins), np.log10(esd/1e12))
+        #return ius(np.log10(rbins), np.log10(esd/1e12))
+        return esd/1e12
 
 
     def esd(self, x, rbins, reduced=True):
@@ -126,7 +128,8 @@ class model():
         """
  
         loglogspl = self.set_esd_spl(x, reduced=reduced)
-        return 10**loglogspl(np.log10(rbins))
+        #return 10**loglogspl(np.log10(rbins))
+        return loglogspl
 
         #logrbins = np.log10(rbins)
         #yy      =   0.0*rbins
@@ -148,42 +151,24 @@ if __name__ == "__main__":
     logMmin     =   10.5
     logMmax     =   11.0
     zlmin       =   0.1
-    zlmax       =   0.4
+    zlmax       =   0.5
     Njacks      =   50
     zdiff       =   0.0
 
     mm = model(H0, Om0, lenstype, logMmin, logMmax, zlmin, zlmax, Njacks, zdiff)
-
-    logmstel    =   10.47462749
-    log_re      =   -2.38450355
-    logmh       =   12.42861652
-    #cfac        =   1.0
+    logmh       =   0.0#
     cfac        =   0.8
-    
-    for ll in [-0.1,0,0.1]:
+    import matplotlib.pyplot as plt
+    plt.subplot(2,2,1)
+   
+    for ll in np.linspace(-1,1,5):
         logalpha       =   ll
         x = [logalpha, logmh, cfac]
-        rbins = np.logspace(np.log10(0.002), np.log10(0.4),10)
+        rbins = np.logspace(-2, -1, 10)
         import time
         begin = time.time()
         red_esd     = mm.esd( x, rbins)
-        print(time.time() - begin)
-        begin = time.time()
-        gamma_esd   = mm.esd( x, rbins, reduced=False)
-        print(time.time() - begin)
-        import matplotlib.pyplot as plt
-        #print(red_esd)
-        #print(gamma_esd)
-
-        siginv = mm.ss._get_sigma_crit_inv(np.array([0.3]), 3.0)
-        #print(mm.esd_dm/1e12)
-
-        #plt.subplot(2,2,1)
         plt.plot(rbins, red_esd, label='$g$')
-        plt.plot(rbins, gamma_esd, label='$\gamma$')
-
-    plt.plot(rbins, mm.esd_s/1e12, '.')
-    plt.plot(rbins, mm.esd_dm/1e12, '.')
 
     plt.xlabel('$R_p$')
     plt.ylabel('$\Delta \Sigma$')
