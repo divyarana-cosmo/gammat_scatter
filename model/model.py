@@ -81,54 +81,54 @@ class model():
         return f(z)
 
 
-def set_esd_spl(self, x, reduced=True):
-    logalpha, logmh, cfac = x
-    rbins = self.rbins_esd_s
+    def set_esd_spl(self, x, reduced=True):
+        logalpha, logmh, cfac = x
+        rbins = self.rbins_esd_s
 
-    self.lconc = cfac
-    self.esd_dm, self.sigma_dm = self.ss._get_esd_dm(logmh=logmh, lconc=self.lconc, proj_sep=rbins)
+        self.lconc = cfac
+        self.esd_dm, self.sigma_dm = self.ss._get_esd_dm(logmh=logmh, lconc=self.lconc, proj_sep=rbins)
 
-    sigma = 10**logalpha * self.sigma_s + self.sigma_dm
-    delta_sigma = 10**logalpha * self.esd_s + self.esd_dm
+        sigma = 10**logalpha * self.sigma_s + self.sigma_dm
+        delta_sigma = 10**logalpha * self.esd_s + self.esd_dm
 
-    if not reduced:
-        return delta_sigma / 1e12
-    else:
-        zmin = self.zlmax + self.zdiff
+        if not reduced:
+            return delta_sigma / 1e12
+        else:
+            zmin = self.zlmax + self.zdiff
 
-        def integrand_kappa_power(zs, n):
-            """
-            Compute ⟨κ^n⟩ = ∫∫ p(z_l) n(z_s) [Σ/Σ_crit]^n dz_l dz_s
-            """
-            if zs <= zmin:
-                return 0.0
-            nz = self.nsrc(zs) / self.Norm
-            siginv = self.ss._get_sigma_crit_inv(self.zlbins, zs)
+            def integrand_kappa_power(zs, n):
+                """
+                Compute ⟨κ^n⟩ = ∫∫ p(z_l) n(z_s) [Σ/Σ_crit]^n dz_l dz_s
+                """
+                if zs <= zmin:
+                    return 0.0
+                nz = self.nsrc(zs) / self.Norm
+                siginv = self.ss._get_sigma_crit_inv(self.zlbins, zs)
 
-            # Average over lens redshifts: Σ^n × ⟨Σ_crit^(-n)⟩
-            avg_kappa_n = (sigma ** n) * np.dot(self.pzl, siginv ** n)
+                # Average over lens redshifts: Σ^n × ⟨Σ_crit^(-n)⟩
+                avg_kappa_n = (sigma ** n) * np.dot(self.pzl, siginv ** n)
 
-            return nz * avg_kappa_n
+                return nz * avg_kappa_n
 
-        # Start with correction = 0 (n=0 term is implicit in delta_sigma)
-        correction = 0.0
+            # Start with correction = 0 (n=0 term is implicit in delta_sigma)
+            correction = 0.0
 
-        max_order = 5  # Adjust based on typical κ values
+            max_order = 5  # Adjust based on typical κ values
 
-        for n in range(1, max_order + 1):  # n starts from 1
-            kappa_n_avg = quad(integrand_kappa_power, zmin, self.zsrcmax, args=(n,),
-                              epsabs=1e-10, epsrel=1e-8)[0]
-            correction += kappa_n_avg
+            for n in range(1, max_order + 1):  # n starts from 1
+                kappa_n_avg = quad(integrand_kappa_power, zmin, self.zsrcmax, args=(n,),
+                                  epsabs=1e-10, epsrel=1e-8)[0]
+                correction += kappa_n_avg
 
-            # Optional: check convergence
-            if np.all(np.abs(kappa_n_avg / correction) < 1e-4):
-                print(f"Series converged at order {n}")
-                break
+                # Optional: check convergence
+                if np.all(np.abs(kappa_n_avg / correction) < 1e-4):
+                    print(f"Series converged at order {n}")
+                    break
 
-        # Apply correction: ΔΣ_reduced = ΔΣ × (1 + correction)
-        ds_reduced = delta_sigma * (1.0 + correction)
+            # Apply correction: ΔΣ_reduced = ΔΣ × (1 + correction)
+            ds_reduced = delta_sigma * (1.0 + correction)
 
-        return ds_reduced / 1e12
+            return ds_reduced / 1e12
 
     def esd(self, x, rbins, reduced=True):
         """
