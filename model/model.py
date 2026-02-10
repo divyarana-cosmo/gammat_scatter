@@ -83,63 +83,79 @@ class model():
 
 
 
-
     def set_esd_spl(self, x, reduced=True):
-        logalpha, logmh, cfac = x
+        alpha, logmh, cfac = x
         rbins = self.rbins_esd_s
-
+        
         self.lconc = cfac
         self.esd_dm, self.sigma_dm = self.ss._get_esd_dm(logmh=logmh, lconc=self.lconc, proj_sep=rbins)
-
-        sigma = 10**logalpha * self.sigma_s + self.sigma_dm
-        delta_sigma = 10**logalpha * self.esd_s + self.esd_dm
-
+        
+        sigma = alpha * self.sigma_s + self.sigma_dm
+        delta_sigma = alpha * self.esd_s + self.esd_dm
+        
         if not reduced:
             return delta_sigma / 1e12
         else:
             zmin = self.zlmax + self.zdiff
-
-            # Precompute sigma^n for each order (shape: n_rbins)
-            # We'll compute this inside the loop for each n
-
+            
+            # We need to compute correction for each radial bin separately
+            # because ? < 1 condition depends on ?(R)
             correction = np.zeros_like(sigma)
             max_order = 5
-
-            for n in range(1, max_order + 1):
-
-                def integrand_kappa_power_n(zs):
-                    """
-                    Compute ⟨κ^n⟩ for all radial bins at once (but returns scalar for quad)
-                    We'll call this for each radial bin separately
-                    """
-                    if zs <= zmin:
-                        return 0.0
-                    nz = self.nsrc(zs) / self.Norm
-                    siginv = self.ss._get_sigma_crit_inv(self.zlbins, zs)
-
-                    # Average over lens redshifts: ⟨Σ_crit^(-n)⟩
-                    avg_siginv_n = np.dot(self.pzl, siginv ** n)
-
-                    return nz * avg_siginv_n
-
-                # Integrate to get ⟨Σ_crit^(-n)⟩ averaged over sources
-                avg_siginv_n = quad(integrand_kappa_power_n, zmin, self.zsrcmax,
-                                   epsabs=1e-10, epsrel=1e-8)[0]
-
-                # Now multiply by Σ^n for each radial bin
-                kappa_n_avg = (sigma ** n) * avg_siginv_n
-
-                correction += kappa_n_avg
-
-                # Optional: check convergence
-                if n > 1 and np.all(np.abs(kappa_n_avg / correction) < 1e-4):
-                    print(f"Series converged at order {n}")
-                    break
-
-            # Apply correction
+            
+            for r_idx in range(len(rbins)):
+                sigma_r = sigma[r_idx]
+                correction_r = 0.0
+                
+                for n in range(1, max_order + 1):
+                    
+                    def integrand_kappa_power_n(zs):
+                        """
+                        Compute ??_crit^(-n)? for this radius with ? < 1 filter
+                        """
+                        if zs <= zmin:
+                            return 0.0
+                        
+                        nz = self.nsrc(zs) / self.Norm
+                        siginv = self.ss._get_sigma_crit_inv(self.zlbins, zs)
+                        
+                        # For this radius and source redshift, check ? < 1 for each lens bin
+                        kappa_per_zlbin = sigma_r * siginv  # Shape: (n_zlbins,)
+                        
+                        # Only include lens redshifts where ? < 1
+                        valid_mask = kappa_per_zlbin < 1.0
+                        pzl_valid = self.pzl * valid_mask
+                        
+                        pzl_sum = np.sum(pzl_valid)
+                        if pzl_sum < 1e-10:
+                            return 0.0
+                        
+                        # Normalize and average over valid lens redshifts
+                        pzl_normalized = pzl_valid / pzl_sum
+                        avg_siginv_n = np.dot(pzl_normalized, siginv ** n)
+                        
+                        # Weight by fraction of valid pairs
+                        return nz * avg_siginv_n * pzl_sum
+                    
+                    # Integrate to get ??_crit^(-n)? averaged over sources
+                    avg_siginv_n = quad(integrand_kappa_power_n, zmin, self.zsrcmax,
+                                       epsabs=1e-10, epsrel=1e-8)[0]
+                    
+                    # Multiply by ?^n for this radial bin
+                    kappa_n = (sigma_r ** n) * avg_siginv_n
+                    correction_r += kappa_n
+                    
+                    # Check convergence for this radius
+                    if n > 1 and abs(kappa_n / correction_r) < 1e-4:
+                        break
+                
+                correction[r_idx] = correction_r
+            
+            # Apply correction: ??_reduced = ?? × (1 + correction)
             ds_reduced = delta_sigma * (1.0 + correction)
+            
+            return rbins, ds_reduced / 1e12
 
-            return ds_reduced / 1e12
 
 
     def esd(self, x, rbins, reduced=True):
@@ -147,9 +163,8 @@ class model():
         Predicts ESD profile (in M_sun/pc^2). If `reduced=True`, returns g * sigma_crit using integrated correction.
         """
 
-        loglogspl = self.set_esd_spl(x, reduced=reduced)
-        #return 10**loglogspl(np.log10(rbins))
-        return loglogspl
+        splrbins, splesd = self.set_esd_spl(x, reduced=reduced)
+        return splesd[np.isin(splrbins, rbins)]
 
         #logrbins = np.log10(rbins)
         #yy      =   0.0*rbins
@@ -182,8 +197,8 @@ if __name__ == "__main__":
     plt.subplot(2,2,1)
 
     for ll in np.linspace(-1,1,5):
-        logalpha       =   ll
-        x = [logalpha, logmh, cfac]
+        alpha       =   ll
+        x = [alpha, logmh, cfac]
         rbins = np.logspace(-2, -1, 10)
         import time
         begin = time.time()
@@ -203,7 +218,7 @@ if __name__ == "__main__":
 
 """
     def set_esd_spl(self,x, reduced=True):
-        logalpha, logmh, cfac = x
+        alpha, logmh, cfac = x
         #rbins = self.spl_rbins
         rbins = self.rbins_esd_s
 
@@ -211,9 +226,9 @@ if __name__ == "__main__":
         self.lconc = cfac #* concentration.concentration(10**logmh, '200m', self.mean_lzred, model='diemer19')
 
         self.esd_dm, self.sigma_dm = self.ss._get_esd_dm(logmh=logmh, lconc=self.lconc, proj_sep=rbins)
-        sigma       = 10**logalpha * self.sigma_s    + self.sigma_dm
-        delta_sigma = 10**logalpha * self.esd_s      + self.esd_dm
-        #esd_sigma   = 10**(2*logalpha) * self.esd_s_sigma_s +  10**logalpha * self.esd_s  * self.sigma_dm + self.esd_dm * 10**logalpha * self.sigma_s +  self.esd_dm * self.sigma_dm
+        sigma       = alpha * self.sigma_s    + self.sigma_dm
+        delta_sigma = alpha * self.esd_s      + self.esd_dm
+        #esd_sigma   = 10**(2*alpha) * self.esd_s_sigma_s +  10**alpha * self.esd_s  * self.sigma_dm + self.esd_dm * 10**alpha * self.sigma_s +  self.esd_dm * self.sigma_dm
 
         if not reduced:
             esd = delta_sigma #/ 1e12
@@ -254,16 +269,16 @@ if __name__ == "__main__":
 #    """
 #    Predicts ESD profile (in M_sun/pc^2). If `reduced=True`, returns g * sigma_crit using integrated correction.
 #    """
-#    logalpha, logmh, cfac = x
+#    alpha, logmh, cfac = x
 #
 #    cosmology.setCurrent(self.cosmo)
 #    self.lconc = cfac #* concentration.concentration(10**logmh, '200m', self.mean_lzred, model='diemer19')
 #
 #    self.esd_dm, self.sigma_dm = self.ss._get_esd_dm(logmh=logmh, lconc=self.lconc, proj_sep=rbins)
-#    sigma       = 10**logalpha * self.sigma_s    + self.sigma_dm
-#    delta_sigma = 10**logalpha * self.esd_s      + self.esd_dm
-#    #sigma       = 10**logalpha * 10**self.spl_log_sigma_s(np.log10(rbins))    + sigma_dm
-#    #delta_sigma = 10**logalpha * 10**self.spl_log_esd_s(np.log10(rbins))  + self.esd_dm
+#    sigma       = alpha * self.sigma_s    + self.sigma_dm
+#    delta_sigma = alpha * self.esd_s      + self.esd_dm
+#    #sigma       = alpha * 10**self.spl_log_sigma_s(np.log10(rbins))    + sigma_dm
+#    #delta_sigma = alpha * 10**self.spl_log_esd_s(np.log10(rbins))  + self.esd_dm
 #
 #    if not reduced:
 #        return delta_sigma / 1e12
@@ -301,16 +316,16 @@ if __name__ == "__main__":
 #    logrdiff = logrbins[1] - logrbins[0]
 #    logrbins = np.append(logrbins-logrdiff, logrbins[-1] + logrdiff)
 
-#    logalpha, logmh, cfac = x
+#    alpha, logmh, cfac = x
 #
 #    cosmology.setCurrent(self.cosmo)
 #    self.lconc = cfac #* concentration.concentration(10**logmh, '200m', self.mean_lzred, model='diemer19')
 #
 #    self.esd_dm, self.sigma_dm = self.ss._get_esd_dm(logmh=logmh, lconc=self.lconc, proj_sep=rbins)
-#    sigma       = 10**logalpha * self.sigma_s    + self.sigma_dm
-#    delta_sigma = 10**logalpha * self.esd_s      + self.esd_dm
-#    #sigma       = 10**logalpha * 10**self.spl_log_sigma_s(np.log10(rbins))    + sigma_dm
-#    #delta_sigma = 10**logalpha * 10**self.spl_log_esd_s(np.log10(rbins))  + self.esd_dm
+#    sigma       = alpha * self.sigma_s    + self.sigma_dm
+#    delta_sigma = alpha * self.esd_s      + self.esd_dm
+#    #sigma       = alpha * 10**self.spl_log_sigma_s(np.log10(rbins))    + sigma_dm
+#    #delta_sigma = alpha * 10**self.spl_log_esd_s(np.log10(rbins))  + self.esd_dm
 #
 #    if not reduced:
 #        return delta_sigma / 1e12
