@@ -166,150 +166,19 @@ class halo(constants):
 
 
 if __name__ == "__main__":
-    plt.subplot(2,2,1)
-    rbin = np.logspace(np.log10(0.004),np.log10(0.8), int(30))
-    hp = halo(13,4)
+    ax1 = plt.subplot(2,2,1)
+    ax2 = plt.subplot(2,2,2)
+    
+    rbin = np.logspace(-4,-1, int(30))
+    hp = halo(15,4)
     print(hp.r_200)
-    yy = hp.esd_nfw(rbin)/(1e12)
-    #yy = hp.avg_sigma_nfw(rbin)/(1e12)
-    plt.plot(rbin, yy, '-')
+    ax1.plot(rbin, hp.esd_nfw(rbin)/(1e12), '-')
+    ax1.set_xscale('log')
+    ax1.set_yscale('log')
 
-
-    hp = halo(13, 4, beta=1)
-    yy1 = hp.esd_gnfw(rbin)/(1e12)
-    #yy1 = hp.avg_sigma_gnfw(rbin)/(1e12)
-    plt.plot(rbin, yy1, '.')
-
-    print(yy1 - yy)
-
-    plt.xscale('log')
-    plt.yscale('log')
-
-    plt.savefig('test.png')
- 
-    #mlist =  [12]
-    #for mm in mlist:
-    #    hp = halo(mm,4)
-    #    rbin = np.logspace(-2,np.log10(1), int(1e6))
-    #    yy = 0.0*rbin
-    #    import time
-    #    begin = time.time()
-    #    yy = hp.esd_nfw(rbin)
-    #    print(time.time() - begin)
-    #    #yy0 = 0.0*yy
-    #    #for ii, rr in enumerate(rbin):
-    #    #    yy0[ii] = hp.esd_scalar(rr)
-    #    #yy0 = hp.num_delta_sigma(rbin)
-    #    plt.plot(rbin, yy)
-    #    #plt.plot(rbin, yy0,'.')
-
-
-
-
-
-
-
-    #plt.plot(rbin, hp.num_delta_sigma(rbin)/(1e12), '.', lw=0.0)
-    #plt.xscale('log')
-    #plt.yscale('log')
-    #plt.xlabel(r'$R [{\rm h^{-1}Mpc}]$')
-    #plt.ylabel(r'$M (<R)$')
-    #plt.ylabel(r'$\Delta \Sigma (R) [{\rm h M_\odot pc^{-2}}]$')
+    ax2.plot(rbin, hp.sigma_nfw(rbin)/(1e12), '-')
+    ax2.set_xscale('log')
+    ax2.set_yscale('log')
 
     plt.savefig('test.png', dpi=300)
-
-    #xx = rbin
-    #yy = 0.0*xx
-
-    #for ii,rr in enumerate(rbin):
-    #    yy[ii] = hp.esd_scalar(rr)
-
-    #plt.plot(xx, yy/(1e12), 's', lw=0.0)
-    #plt.plot(xx, hp.esd(xx)/(1e12))
-
-    #hp = halo(10**14,10)
-    #hp = halo(14.5,6)
-    #yy1 = hp.esd(rbin)/(1e12)
-    #plt.plot(rbin, yy1)
-    #def sigma_nfw(self,r):
-    #    """analytical projection of NFW"""
-    #    r_s = self.r_200/self.c
-    #    k = 2*r_s*self.rho_0
-    #    sig = 0.0*r
-    #    c=0
-    #    for i in r:
-    #        if i<5e-3:
-    #            sig[c] = self.sigma_nfw_scalar(5e-3)
-    #        else:
-    #            sig[c] = self.sigma_nfw_scalar(i)
-    #        c=c+1
-
-    #    return sig
-
-    #def avg_sigma_nfw(self,r):
-    #    """analytical average projected of NFW"""
-    #    r_s = self.r_200/self.c
-    #    k = 2*r_s*self.rho_0
-    #    sig = 0.0*r
-    #    c=0
-    #    for i in r:
-    #        if i<5e-3:
-    #            sig[c] = self.avg_sigma_nfw_scalar(5e-3)
-    #        else:
-    #            sig[c] = self.avg_sigma_nfw_scalar(i)
-
-    #        c=c+1
-
-    #    return sig
-
-    #def esd_scalar(self,r):
-    #    """ESD profile from analytical predictions"""
-    #    if r<5e-3:
-    #        val = 0.0
-    #    else:
-    #        val = self.avg_sigma_nfw_scalar(r) - self.sigma_nfw_scalar(r)
-    #    return val
-
-    #def sigma_nfw_scalar(self,r):
-    #    """analytical projection of NFW"""
-    #    if r<5e-3:#cut at the 5h-1kpc
-    #        r=5e-3
-
-    #    r_s = self.r_200/self.c
-    #    k = 2*r_s*self.rho_0
-
-    #    x = r/r_s
-    #    if x < 1:
-    #        value = (1 - np.arccosh(1/x)/np.sqrt(1-x**2))/(x**2-1)
-    #    elif x > 1:
-    #        value = (1 - np.arccos(1/x)/np.sqrt(x**2-1))/(x**2-1)
-    #    else:
-    #        value = 1./3.
-    #    sig = value*k
-
-    #    return sig
-
-    #def avg_sigma_nfw_scalar(self,r):
-    #    """analytical average projected of NFW"""
-    #    r_s = self.r_200/self.c
-    #    k = 2*r_s*self.rho_0
-    #    x = r/r_s
-
-
-    #    if x < 1:
-    #        value = np.arccosh(1/x)/np.sqrt(1-x**2) + np.log(x/2.0)
-    #        value = value*2.0/x**2
-    #    elif x > 1:
-    #        value = np.arccos(1/x)/np.sqrt(x**2-1)  + np.log(x/2.0)
-    #        value = value*2.0/x**2
-    #    else:
-    #        value = 2*(1-np.log(2))
-    #    sig = value*k
-    #    return sig
-
-
-            #for ii,rr in enumerate(r):
-            #    sig[ii] = self.sigma_nfw_scalar(rr)
-            #return sig
-
 
