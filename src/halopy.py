@@ -7,7 +7,7 @@ from scipy.interpolate import interp1d
 
 class constants:
     """Useful constants"""
-    G   = 4.301e-9 #km^2 Mpc M_sun^-1 s^-2 gravitational constant
+    G   = 4.300917270038e-9 #km^2 Mpc M_sun^-1 s^-2 gravitational constant
     H0  = 100. #h km s-1 Mpc-1 hubble constant at present
 
 class halo(constants):
@@ -17,7 +17,8 @@ class halo(constants):
         self.c = con_par # concentration parameter
         self.omg_m = omg_m
         self.rho_crt = 3*self.H0**2/(8*np.pi*self.G) # rho critical
-        self.r_200 = (3*self.m_tot/(4*np.pi*200*self.rho_crt*self.omg_m ))**(1./3.) # radius defines size of the halo
+        self.rho_m  =   self.rho_crt*self.omg_m 
+        self.r_200 = (3*self.m_tot/(4*np.pi*200*self.rho_m))**(1./3.) # radius defines size of the halo
         self.rho_0 = con_par**3 *self.m_tot/(4*np.pi*self.r_200**3 *(np.log(1+con_par)-con_par/(1+con_par)))
 
         self.spl_esd_rmin   = Rmin
@@ -166,19 +167,49 @@ class halo(constants):
 
 
 if __name__ == "__main__":
-    ax1 = plt.subplot(2,2,1)
-    ax2 = plt.subplot(2,2,2)
+    omgm0 = 0.3
+
+    from colossus.cosmology import cosmology
+    params = {'flat': True, 'H0': 100, 'Om0': omgm0, 'Ob0': 0.049, 'sigma8': 0.81, 'ns': 0.95}
+    cosmology.addCosmology('myCosmo', **params)
+    cosmo = cosmology.setCosmology('myCosmo')
+        
+    zzarr = np.linspace(0,1,10)
+
+    plt.subplot(2,2,1)
+    plt.plot(zzarr, cosmo.rho_m(zzarr)*1e9, zorder=10)
     
-    rbin = np.logspace(-4,-1, int(30))
-    hp = halo(15,4)
-    print(hp.r_200)
-    ax1.plot(rbin, hp.esd_nfw(rbin)/(1e12), '-')
-    ax1.set_xscale('log')
-    ax1.set_yscale('log')
+    for zz in zzarr:
+        hp = halo(log_mtot=14, con_par=3, omg_m=omgm0*(1+zz)**3)
+        plt.plot(zz, hp.rho_m , '.k')
 
-    ax2.plot(rbin, hp.sigma_nfw(rbin)/(1e12), '-')
-    ax2.set_xscale('log')
-    ax2.set_yscale('log')
+        print(hp.rho_m - (cosmo.rho_m(zz)*1e9))
+        print(hp.rho_crt/1e11)
 
-    plt.savefig('test.png', dpi=300)
+    plt.yscale('log')
+
+    
+    plt.savefig('test.png')
+
+
+
+
+
+
+
+    #ax1 = plt.subplot(2,2,1)
+    #ax2 = plt.subplot(2,2,2)
+    #
+    #rbin = np.logspace(-4,-1, int(30))
+    #hp = halo(15,4)
+    #print(hp.r_200)
+    #ax1.plot(rbin, hp.esd_nfw(rbin)/(1e12), '-')
+    #ax1.set_xscale('log')
+    #ax1.set_yscale('log')
+
+    #ax2.plot(rbin, hp.sigma_nfw(rbin)/(1e12), '-')
+    #ax2.set_xscale('log')
+    #ax2.set_yscale('log')
+
+    #plt.savefig('test.png', dpi=300)
 
