@@ -67,7 +67,7 @@ class simshear():
         if not np.any(valid_mask):
             return sigma_crit_inv
             
-        sigma_crit_inv = self._get_sigma_crit_inv_scalar(lzred[valid_mask], szred[valid_mask])
+        sigma_crit_inv[valid_mask] = self._get_sigma_crit_inv_scalar(lzred[valid_mask], szred[valid_mask])
        
         return sigma_crit_inv
 
@@ -77,7 +77,7 @@ class simshear():
         sigma_s     = self.stel.sigma_deVaucouleurs(proj_sep) 
         return esd_s, sigma_s
 
-    def _get_esd_dm(self, logmh, lconc, proj_sep):
+    def _get_esd_dm(self, logmh, lconc, lzred, proj_sep):
         self.hp = halo(logmh, lconc, omg_m=self.omg_m)
         # Vectorized calculations for all separations at once
         esd_dm      = self.hp.esd_nfw(proj_sep)           
@@ -85,11 +85,11 @@ class simshear():
         return esd_dm, sigma_dm
  
 
-    def _get_esd(self, logmstel, logre, logmh, lconc, proj_sep):
+    def _get_esd(self, logmstel, logre, logmh, lconc, lzred, proj_sep):
         """Provides the ESD and sigma in comoving units - vectorized for multiple separations"""
         # Vectorized calculations for all separations at once
         esd_s, sigma_s      =   self._get_esd_s(logmstel, logre, proj_sep)
-        esd_dm, sigma_dm    =   self._get_esd_dm(logmh, lconc, proj_sep)
+        esd_dm, sigma_dm    =   self._get_esd_dm(logmh, lconc, lzred, proj_sep)
         return esd_s, esd_dm, sigma_s, sigma_dm 
 
     def _get_g(self, logmstel, logre, logmh, lconc, lzred, szred, proj_sep):
@@ -98,7 +98,7 @@ class simshear():
         get_sigma_crit_inv = self._get_sigma_crit_inv(lzred, szred) 
         
         # Get ESD and sigma for all separations at once
-        esd_s, esd_dm, sigma_s, sigma_dm = self._get_esd(logmstel, logre, logmh, lconc, proj_sep)
+        esd_s, esd_dm, sigma_s, sigma_dm = self._get_esd(logmstel, logre, logmh, lconc, lzred, proj_sep)
         
         # Vectorized calculation of gamma and kappa
         gamma_s     = esd_s     * get_sigma_crit_inv
@@ -143,7 +143,8 @@ class simshear():
             g_dm    = gamma_dm / denom_dm # reduced shear - dark matter
         
         # Update flags for weak lensing regime
-        sflag = (np.abs(kappa) < 1.0) & (np.abs(g) < 1.0)
+        sflag = (np.abs(kappa) < 0.3) & (np.abs(g) < 0.3)
+        #sflag = (np.abs(kappa) < 1.0) & (np.abs(g) < 1.0)
         
         # Convert to radians for trigonometric calculations
         lra_rad     = np.radians(lra)
