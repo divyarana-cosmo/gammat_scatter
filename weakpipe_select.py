@@ -169,17 +169,21 @@ def lens_select(lensargs, seed=123, jk=None):
         df = df[idx]
 
         #assign the virial mass and concentration for the satellites by finding the nearest central galaxy in redshift and stellar mass and assigning the virial mass and concentration of the central galaxy to the satellite galaxy.
+        # first do the selection in redshift difference of 0.01 and then from the selected central galaxies, find the nearest one in stellar mass and assign the virial mass and concentration of that central galaxy to the satellite galaxy.
+
         for ii in range(len(df)):
             if df['kind'][ii] == 1:
-                z_gal = df['observed_redshift_gal'][ii]
-                mstel_gal = df['log_stellar_mass'][ii]
-                idx_central = (df['kind'] == 0) & (np.abs(df['observed_redshift_gal'] - z_gal) < 0.01) & (np.abs(df['log_stellar_mass'] - mstel_gal) < 0.1)
-                if np.sum(idx_central) > 0:
-                    df['mvir'][ii] = df['mvir'][idx_central][0]
-                    df['conc_vir_halo'][ii] = df['conc_vir_halo'][idx_central][0]
+                z_diff = np.abs(df['observed_redshift_gal'] - df['observed_redshift_gal'][ii])
+                mstel_diff = np.abs(df['log_stellar_mass'] - df['log_stellar_mass'][ii])
+                central_idx = np.where((z_diff < 0.01) & (df['kind'] == 0))[0]
+                if len(central_idx) > 0:
+                    nearest_central_idx = central_idx[np.argmin(mstel_diff[central_idx])]
+                    df['mvir'][ii] = df['mvir'][nearest_central_idx]
+                    df['conc_vir_halo'][ii] = df['conc_vir_halo'][nearest_central_idx]
                 else:
                     df['mvir'][ii] = np.nan
-                    df['conc_vir_halo'][ii] = np.nan
+                    df['conc_vir_halo'][ii] = np.nan    
+
 
         idx = np.isfinite(df['mvir']) & np.isfinite(df['conc_vir_halo']) & (df['kind'] == 1)
         df = df[idx]
