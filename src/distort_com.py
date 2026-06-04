@@ -1,8 +1,9 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from halopy import halo
-from halopy_w_offcen import halo as offcen_halo
+from halo_w_offcen_n_truncation import halo
 from stellarpy import stellar
+
+
+
 from colossus.cosmology import cosmology
 from colossus.halo import concentration
 from astropy.cosmology import FlatLambdaCDM
@@ -78,34 +79,44 @@ class simshear():
         sigma_s     = self.stel.sigma_deVaucouleurs(proj_sep) 
         return esd_s, sigma_s
 
-    def _get_esd_dm(self, logmh, lconc, lzred, proj_sep,  Roff=None, cos_theta_ls=None):
-        if Roff is not None:
-            self.hp = offcen_halo(logmh, lconc, omg_m=self.omg_m, Roff=Roff)
-            # Vectorized calculations for all separations at once
+    def _get_esd_dm(self, logmh, lconc, lzred, kind=0, proj_sep,  Roff=None, cos_theta_ls=None):
+        if kind == 0:
+            self.hp     = halo(logmh, lconc, omg_m=self.omg_m)
+            esd_dm      = self.hp.esd_nfw(proj_sep)  
+            sigma_dm    = self.hp.sigma_nfw(proj_sep)
+        elif kind == 1:
+            self.hp     = halo(logmh, lconc, omg_m=self.omg_m, rtrunc=0.4)
+            esd_dm      = self.hp.esd_nfw(proj_sep)  
+            sigma_dm    = self.hp.sigma_nfw(proj_sep)
+        elif kind == 0 and Roff is not None:    
+            self.hp     = halo(logmh, lconc, omg_m=self.omg_m, rtrunc=None, Roff=Roff)
+            esd_dm      = self.hp.esd_nfw(proj_sep)           
+            sigma_dm    = self.hp.sigma_nfw((proj_sep**2 + Roff**2 + 2*proj_sep*Roff*cos_theta_ls)**0.5)         
+        elif kind == 1 and Roff is not None:    
+            self.hp     = halo(logmh, lconc, omg_m=self.omg_m, rtrunc=0.4, Roff=Roff)
             esd_dm      = self.hp.esd_nfw(proj_sep)           
             sigma_dm    = self.hp.sigma_nfw((proj_sep**2 + Roff**2 + 2*proj_sep*Roff*cos_theta_ls)**0.5)         
         else:
-            self.hp = halo(logmh, lconc, omg_m=self.omg_m)
-            # Vectorized calculations for all separations at once
-            esd_dm      = self.hp.esd_nfw(proj_sep)           
-            sigma_dm    = self.hp.sigma_nfw(proj_sep)         
+            esd_dm      =   0.0
+            sigma_dm    =   0.0
+            raise ValueError("Please check the inpur rightly")
         return esd_dm, sigma_dm
  
 
-    def _get_esd(self, logmstel, logre, logmh, lconc, lzred, proj_sep,  Roff=None, cos_theta_ls=None):
+    def _get_esd(self, logmstel, logre, logmh, lconc, lzred, kind=0, proj_sep,  Roff=None, cos_theta_ls=None):
         """Provides the ESD and sigma in comoving units - vectorized for multiple separations"""
         # Vectorized calculations for all separations at once
         esd_s, sigma_s      =   self._get_esd_s(logmstel, logre, proj_sep)
-        esd_dm, sigma_dm    =   self._get_esd_dm(logmh, lconc, lzred, proj_sep,  Roff=None, cos_theta_ls=None)
+        esd_dm, sigma_dm    =   self._get_esd_dm(logmh, lconc, lzred, kind=0, proj_sep,  Roff=None, cos_theta_ls=None)
         return esd_s, esd_dm, sigma_s, sigma_dm 
 
-    def _get_g(self, logmstel, logre, logmh, lconc, lzred, szred, proj_sep,  Roff=None, cos_theta_ls=None):
+    def _get_g(self, logmstel, logre, logmh, lconc, lzred, kind=0, szred, proj_sep,  Roff=None, cos_theta_ls=None):
         """Calculate gamma and kappa components - vectorized"""
         # Get sigma_crit_inv for all source-lens pairs at once
         get_sigma_crit_inv = self._get_sigma_crit_inv(lzred, szred) 
         
         # Get ESD and sigma for all separations at once
-        esd_s, esd_dm, sigma_s, sigma_dm = self._get_esd(logmstel, logre, logmh, lconc, lzred, proj_sep,  Roff=None, cos_theta_ls=None)
+        esd_s, esd_dm, sigma_s, sigma_dm = self._get_esd(logmstel, logre, logmh, lconc, lzred,  kind=0, proj_sep,  Roff=None, cos_theta_ls=None)
         
         # Vectorized calculation of gamma and kappa
         gamma_s     = esd_s     * get_sigma_crit_inv
@@ -115,7 +126,7 @@ class simshear():
         
         return gamma_s, gamma_dm, kappa_s, kappa_dm
 
-    def get_g(self, lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred,  Roff=None,use_shear=False, no_shear=False):
+    def get_g(self, lra, ldec, lzred, logmstel, logre, logmh, lconc, kind=0, sra, sdec, szred,  Roff=None,use_shear=False, no_shear=False):
         """Compute g1 and g2 components for the reduced shear - vectorized for multiple sources"""
         # Convert all positions to Cartesian coordinates at once
         lx, ly, lz = self.get_xyz(lra, ldec) 
@@ -127,7 +138,7 @@ class simshear():
         proj_sep    = self.cosmo_comoving_distance(lzred) * sep_vector
         
         # Get gamma and kappa components for all pairs at once
-        gamma_s, gamma_dm, kappa_s, kappa_dm = self._get_g(logmstel, logre, logmh, lconc, lzred, szred, proj_sep,  Roff=None)
+        gamma_s, gamma_dm, kappa_s, kappa_dm = self._get_g(logmstel, logre, logmh, lconc, lzred, kind=0, szred, proj_sep,  Roff=None)
         
         # Vectorized calculation of total gamma and kappa
         gamma = gamma_s + gamma_dm
@@ -151,7 +162,7 @@ class simshear():
             g_dm    = gamma_dm / denom_dm # reduced shear - dark matter
         
         # Update flags for weak lensing regime
-        sflag = (np.abs(kappa) < 0.3) & (np.abs(g) < 0.3)
+        sflag = (np.abs(kappa) < 1.0) & (np.abs(g) < 0.3)
         #sflag = (np.abs(kappa) < 1.0) & (np.abs(g) < 1.0)
         
         # Convert to radians for trigonometric calculations
@@ -189,11 +200,12 @@ class simshear():
             
         return g_1, g_2, g, kappa, c_2phi, s_2phi, proj_sep, sflag, g_b, g_dm
 
-    def shear_src(self, lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, intse1, intse2,  Roff=None, use_shear=False, no_shear= False):
+    #def shear_src(self, lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred, intse1, intse2,  Roff=None, use_shear=False, no_shear= False):
+    def shear_src(self, lra, ldec, lzred, logmstel, logre, logmh, lconc, kind=0,sra, sdec, szred, intse1, intse2,  Roff=None, use_shear=False, no_shear= False):
         """Apply shear to source galaxies with given intrinsic shapes - fully vectorized"""
         # Get shear components for all sources at once
         g_1, g_2, gtan, kappa, c_2phi, s_2phi, proj_sep, sflag, g_b, g_dm = self.get_g(
-            lra, ldec, lzred, logmstel, logre, logmh, lconc, sra, sdec, szred,  Roff=None, use_shear=use_shear, no_shear=no_shear
+            lra, ldec, lzred, logmstel, logre, logmh, lconc, kind=0, sra, sdec, szred,  Roff=None, use_shear=use_shear, no_shear=no_shear
         )
         
         # Convert to complex numbers for easier manipulation
