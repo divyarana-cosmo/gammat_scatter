@@ -1,299 +1,168 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 import sys
+import os
+import argparse
+import yaml
+
 sys.path.append('/net/dobbe/data2/github/gammat_scatter/model/')
 sys.path.append('/net/dobbe/data2/github/gammat_scatter/src/')
 from model import model
 from distort_com import simshear
-from scipy.interpolate import interp1d
 
-def get_meas(outdir, logMstelarr, nover_samp=1):
-    # reading the data
-    from glob import glob
-    print(logMstelarr)   
-    for logMstelmin, logMstelmax in zip(logMstelarr[:-1], logMstelarr[1:]):
-        print(logMstelmin, logMstelmax)
-        #flist = glob(outdir + 'simed_sources.dat_lmstelmin_%2.2f_lmstelmax_%2.2f_with_shape_noise_using_shear_w_jacks_jk_*'%(logMstelmin, logMstelmax) + '_fast')
-        flist = glob(outdir + 'simed_sources.dat_lmstelmin_%2.2f_lmstelmax_%2.2f_with_shape_noise_w_jacks_jk_*'%(logMstelmin, logMstelmax) + '_fast')
-        Njacks = int(len(flist))
-        print('Number of jackknifes samples', Njacks)
- 
-        rbin      = np.array([])
-        dsigmaarr = np.array([])
-        xdsigmaarr = np.array([])
-        inp_gammat_arr = np.array([])
-
-        
-        for jk in range(Njacks):
-            stel_num =0
-            stel_den =0
-            avg_inv_sigc_num =  0
-            avg_inv_sigc_den =  0
-
-            file = outdir + 'simed_sources.dat_lmstelmin_%2.2f_lmstelmax_%2.2f_with_shape_noise_w_jacks_jk_%d'%(logMstelmin, logMstelmax, jk) + '_fast' 
-            data = pd.read_csv(file, delim_whitespace=1, skipfooter=1, engine='python') 
-            stel_num += data['22-dsigmat_inp_bary'].values[:]*data['27-sumd_dsigma_den']
-            stel_den += data['27-sumd_dsigma_den']
-            avg_inv_sigc_num += data['28-sumd_wls_by_sigmac']
-            avg_inv_sigc_den += data['14-sumd_wls']
-
-            num=0; xnum=0; den=0
-            for ii in range(Njacks): # leave out one jackknife region
-                if ii==jk :
-                    continue
-                #file = outdir + 'simed_sources.dat_lmstelmin_%2.2f_lmstelmax_%2.2f_with_shape_noise_using_shear_w_jacks_jk_%d'%(logMstelmin, logMstelmax, ii) + '_fast' 
-                file = outdir + 'simed_sources.dat_lmstelmin_%2.2f_lmstelmax_%2.2f_with_shape_noise_w_jacks_jk_%d'%(logMstelmin, logMstelmax, ii) + '_fast' 
-                data = pd.read_csv(file, delim_whitespace=1, skipfooter=1, engine='python') 
-                #idx = data['0-rmin/2+rmax/2']*1e3 > 4.0
-                #data = data[idx]
-                num +=data['25-sumd_dsigma_num'].values[:]
-                xnum+=data['26-sumd_dsigmax_num'].values[:]
-                den +=data['27-sumd_dsigma_den'].values[:]
-                rbin = data['2-rmin/2+rmax/2'].values[:]
-                inp_gammat_arr = data['11-gammat_inp'].values[:]
-            dsigmaarr  = np.append(dsigmaarr,num/den)
-            xdsigmaarr = np.append(xdsigmaarr,xnum/den)
+def build_dir_path(base_dir, logMmin, logMmax, seed, oversamp, sigma_Roff=None, sigma_logre=None):
+    """
+    Reconstructs the directory path dynamically using the config and oversampling factor.
+    Ensure your MPI run script uses this exact same naming convention!
+    """
+    dir_name = f'{logMmin:2.2f}_{logMmax:2.2f}_seed_{int(seed)}_ovp_{int(oversamp)}'
     
-        dsigmaarr   = dsigmaarr.reshape(Njacks,-1)
-        xdsigmaarr  = xdsigmaarr.reshape(Njacks,-1)
-        dsigma      = np.mean(dsigmaarr,axis=0)        
-        xdsigma     = np.mean(xdsigmaarr,axis=0)        
+    if sigma_Roff and sigma_Roff != -999:
+        dir_name += f'_sigma_off_{sigma_Roff:2.2f}'
+    if sigma_logre and sigma_logre > 0.0:
+        dir_name += f'_sigRe_{sigma_logre:2.2f}'
         
-        cov = np.zeros((len(rbin), len(rbin)))
-        xcov = np.zeros((len(rbin), len(rbin)))
-        # calculating the covariances
-        for ii in range(len(rbin)):
-            for jj in range(len(rbin)):
-                cov[ii,jj]  = np.mean((dsigmaarr[:,ii] - dsigma[ii])*(dsigmaarr[:,jj] - dsigma[jj]))
-                xcov[ii,jj] = np.mean((xdsigmaarr[:,ii] - xdsigma[ii])*(xdsigmaarr[:,jj] - xdsigma[jj]))
-        #correction for jackknife and oversampling factor        
-        cov  *=(nover_samp*(Njacks -1))         
-        xcov *=(nover_samp*(Njacks -1))
-        
-        dsigmaerr       = np.diag(cov)**0.5
-        xdsigmaerr      = np.diag(xcov)**0.5
+    return os.path.join(base_dir, dir_name) + '/'
 
-        
-        #stellar and sigma c part
-        stel_dsigmaarr = stel_num/stel_den 
-        avg_inv_sigcarr    = avg_inv_sigc_num/avg_inv_sigc_den
-        avg_inv_sigcarrsq   = stel_den/avg_inv_sigc_den
-                         
-        # saving the output
-        #np.savetxt(outdir + '/dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f_ovpsamp_100'%(logMstelmin, logMstelmax), np.transpose([rbin, dsigma, dsigmaerr, xdsigma, xdsigmaerr, stel_dsigmaarr, avg_inv_sigcarr, avg_inv_sigcarrsq]), header='Rp[h-1 Mpc] dsigma dsigmaerr xdsigma xdsigmaerr stel_dsigma avg_sigc avg_sigc_sq')
-        ##np.savetxt(outdir + '/dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMstelmin, logMstelmax), np.transpose([rbin, dsigma, dsigmaerr, xdsigma, xdsigmaerr, stel_dsigmaarr, avg_inv_sigcarr, avg_inv_sigcarrsq]), header='Rp[h-1 Mpc] dsigma dsigmaerr xdsigma xdsigmaerr stel_dsigma avg_sigc avg_sigc_sq')
-        np.savetxt(outdir + '/cov_dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMstelmin, logMstelmax), cov)
-        np.savetxt(outdir + '/xcov_dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMstelmin, logMstelmax), xcov)
-    return 0
-
-def make_plots(pltdir, logMstelarr, Njacks=100):
-    #fixing the minimum projected separation to be atleast 2*Re
-    lens_metadata   = pd.read_csv('/net/dobbe/data2/github/gammat_scatter/lens_sample.dat', delim_whitespace=1)
-    #pushing the fitting xx,yy in an array
-    xfit = np.array([])
-    yfit = np.array([])
-
-
-    # remove first radial bin
-    ss=1
-    ax = plt.subplot(3,3,ss)
-    colorcnt=0
-    inp_gammat_arr =0
-    # dsigma plots
-    for ii, (logMstelmin, logMstelmax)in enumerate(zip(logMstelarr[:-1], logMstelarr[1:])):
-        if logMstelmin>9.5 and logMstelmin<10.5:
-            continue
-        if logMstelmin>10.5 and logMstelmin<11.4:
-            continue
-        if logMstelmin>11.4:
-            continue
-
-        outdir = 'output/desi_z_0.0_0.4/iso_centrals/%2.2f_%2.2f_seed_%d/'%(logMstelmin, logMstelmax, ii)
-        file = outdir + 'simed_sources.dat_lmstelmin_%2.2f_lmstelmax_%2.2f_with_shape_noise_w_jacks_jk_%d'%(logMstelmin, logMstelmax, 10) + '_fast' 
-        data = pd.read_csv(file, delim_whitespace=1) 
-        rbin = data['2-rmin/2+rmax/2'].values[:]
-        inp_gammat_arr = data['11-gammat_inp'].values[:]
-        from scipy.interpolate import interp1d
-        idx = np.isfinite(inp_gammat_arr)
-        interpfunc = interp1d(inp_gammat_arr[idx], rbin[idx], kind='cubic')
-        
+def get_jk_leaves(outdir, logMmin, logMmax, Njacks):
+    """
+    Pre-loads all Jackknife files into RAM exactly ONCE per mass bin,
+    then constructs the N-1 jackknife leaves in memory.
+    """
+    data_jacks = []
+    
+    # 1. Pre-load all jackknife files to prevent 10,000+ redundant I/O operations
+    for jk in range(Njacks):
+        # Assumes standard filename generation from the MPI script
+        file = os.path.join(outdir, f'simed_sources_lmmin_{logMmin:2.2f}_lmmax_{logMmax:2.2f}_with_shape_noise_w_jacks_jk_{jk}_fast')
         try:
-            rpvt = interpfunc(0.3)
-        except ValueError:
-            rpvt = min(rbin)
+            data = pd.read_csv(file, delim_whitespace=True, skipfooter=1, engine='python')
+            data_jacks.append(data)
+        except Exception as e:
+            print(f"  -> Missing or unreadable file: {file}")
+            return None
 
-        rbins, dsigma, dsigmaerr, xdsigma, xdsigmaerr, stel_dsigma, avg_sigc, avg_sigc_sq = np.loadtxt(outdir + 'dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f_ovpsamp_100'%(logMstelmin, logMstelmax), unpack=1)
-
-        #rbins, dsigma, dsigmaerr, xdsigma, xdsigmaerr 
-        cov  = np.loadtxt(outdir + 'cov_dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMstelmin, logMstelmax))
-
-
-        idx             = (lens_metadata['logMmin']==logMstelmin) &(lens_metadata['logMmax']==logMstelmax)
-        Rmin            = lens_metadata['re_50'].values[idx] * 2.5/1e3 # 1e3 factor to convert Mpc to kpc
-
-        
-        if Rmin<rbins[0]:
-            Rmin = rbins[0]
-            xfit = np.append(xfit, Rmin)
-            yfit = np.append(yfit, dsigma[0])
-        
-        else:
-            func = interp1d(rbins, dsigma, kind='cubic')
-            xfit = np.append(xfit, Rmin)
-            yfit = np.append(yfit, func(Rmin))
-
-
-        ##removing nans
-        #idx = np.isfinite(dsigma) & (rbins>np.min(rbins))
-        #rbins       =   rbins[idx]
-        #dsigma      =   dsigma[idx]
-
-        #cov         =   np.delete(cov, ~idx, axis=0)
-        #cov         =   np.delete(cov, ~idx, axis=1)
-        
-        #print(sum(idx), cov)
-        dsigmaerr   = np.diag(cov)**0.5         
- 
-        icov  = np.linalg.inv(cov)*(Njacks - len(rbins) -2)/(Njacks -1)
-        snr = (np.dot(dsigma, np.dot(icov, dsigma)))**0.5
-        interpfunc = interp1d(rbins,dsigma)
-        print(logMstelmin, logMstelmax, rpvt)
-
-        #ax.plot(rpvt*1e3, interpfunc(rpvt), 'k.', zorder=20)
-        #print(dsigma)
-        ax.errorbar(rbins*1e3, dsigma, yerr=dsigmaerr, fmt='.', capsize=3 ,label='(%2.1f, %2.1f)'%(logMstelmin, logMstelmax), color='C%d'%colorcnt)
-
-        print(rbins)
-        print(dsigma)
-        print(dsigmaerr/dsigma * 100)
-
-        ## reading the best fit model predictions
-        #preddata    =   np.loadtxt('./model/output_mcmc_desi_runs/predfile_nfw_lmstelmin_%2.2f_lmstelmax_%2.2f.dat_full_desixeuclid_seed_%d_fixed_conc_14kdr3'%(logMstelmin, logMstelmax, ii))
-        #predesd    =   preddata[np.argmin(preddata[:,-1]),:-1]
-        #ax.plot(rbins*1e3, predesd, 'C%d'%colorcnt)    
-
-
-
-        colorcnt +=1
+    rbin = data_jacks[0]['2-rmin/2+rmax/2'].values
     
+    # 2. Accumulate the total denominators for the Baryonic and SigC calculations
+    stel_num_total = sum((d['22-dsigmat_inp_bary'].values * d['27-sumd_dsigma_den'].values) for d in data_jacks)
+    stel_den_total = sum(d['27-sumd_dsigma_den'].values for d in data_jacks)
+    avg_inv_sigc_num_total = sum(d['28-sumd_wls_by_sigmac'].values for d in data_jacks)
+    avg_inv_sigc_den_total = sum(d['14-sumd_wls'].values for d in data_jacks)
 
-    # make sure x values are sorted
-    xfill = xfit * 1e3
-    idx = np.argsort(xfill)
-    xfill = xfill[idx]
-    yfill = yfit[idx]
+    # 3. Construct the N-1 Jackknife leaves in memory
+    dsigma_leaves = []
+    xdsigma_leaves = []
     
-    ax = plt.gca()
-    ymax = np.max(dsigma) * 3  # or any suitably large value
+    for jk in range(Njacks):
+        num = 0; den = 0; xnum = 0
+        for ii in range(Njacks):
+            if ii == jk: 
+                continue
+            num  += data_jacks[ii]['25-sumd_dsigma_num'].values
+            den  += data_jacks[ii]['27-sumd_dsigma_den'].values
+            xnum += data_jacks[ii]['26-sumd_dsigmax_num'].values
+            
+        dsigma_leaves.append(num / den)
+        xdsigma_leaves.append(xnum / den)
+
+    stel_dsigmaarr = stel_num_total / stel_den_total
+    avg_inv_sigcarr = avg_inv_sigc_num_total / avg_inv_sigc_den_total
+    avg_inv_sigcarrsq = stel_den_total / avg_inv_sigc_den_total
+
+    return np.array(dsigma_leaves), np.array(xdsigma_leaves), stel_dsigmaarr, avg_inv_sigcarr, avg_inv_sigcarrsq, rbin
+
+
+def process_mass_bin(config, logMmin, logMmax, oversamp_sig, oversamp_cov):
+    """
+    Computes delta sigma using the highly oversampled signal directory, 
+    but strictly computes the physical covariance matrix using the 1x directory.
+    """
+    print(f"\nProcessing Mass Bin: {logMmin:2.2f} - {logMmax:2.2f}")
     
-    ax.plot(xfill, yfill, '--', color='grey', zorder=10, label=r'$2.5 R_{\rm e}$')
+    seed = config.get('seed', 1)
+    Njacks = config['lens']['Njacks']
+    sig_Roff = config['lens'].get('sigma_Roff', -999)
+    sig_Re   = config['lens'].get('sigma_logre', 0.0)
 
-    xshade = np.insert(xfill, 0, 5)
-    yshade = np.insert(yfill, 0, yfill[0])  # horizontal extension
+    # Build precise directories using the single config + respective oversampling factors
+    dir_sig = build_dir_path(config['outputdir'], logMmin, logMmax, seed, oversamp_sig, sig_Roff, sig_Re)
+    dir_cov = build_dir_path(config['outputdir'], logMmin, logMmax, seed, oversamp_cov, sig_Roff, sig_Re)
     
-    ax.fill_between(
-        xshade,
-        yshade,
-        ymax,
-        color='grey',
-        alpha=0.5,
-        zorder=10
-    )
+    print(f"  Signal Dir : {dir_sig}")
+    print(f"  Cov Dir    : {dir_cov}")
 
+    # Get leaves for the signal and covariance
+    res_signal = get_jk_leaves(dir_sig, logMmin, logMmax, Njacks)
+    res_cov    = get_jk_leaves(dir_cov, logMmin, logMmax, Njacks)
 
-    #plt.plot(xfit*1e3, yfit, '--', color='grey', zorder=10)
-    #plt.xlim(5, 150)
-    plt.ylabel(r'$\Delta \Sigma[{\rm h M_{\odot} pc^{-2}}]$' )
-    plt.xlabel(r'${\rm R_{\rm p} [h^{-1}kpc]}$')
-    plt.xscale('log')
-    plt.yscale('log')
-    leg = plt.legend(fontsize='xx-small')
-    leg.set_zorder(100)
+    if res_signal is None or res_cov is None:
+        print(f"  -> Skipping bin {logMmin:2.2f}-{logMmax:2.2f} due to missing data.")
+        return
 
-    plt.savefig(pltdir + 'dsigma-signals_paper.pdf')
-    return 0
+    dsigma_leaves_sig, xdsigma_leaves_sig, stel_dsigmaarr, avg_inv_sigcarr, avg_inv_sigcarrsq, rbin = res_signal
+    dsigma_leaves_cov, xdsigma_leaves_cov, _, _, _, _ = res_cov
 
-def plot_snr(pltdir, logMstelarr, Njacks=100):
-    #fixing the minimum projected separation to be atleast 2*Re
-    lens_metadata   = pd.read_csv('/net/dobbe/data2/github/gammat_scatter/lens_sample.dat', delim_whitespace=1)
+    # 1. SIGNAL: Evaluated from the heavily oversampled runs
+    dsigma  = np.mean(dsigma_leaves_sig, axis=0)        
+    xdsigma = np.mean(xdsigma_leaves_sig, axis=0)        
+    
+    # 2. COVARIANCE: Evaluated STRICTLY from the baseline (e.g. 1x) runs
+    dsigma_cov_mean  = np.mean(dsigma_leaves_cov, axis=0)
+    xdsigma_cov_mean = np.mean(xdsigma_leaves_cov, axis=0)
+    
+    cov = np.zeros((len(rbin), len(rbin)))
+    xcov = np.zeros((len(rbin), len(rbin)))
+    
+    for ii in range(len(rbin)):
+        for jj in range(len(rbin)):
+            cov[ii,jj]  = np.mean((dsigma_leaves_cov[:,ii] - dsigma_cov_mean[ii]) * (dsigma_leaves_cov[:,jj] - dsigma_cov_mean[jj]))
+            xcov[ii,jj] = np.mean((xdsigma_leaves_cov[:,ii] - xdsigma_cov_mean[ii]) * (xdsigma_leaves_cov[:,jj] - xdsigma_cov_mean[jj]))
+            
+    # Because we use the baseline 1x run, the physical area multiplier is standard.
+    # Standard Jackknife prefactor applies.
+    cov  *= (Njacks - 1)         
+    xcov *= (Njacks - 1)
+    
+    dsigmaerr  = np.diag(cov)**0.5
+    xdsigmaerr = np.diag(xcov)**0.5
 
-    # dsigma plots
-    logMstel_arr =   np.array([])
-    snr_arr      =   np.array([])
+    # Save the output back into the main Signal directory
+    np.savetxt(dir_sig + f'dsigma.dat_lmstelmin_{logMmin:2.2f}_lmstelmax_{logMmax:2.2f}_ovpsamp_{int(oversamp_sig)}', 
+               np.transpose([rbin, dsigma, dsigmaerr, xdsigma, xdsigmaerr, stel_dsigmaarr, avg_inv_sigcarr, avg_inv_sigcarrsq]), 
+               header='Rp[h-1_Mpc] dsigma dsigmaerr xdsigma xdsigmaerr stel_dsigma avg_sigc avg_sigc_sq')
+    
+    np.savetxt(dir_sig + f'cov_dsigma.dat_lmstelmin_{logMmin:2.2f}_lmstelmax_{logMmax:2.2f}', cov)
+    np.savetxt(dir_sig + f'xcov_dsigma.dat_lmstelmin_{logMmin:2.2f}_lmstelmax_{logMmax:2.2f}', xcov)
+    
+    print("  -> Successfully compiled and saved.")
 
-    for ii, (logMstelmin, logMstelmax)in enumerate(zip(logMstelarr[:-1], logMstelarr[1:])):
-        print(logMstelmin, logMstelmax)
-        outdir = 'output/desi_z_0.0_0.4/iso_centrals/%2.2f_%2.2f_seed_%d/'%(logMstelmin, logMstelmax, ii)
-        #rbins, dsigma, dsigmaerr, xdsigma, xdsigmaerr = np.loadtxt(outdir + 'dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMstelmin, logMstelmax), unpack=1)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--config", required=True, help="YAML Configuration file")
+    parser.add_argument("--oversamp_sig", type=float, default=100.0, help="Oversampling fraction used for the Signal extraction")
+    parser.add_argument("--oversamp_cov", type=float, default=1.0, help="Oversampling fraction used for the Covariance extraction")
+    args = parser.parse_args()
 
-        rbins, dsigma, dsigmaerr, xdsigma, xdsigmaerr, stel_dsigma, avg_sigc, avg_sigc_sq = np.loadtxt(outdir + 'dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f_ovpsamp_100'%(logMstelmin, logMstelmax), unpack=1)
+    # Load configuration
+    with open(args.config, 'r') as f:
+        config = yaml.safe_load(f)
 
-        cov  = np.loadtxt(outdir + 'cov_dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMstelmin, logMstelmax))
-        cov  = np.diag(np.diag(cov))
-        
+    # Convert seed to match the integer seed format used in MPI runs
+    config['seed'] = int(5e11 * config.get('seed', 1.0)) if 'seed' not in config else config['seed']
 
+    # Establish the Mass Bins you want to process
+    logMstelarr = 9.5 + 0.1 * np.arange(21)
+    
+    print(f"--- Starting Collation ---")
+    print(f"Signal Oversampling: {args.oversamp_sig}x")
+    print(f"Covariance Oversampling: {args.oversamp_cov}x")
+    
+    # Process each bin
+    for logMmin, logMmax in zip(logMstelarr[:-1], logMstelarr[1:]):
+        process_mass_bin(config, logMmin, logMmax, args.oversamp_sig, args.oversamp_cov)
 
-        #removing nans
-        idx       = (lens_metadata['logMmin']==logMstelmin) &(lens_metadata['logMmax']==logMstelmax)
-        Rmin      = lens_metadata['re_50'].values[idx] * 2.5/1e3 # 1e3 factor to convert Mpc to kpc
-
-
-        idx         = (rbins>Rmin)
-        rbins       =   rbins[idx]
-        dsigma      =   dsigma[idx]
-
-        cov         =   np.delete(cov, ~idx, axis=0)
-        cov         =   np.delete(cov, ~idx, axis=1)
-        
-        #print(sum(idx), cov)
-        dsigmaerr   = np.diag(cov)**0.5         
-
-        #print(logMstelmin, logMstelmax, dsigmaerr/dsigma * 100)
-        #continue
- 
-        icov  = np.linalg.inv(cov)*(Njacks - len(rbins) -2)/(Njacks -1)
-        snr = (np.dot(dsigma, np.dot(icov, dsigma)))**0.5
-        print(snr)
-        logMstel_arr =   np.append(logMstel_arr, [logMstelmin*0.5 + logMstelmax*0.5])
-        snr_arr      =   np.append(snr_arr     , [snr])
-
-
-    ax = plt.subplot(3,3,1)
-    ax.plot(logMstel_arr, snr_arr,'-')
-    #ax.set_yscale('log')
-    ax.set_xlabel(r'$\log[M_*/{\rm h^{-1}M_\odot}]$')
-    ax.set_ylabel(r'${\rm SNR}$')
-
-    plt.savefig(pltdir + 'snr_paper.pdf', dpi=300)
-    return 0
-
-
-#ss=17
-#logMmin =   11.20
-#logMmax =   11.30
-#outdir = 'output/desi_z_0.0_0.4/iso_centrals/%2.2f_%2.2f_seed_%d/'%(logMmin, logMmax, ss)
-#get_meas(outdir, [logMmin, logMmax], nover_samp=1000)
-#
-
-
-
-
-logMstelarr = 9.5 + 0.1*np.arange(21)
-#for ss,(logMmin, logMmax) in enumerate(zip(logMstelarr[:-1], logMstelarr[1:])):
-#    #if logMmin!=11.5:
-#    #    continue
-#    outdir = 'output/desi_z_0.0_0.4/iso_centrals/%2.2f_%2.2f_seed_%d/'%(logMmin, logMmax, ss)
-#    get_meas(outdir, [logMmin, logMmax], nover_samp=1)
-
-##print('measurements done')
-make_plots('./plots/', logMstelarr)
-#plt.clf()
-#logMstelarr = logMstelarr[logMstelarr<=11.6]
-#plot_snr('./plots/', logMstelarr)
-
-## plot only first and last stellar mass bin
-
-
-
-
+    print("\nMeasurements Complete. Proceeding to plots...")
+    
+    # make_plots('./plots/', logMstelarr)
+    # plot_snr('./plots/', logMstelarr[logMstelarr <= 11.6])
