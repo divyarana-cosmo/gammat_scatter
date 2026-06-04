@@ -119,7 +119,7 @@ def lens_select(lensargs, seed=123, jk=None):
         # Oversampling by 175 times (1.75 * 100)
         # 1.75 is to scale the area to full DESIxEuclid DR3
         # Sample with replacement from the filtered jackknife data
-        n_samples = int(n_jk_galaxies * 1.75 * 100)
+        n_samples = int(n_jk_galaxies * 1.75 * 1)
         oversample_idx = rng.choice(n_jk_galaxies, size=n_samples, replace=True)
         
         # Generate new seeds for oversampled data
@@ -145,7 +145,8 @@ def lens_select(lensargs, seed=123, jk=None):
         else:
             return lseed, lra, ldec, lzred, lwgt, llogmstel, llogre, llogmh, lconc, lxjkreg
 
-    if lensargs['type'] == "desi_satellites":
+
+    if lensargs['type'] == "desi-smhm":
         # first assign the physical params 
         # assign the jackknife index
         # oversample to match the desi and minimize the sample bias (100 times more than sample size)
@@ -163,30 +164,204 @@ def lens_select(lensargs, seed=123, jk=None):
         fname = '/home/rana/github_0/gammat_scatter/DataStore/flagship/22984.fits'
         df = fits.getdata(fname)
         idx = (df['log_stellar_mass'] > lensargs['logmstelmin']) & (df['log_stellar_mass'] < lensargs['logmstelmax'])
-        idx = idx  & (df['observed_redshift_gal'] > zlmin) & (df['observed_redshift_gal'] < zlmax)
+        idx = idx & (df['kind'] == 0) & (df['observed_redshift_gal'] > zlmin) & (df['observed_redshift_gal'] < zlmax)
         idx = idx & (df['mag_r'] < 19.5)
         idx = idx & (np.isfinite(df['galaxy_id'])) & (np.isfinite(df['ra_gal'])) & (np.isfinite(df['dec_gal'])) & (df['log_stellar_mass'] > 0) & (df['m200b'] > 0)
         df = df[idx]
+        
+        # converting the units from h-2 to h-1
+        df['log_stellar_mass'] = np.log10(10**df['log_stellar_mass'] / 0.677)
+    
+        # assigning the jackknife indices
+        from numpy.random import default_rng
+        rng     = default_rng(seed)
+        rseed   = rng.integers(0, 2**64, size=1, dtype=np.uint64)
+        rng     = default_rng(rseed)
+    
+        n_galaxies  = len(df)
+        lseed       = rng.integers(0, 2**64, size=n_galaxies, dtype=np.uint64)
+        lxjkreg     = rng.integers(0, lensargs['Njacks'], size=n_galaxies)
+        
+    
+        # ............assigning the half-light radius and concentration.............#
+        Astropy_cosmo = FlatLambdaCDM(H0=lensargs['H0'], Om0=lensargs['Om0'], Ob0=0.049)
+        
+        # Vectorized conversion of effective radius
+        thetare     = get_re(df['log_stellar_mass'], df['observed_redshift_gal'])  # in units of arcsec
+        thetare     = thetare * np.pi / (180 * 60 * 60)  # arcsec to radians
+        llogre      = np.log10(thetare * Astropy_cosmo.comoving_distance(df['observed_redshift_gal']).value)  # in the units of h-1 Mpc
+    
+        # Vectorized calculation of concentration parameters
+        params = {'flat': True, 'H0': lensargs['H0'], 'Om0': lensargs['Om0'], 'Ob0': 0.049, 'sigma8': 0.813, 'ns': 0.96}
+        cosmology.addCosmology('myCosmo', **params)
+        cosmo = cosmology.setCosmology('myCosmo')
+    
+        lconc = -999 + np.zeros(n_galaxies)
+        llogMh = -999 + np.zeros(n_galaxies)
+    
+        print(f'Converting mass definitions for {n_galaxies} galaxies...')
+        for ii in range(n_galaxies):
+            Mvir = df['mvir'][ii]
+            cvir = df['conc_vir_halo'][ii]
+            z = df['observed_redshift_gal'][ii]
+            M200m, r200m, c200m = mass_defs.changeMassDefinition(Mvir, cvir, z, 'vir', '200m')
+            llogMh[ii] = np.log10(M200m)
+            lconc[ii] = c200m
+            
+            # Progress indicator every 1000 galaxies
+            if (ii + 1) % 1000 == 0:
+                print(f'  Processed {ii + 1}/{n_galaxies} galaxies')
+        
+        print('Mass definition conversion complete')
+        
+        # collecting all the parameters now
+        lid     = df['galaxy_id']
+        lra     = df['ra_gal']
+        ldec    = df['dec_gal']
+        lzred   = df['observed_redshift_gal']
+        llogmh  = llogMh
+        # lconc already assigned
+        # lxjkreg already assigned
+        lwgt = 1.0 + 0.0 * lra
+        llogmstel = df['log_stellar_mass']
+    
+        # If no jackknife filtering requested, return all data
+        if jk is None:
+            return lseed, lra, ldec, lzred, lwgt, llogmstel, llogre, llogmh, lconc, lxjkreg
+        
+        # Filter by jackknife region
+        jk_mask = (lxjkreg == jk)
+        
+        lid         = lid       [jk_mask]
+        lra         = lra       [jk_mask]
+        ldec        = ldec      [jk_mask]
+        lzred       = lzred     [jk_mask]
+        llogmh      = llogmh    [jk_mask]
+        lconc       = lconc     [jk_mask]
+        lxjkreg     = lxjkreg   [jk_mask]
+        lwgt        = lwgt      [jk_mask]
+        llogmstel   = llogmstel [jk_mask]
+        llogre      = llogre    [jk_mask]
+        
+        n_jk_galaxies = len(lid)
+        
+        # 2.7 is to scale the area to full full Euclid DR3
+        # Sample with replacement from the filtered jackknife data
+        n_samples = int(n_jk_galaxies * 2.7 * 1)
+        oversample_idx = rng.choice(n_jk_galaxies, size=n_samples, replace=True)
+        
+        # Generate new seeds for oversampled data
+        lseed = rng.integers(0, 2**64, size=n_samples, dtype=np.uint64)
+        
+        # Apply oversampling to all arrays
+        lid         = lid       [oversample_idx]
+        lra         = lra       [oversample_idx]
+        ldec        = ldec      [oversample_idx]
+        lzred       = lzred     [oversample_idx]
+        llogmh      = llogmh    [oversample_idx]
+        lconc       = lconc     [oversample_idx]
+        lxjkreg     = lxjkreg   [oversample_idx]
+        lwgt        = lwgt      [oversample_idx]
+        llogmstel   = llogmstel [oversample_idx]
+        llogre      = llogre    [oversample_idx]
+        
+        sys.stdout.write("Number of lenses after oversampling: %d \n" % n_samples)
+        if 'sigma_Roff' in lensargs:
+            rng     = default_rng(seed+jk)
+            lRoff    = rng.rayleigh(scale=lensargs['sigma_Roff'],  size=int(len(lra)))
+            return lseed, lra, ldec, lzred, lwgt, llogmstel, llogre, llogmh, lconc, lxjkreg, lRoff
+        else:
+            return lseed, lra, ldec, lzred, lwgt, llogmstel, llogre, llogmh, lconc, lxjkreg
 
-        #assign the virial mass and concentration for the satellites by finding the nearest central galaxy in redshift and stellar mass and assigning the virial mass and concentration of the central galaxy to the satellite galaxy.
-        # first do the selection in redshift difference of 0.01 and then from the selected central galaxies, find the nearest one in stellar mass and assign the virial mass and concentration of that central galaxy to the satellite galaxy.
-
-        for ii in range(len(df)):
-            if df['kind'][ii] == 1:
-                z_diff = np.abs(df['observed_redshift_gal'] - df['observed_redshift_gal'][ii])
-                mstel_diff = np.abs(df['log_stellar_mass'] - df['log_stellar_mass'][ii])
-                central_idx = np.where((z_diff < 0.01) & (df['kind'] == 0))[0]
-                if len(central_idx) > 0:
-                    nearest_central_idx = central_idx[np.argmin(mstel_diff[central_idx])]
-                    df['mvir'][ii] = df['mvir'][nearest_central_idx]
-                    df['conc_vir_halo'][ii] = df['conc_vir_halo'][nearest_central_idx]
-                else:
-                    df['mvir'][ii] = np.nan
-                    df['conc_vir_halo'][ii] = np.nan    
 
 
-        idx = np.isfinite(df['mvir']) & np.isfinite(df['conc_vir_halo']) & (df['kind'] == 1)
+
+    if lensargs['type'] == "desi_w_satellites":
+        # first assign the physical params 
+        # assign the jackknife index
+        # oversample to match the desi and minimize the sample bias (100 times more than sample size)
+        # color cut file
+        
+        lmstel, zred = np.loadtxt('/home/rana/github_0/gammat_scatter/DataStore/flagship/color_cuts.dat', unpack=1)
+        selfunc = usp(lmstel, zred)
+        
+        try:
+            zlmin = lensargs['zlmin']
+            zlmax = selfunc(lensargs['logmstelmin'])
+        except:
+            print("color_cuts are not in the same binning, please redo the color cuts\n")
+            sys.exit()
+        
+        fname = '/home/rana/github_0/gammat_scatter/DataStore/flagship/22984.fits'
+        df = fits.getdata(fname)
+        
+        # Combined filtering to avoid creating multiple temporary boolean arrays
+        idx = (
+            (df['log_stellar_mass'] > lensargs['logmstelmin']) & 
+            (df['log_stellar_mass'] < lensargs['logmstelmax']) &
+            (df['observed_redshift_gal'] > zlmin) & 
+            (df['observed_redshift_gal'] < zlmax) &
+            (df['mag_r'] < 19.5) &
+            np.isfinite(df['galaxy_id']) & 
+            np.isfinite(df['ra_gal']) & 
+            np.isfinite(df['dec_gal']) & 
+            (df['log_stellar_mass'] > 0) & 
+            (df['m200b'] > 0)
+        )
         df = df[idx]
+        print(f"Total galaxies after filtering: {len(df)}")
+        
+        # --- OPTIMIZED MATCHING LOGIC ---
+        
+        # 1. Isolate Centrals (kind == 0) and Satellites (kind == 1)
+        cen_mask = df['kind'] == 0
+        sat_mask = df['kind'] == 1
+        
+        # Extract the relevant arrays for quick access
+        cen_z = df['observed_redshift_gal'][cen_mask]
+        cen_mstel = df['log_stellar_mass'][cen_mask]
+        cen_mvir = df['mvir'][cen_mask]
+        cen_conc = df['conc_vir_halo'][cen_mask]
+        
+        sat_z = df['observed_redshift_gal'][sat_mask]
+        sat_mstel = df['log_stellar_mass'][sat_mask]
+        
+        # Create result arrays filled with NaN by default
+        sat_mvir_new = np.full(sat_mask.sum(), np.nan)
+        sat_conc_new = np.full(sat_mask.sum(), np.nan)
+        
+        if len(cen_z) > 0 and len(sat_z) > 0:
+            # 2. Build the KDTree for Central galaxies using [redshift, log_stellar_mass]
+            cen_coords = np.column_stack((cen_z, cen_mstel))
+            tree = cKDTree(cen_coords)
+        
+            # 3. Query the tree for Satellites
+            sat_coords = np.column_stack((sat_z, sat_mstel))
+            
+            # query_ball_point with p=np.inf checks the maximum distance along any axis.
+            # It acts exactly like: (z_diff <= 0.01) AND (mstel_diff <= 0.01)
+            neighbors_list = tree.query_ball_point(sat_coords, r=0.01, p=np.inf)
+        
+            # 4. Resolve multiple matches by finding the one with the smallest stellar mass difference
+            for i, neighbors in enumerate(neighbors_list):
+                if not neighbors:
+                    continue
+                    
+                # Extract the stellar masses of the valid central neighbors
+                local_cen_mstels = cen_mstel[neighbors]
+                
+                # Find the neighbor index with the minimum difference to the satellite's mass
+                best_local_idx = np.argmin(np.abs(local_cen_mstels - sat_mstel[i]))
+                best_global_cen_idx = neighbors[best_local_idx]
+                
+                # Assign values
+                sat_mvir_new[i] = cen_mvir[best_global_cen_idx]
+                sat_conc_new[i] = cen_conc[best_global_cen_idx]
+        
+        # 5. Safely assign the mapped variables back to the main structured array
+        df['mvir'][sat_mask] = sat_mvir_new
+        df['conc_vir_halo'][sat_mask] = sat_conc_new
+
         # converting the units from h-2 to h-1
         df['log_stellar_mass'] = np.log10(10**df['log_stellar_mass'] / 0.677)
     
