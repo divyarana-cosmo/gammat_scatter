@@ -4,11 +4,10 @@ import sys
 sys.path.append('./src/')
 sys.path.append('./utils/')
 from distort_com import simshear
-
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.cosmology import FlatLambdaCDM
-from get_data import lens_select
+from weakpipe_select import lens_select
 from tqdm import tqdm
 import argparse
 import yaml
@@ -18,216 +17,26 @@ from scipy import stats
 from colossus.cosmology import cosmology
 from colossus.halo import concentration
 from create_sources import get_xyz, create_sources 
+from weakpipe import weakpipe
 
-def run_pipe(config, outputfilename='gamma.dat', jksamp=0, outputpairfile=None):
+def run_pipe(config, outputfilename='gamma.dat', jksamp=0):
     """Optimized pipeline function with proper NumPy vectorization"""
-    rmin = config['Rmin'] 
-    rmax = config['Rmax'] 
-    nbins = config['Nbins']
-    
-    # Set the projected radial binning in units of Mpc
-    rbins = np.logspace(np.log10(rmin), np.log10(rmax), nbins + 1)
-    rdiff = np.log10(rbins[1] / rbins[0])
- 
+    wp = weakpipe(H0=config['H0'], Om0=config['Om0'], Rmin=config['Rmin'], Rmax=config['Rmax'], Nbins=config['Nbins'], outputfilename=outputfilename)
+
     lensargs    = config["lens"]
-    sourceargs  = config["source"]
-
-    zdiff       = sourceargs["zdiff"]
-    
-    # Initialize simshear object
-    ss = simshear(H0=config['H0'], Om0=config['Om0'])
-
-    #colossus_cosmo = cosmology.fromAstropy(ss.Astropy_cosmo, sigma8=ss.sigma8, ns=ss.ns, cosmo_name=ss.cosmo_name)
-
-    # Initialize arrays for accumulation
-    sumdgammat_num              = np.zeros(nbins)
-    sumdgammat_inp_num          = np.zeros(nbins)
-    sumdgammat_inp_bary_num     = np.zeros(nbins)
-    sumdgammat_inp_dm_num       = np.zeros(nbins)
-    sumdgammatsq_num            = np.zeros(nbins)
-    sumdgammax_num              = np.zeros(nbins) 
-    sumdgammaxsq_num            = np.zeros(nbins)
-    sumdwls                     = np.zeros(nbins)
-    sumddsigmat_num             = np.zeros(nbins)
-    sumddsigmat_inp_num         = np.zeros(nbins)
-    sumddsigmat_inp_bary_num    = np.zeros(nbins)
-    sumddsigmat_inp_dm_num      = np.zeros(nbins)
-    sumddsigmatsq_num           = np.zeros(nbins)
-    sumddsigmax_num             = np.zeros(nbins) 
-    sumddsigmaxsq_num           = np.zeros(nbins)
-    sumdwls_by_sigcsq           = np.zeros(nbins)
-
     # Getting the lenses data
     lensargs['H0']=config['H0']; lensargs['Om0']=config['Om0']
-    lid, lra, ldec, lzred, lwgt, llogmstel, llogre, llogmh, lconc, lxjkreg = lens_select(lensargs, jk=jksamp)
+    if 'sigma_Roff' in lensargs:
+        lseed, _lra, _ldec, lzred, lwgt, llogmstel, llogre, llogmh, lconc, lxjkreg, lRoff = lens_select(lensargs, seed=config['seed'], jk=jksamp)
+        wp.process_lensdata(lseed, lzred, lwgt, llogmstel, llogre, llogmh, lconc, lRoff)
+    else:    
+        lseed, _lra, _ldec, lzred, lwgt, llogmstel, llogre, llogmh, lconc, lxjkreg = lens_select(lensargs, seed=config['seed'], jk=jksamp)
+        wp.process_lensdata(lseed, lzred, lwgt, llogmstel, llogre, llogmh, lconc)
 
-    print("lens data read fully", np.min(lzred))
-    # Calculate maximum angular separation based on minimum redshift
-    dismax = config['Rmax'] / ss.Astropy_cosmo.comoving_distance(np.min(lzred)).value 
-    print(np.min(lzred), 'thetamax', dismax) 
-    
-    # Handle shear option
-    if sourceargs['use_shear']:
-        print("using shear not reduced shear for the sims")
-        outputfilename = outputfilename + '_using_shear'
+    sourceargs  = config["source"]
+    wp.weaklens_aroundlens(nsrc=sourceargs['nsrc'], sigell=sourceargs['sigell'], zmax=sourceargs['zmax'], zdiff=sourceargs['zdiff'], seed=config['seed'], use_shear=sourceargs['use_shear'],test_case=config['test_case'])
+    wp.write2file()
 
-    # Open pair output file if needed
-    if outputpairfile is not None:
-        fpairout = open(outputpairfile, "w")
-        fpairout.write('jkid\tlra(deg)\tldec(deg)\tlzred\tllogmstel\tllogmh\tlconc\tsra(deg)\tsdec(deg)\tszred\tse1\tse2\tetan\tetan_obs\tex_obs\tproj_sep\twls\tkappa\tintse1\tintse2\tr90se1\tr90se2\tr90et\tr90ex\tr90intse1\tr90intse2\n')
-
-
-   # Process each lens
-    for ii in tqdm(range(len(lra))):
-        # Create sources for this lens - vectorized creation
-        sra, sdec, szred, wgal, intse1, intse2 = create_sources(
-            lra[ii], ldec[ii], dismax, 
-            nsrc=sourceargs['nsrc'], 
-            sigell=sourceargs['sigell'], 
-            seed=int(config["seed"] + lid[ii])
-        ) 
-        
-        # Handle test case option
-        if config['test_case']:
-            szred = np.full_like(sra, 0.9)
-            
-        # Handle shape noise option
-        if sourceargs['no_shape_noise']:
-            print("no shape noise")
-            intse1 = np.zeros_like(intse1)
-            intse2 = np.zeros_like(intse2)
-
-        print("number of sources:", len(sra))
-        
-        # Vectorized source selection
-        scut = szred > (lensargs['zmax'] + sourceargs['zdiff'])  # zdiff cut
-        if np.sum(scut) == 0:
-            continue
-
-        # Apply cut to all source arrays at once
-        sra     = sra[scut]
-        sdec    = sdec[scut]
-        szred   = szred[scut]
-        wgal    = wgal[scut]
-        intse1  = intse1[scut]
-        intse2  = intse2[scut]
-        
-        # Shear all sources at once
-        se1, se2, etan, kappa, proj_sep, sflag, etan_b, etan_dm, et_obs, ex_obs = ss.shear_src(
-            lra[ii], ldec[ii], lzred[ii], llogmstel[ii], llogre[ii], llogmh[ii], lconc[ii],
-            sra, sdec, szred, intse1, intse2, 
-            use_shear=sourceargs["use_shear"], 
-            no_shear=sourceargs["no_shear"]
-        )
-        
-        print('flagged sources', np.sum(sflag))
-        
-        # Handle no shear option
-        if sourceargs['no_shear']:
-            se1 = intse1
-            se2 = intse2
-            
-        sl_sep  = proj_sep
-        w_ls    = lwgt[ii] * wgal
-        
-        # Vectorized filtering of arrays
-        idx = (sl_sep > rmin) & (sl_sep < rmax) & sflag
-        if np.sum(idx) == 0:
-            continue
-            
-        # Apply filter to all arrays at once
-        sl_sep  = sl_sep[idx]
-        w_ls    = w_ls[idx]
-        et_obs  = et_obs[idx]
-        etan    = etan[idx]
-        kappa   = kappa[idx]
-        etan_b  = etan_b[idx]
-        etan_dm = etan_dm[idx]
-        ex_obs  = ex_obs[idx]
-        se1     = se1[idx]
-        se2     = se2[idx]
-        sra     = sra[idx]
-        sdec    = sdec[idx]
-        szred   = szred[idx]
-
-        # Write pairs to output file if needed
-        if outputpairfile is not None:
-            for jj in range(np.sum(idx)):
-                fpairout.write(f'{lxjkreg[ii]}\t{lra[ii]}\t{ldec[ii]}\t{lzred[ii]}\t{llogmstel[ii]}\t{llogmh[ii]}\t{lconc[ii]}\t{sra[jj]}\t{sdec[jj]}\t{szred[jj]}\t{se1[jj]}\t{se2[jj]}\t{etan[jj]}\t{et_obs[jj]}\t{ex_obs[jj]}\t{sl_sep[jj]}\t{w_ls[jj]}\t{kappa[jj]}\t{intse1[jj]}\t{intse2[jj]}\t{r90se1[jj]}\t{r90se2[jj]}\t{r90et_obs[jj]}\t{r90ex_obs[jj]}\t{r90intse1[jj]}\t{r90intse2[jj]}\n')
-        
-       
-        # Use vectorized operation instead of loop
-        sigma_crit_inv = ss._get_sigma_crit_inv(lzred=lzred[ii], szred=szred) * 1e12
-        w_ls_invsigmacritsq = w_ls * sigma_crit_inv**2
-        w_ls_invsigmacrit   = w_ls * sigma_crit_inv
-        
-        # Vectorized binning
-        slrbins = (np.log10(sl_sep / rmin) // rdiff).astype(int)
-        
-               
-        np.add.at(sumdwls                   ,slrbins    ,w_ls)
-        np.add.at(sumdwls_by_sigcsq         ,slrbins    ,w_ls_invsigmacritsq)
-
-        np.add.at(sumdgammat_inp_num        ,slrbins    ,w_ls * etan)
-        np.add.at(sumdgammat_inp_bary_num   ,slrbins    ,w_ls * etan_b)
-        np.add.at(sumdgammat_inp_dm_num     ,slrbins    ,w_ls * etan_dm)
-        
-        np.add.at(sumdgammat_num            ,slrbins    ,w_ls * et_obs)
-        np.add.at(sumdgammatsq_num          ,slrbins    ,(w_ls * et_obs)**2)
-        np.add.at(sumdgammax_num            ,slrbins    ,w_ls * ex_obs)
-        np.add.at(sumdgammaxsq_num          ,slrbins    ,(w_ls * ex_obs)**2)
-
-        np.add.at(sumddsigmat_inp_num       ,slrbins    ,w_ls_invsigmacrit * etan)
-        np.add.at(sumddsigmat_inp_bary_num  ,slrbins    ,w_ls_invsigmacrit * etan_b)
-        np.add.at(sumddsigmat_inp_dm_num    ,slrbins    ,w_ls_invsigmacrit * etan_dm)
-
-        np.add.at(sumddsigmat_num           ,slrbins    ,w_ls_invsigmacrit * et_obs)
-        np.add.at(sumddsigmatsq_num         ,slrbins    ,(w_ls_invsigmacrit * et_obs)**2)
-        np.add.at(sumddsigmax_num           ,slrbins    ,w_ls_invsigmacrit * ex_obs)
-        np.add.at(sumddsigmaxsq_num         ,slrbins    ,(w_ls_invsigmacrit * ex_obs)**2)
-
-    # Close pair output file if needed
-    if outputpairfile is not None:
-        fpairout.write("#OK")
-        fpairout.close()
-        
-    # Calculate responsivity correction
-    Resp = 1.0
-    
-    # Create dictionary for results
-    df = {}
-    df["-2-rmin"]                   = rbins[:-1]
-    df["-1-rmax"]                   = rbins[1:]
-    df["0-rmin/2+rmax/2"]           = rbins[:-1] * 0.5 + rbins[1:] * 0.5
-    df["1-gammat"]                  = sumdgammat_num / sumdwls / Resp    
-    df["2-gammatsq"]                = sumdgammatsq_num / sumdwls / Resp**2
-    df["3-sigma_gammat"]            = np.sqrt(sumdgammatsq_num / sumdwls / Resp**2 - (sumdgammat_num / sumdwls / Resp)**2)
-    df["4-SN_Errgammat"]            = np.sqrt(sumdgammatsq_num) / sumdwls / Resp
-    df["5-gammax"]                  = sumdgammax_num / sumdwls / Resp
-    df["6-gammaxsq"]                = sumdgammaxsq_num / sumdwls / Resp**2
-    df["7-sigma_gammax"]            = np.sqrt(sumdgammaxsq_num / sumdwls / Resp**2 - (sumdgammax_num / sumdwls / Resp)**2)
-    df["8-SN_Errgammax"]            = np.sqrt(sumdgammaxsq_num) / sumdwls / Resp
-    df["9-gammat_inp"]              = sumdgammat_inp_num / sumdwls / Resp
-    df["10-gammat_inp_bary"]        = sumdgammat_inp_bary_num / sumdwls / Resp
-    df["11-gammat_inp_dm"]          = sumdgammat_inp_dm_num / sumdwls / Resp
-    df["12-sumd_wls"]               = sumdwls
-    df["13-dsigma"]                 = sumddsigmat_num / sumdwls_by_sigcsq / Resp
-    df["14-dsigmasq"]               = sumddsigmatsq_num / sumdwls_by_sigcsq / Resp**2
-    df["15-SN_Errdsigmat"]          = np.sqrt(sumddsigmatsq_num) / sumdwls_by_sigcsq / Resp
-    df["16-dsigmax"]                = sumddsigmax_num / sumdwls_by_sigcsq / Resp
-    df["17-dsigmaxsq"]              = sumddsigmaxsq_num / sumdwls_by_sigcsq / Resp**2
-    df["18-SN_Errdsigmax"]          = np.sqrt(sumddsigmaxsq_num) / sumdwls_by_sigcsq / Resp
-    df["19-dsigmat_inp"]            = sumddsigmat_inp_num / sumdwls_by_sigcsq #/ Resp
-    df["20-dsigmat_inp_bary"]       = sumddsigmat_inp_bary_num / sumdwls_by_sigcsq #/ Resp
-    df["21-dsigmat_inp_dm"]         = sumddsigmat_inp_dm_num / sumdwls_by_sigcsq #/ Resp
-    df["22-sumd_dsigma_wls" ]       = sumdwls_by_sigcsq
-    df["23-sumd_dsigma_num" ]       = sumddsigmat_num
-    df["24-sumd_dsigmax_num" ]      = sumddsigmax_num
-    df["25-sumd_dsigma_den" ]       = sumdwls_by_sigcsq*Resp
-
-    import pandas as pd
-    df = pd.DataFrame(df)
-    df.to_csv(outputfilename, index=False, sep=' ')
     return 0
 
 if __name__ == "__main__":
@@ -242,8 +51,7 @@ if __name__ == "__main__":
     parser.add_argument("--rot90", help="rotating intrinsic shapes by 90 degrees", type=bool, default=False)
     parser.add_argument("--logmstelmin", help="log stellar mass minimum-lense selection", type=float, default=9.0)
     parser.add_argument("--logmstelmax", help="log stellar mass maximum-lense selection", type=float, default=10.5)
-    #parser.add_argument("--ten_percent", help="using ten percent of the lense sample", type=bool, default=False)
-
+    parser.add_argument("--sigma_Roff", help="miscentering sigma for the rayleigh distribution in h-1 Mpc", type=float, default=-999)
     parser.add_argument("--two_percent", help="using two percent of the lense sample", type=bool, default=False)
 
     args = parser.parse_args()
@@ -260,14 +68,17 @@ if __name__ == "__main__":
         config['lens']['logmstelmax'] = args.logmstelmax
 
     config['test_case']                 = args.test_case
-    config['seed']                      = args.seed
+    config['seed']                      = int(5e11*args.seed)
     config['lens']['two_percent']       = args.two_percent
     config['source']['use_shear']       = args.use_shear
     config['source']['no_shape_noise']  = args.no_shape_noise
     config['source']['no_shear']        = args.no_shear
 
-
-    config["outputdir"] += '_seed_%d'%config['seed']
+    if args.sigma_Roff != -999:
+        config['lens']['sigma_Roff']        = args.sigma_Roff 
+        config["outputdir"] += '%2.2f_%2.2f_seed_%d_sigma_off_%2.2f'%(args.logmstelmin, args.logmstelmax, args.seed, args.sigma_Roff)
+    else:
+        config["outputdir"] += '%2.2f_%2.2f_seed_%d'%(args.logmstelmin, args.logmstelmax, args.seed)
     outputfilename = '%s/simed_sources.dat'%(config['outputdir'])
     #make the directory for the output
     from subprocess import call
@@ -284,6 +95,8 @@ if __name__ == "__main__":
         if args.rot90:
             outputfilename = outputfilename + '_with_90_rotation'
 
+    if args.use_shear:
+        outputfilename = outputfilename + '_using_shear'
     if args.no_shear:
         outputfilename = outputfilename + '_no_shear'
     if args.test_case:
