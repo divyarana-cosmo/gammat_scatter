@@ -14,11 +14,13 @@ def make_plots(pltdir, logMstelarr, Njacks=100):
     #pushing the fitting xx,yy in an array
     xfit = np.array([])
     yfit = np.array([])
+    yfit1 = np.array([])
 
 
     # remove first radial bin
     ss=1
     ax = plt.subplot(3,3,ss)
+    ax1 = plt.subplot(3,3,ss+3)
     colorcnt=0
     inp_gammat_arr =0
     # dsigma plots
@@ -30,7 +32,7 @@ def make_plots(pltdir, logMstelarr, Njacks=100):
         if logMstelmin>11.4:
             continue
 
-        outdir = 'output/desi_z_0.0_0.4/iso_centrals_p_satellites/%2.2f_%2.2f_seed_%d'%(logMstelmin, logMstelmax, ii)
+        outdir = 'output/desi_z_0.0_0.4/iso_centrals/%2.2f_%2.2f_seed_%d'%(logMstelmin, logMstelmax, ii)
 
         rbins, dsigma, dsigmaerr, xdsigma, xdsigmaerr, stel_dsigma, avg_sigc, avg_sigc_sq = np.loadtxt(outdir + '_ovp_100/' + 'dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMstelmin, logMstelmax), unpack=1)
 
@@ -52,19 +54,26 @@ def make_plots(pltdir, logMstelarr, Njacks=100):
         idx             = (lens_metadata['logMmin']==logMstelmin) &(lens_metadata['logMmax']==logMstelmax)
         Rmin            = lens_metadata['re_50'].values[idx] * 3/1e3 # 1e3 factor to convert Mpc to kpc
         
+        dsigmaerr   = np.diag(cov)**0.5         
+
         if Rmin<rbins[0]:
             Rmin = rbins[0]
             xfit = np.append(xfit, Rmin)
             yfit = np.append(yfit, dsigma[0])
+            yfit1 = np.append(yfit1, dsigmaerr[0]/dsigma[0])
         
         else:
             func = interp1d(rbins, dsigma, kind='cubic')
+            func1 = interp1d(rbins, dsigmaerr/dsigma, kind='cubic')
             xfit = np.append(xfit, Rmin)
             yfit = np.append(yfit, func(Rmin))
+            yfit1 = np.append(yfit1, func1(Rmin))
 
-        dsigmaerr   = np.diag(cov)**0.5         
 
         ax.errorbar(rbins*1e3, dsigma, yerr=dsigmaerr, fmt='.', capsize=3 ,label='(%2.1f, %2.1f)'%(logMstelmin, logMstelmax), color='C%d'%colorcnt)
+
+        ax1.plot(rbins*1e3, 100*dsigmaerr/dsigma, color='C%d'%colorcnt)
+
 
         print(dsigmaerr/dsigma * 100)
 
@@ -83,14 +92,18 @@ def make_plots(pltdir, logMstelarr, Njacks=100):
     idx = np.argsort(xfill)
     xfill = xfill[idx]
     yfill = yfit[idx]
+    yfill1 = yfit1[idx]
     
     ax = plt.gca()
     ymax = np.max(dsigma) * 3  # or any suitably large value
+    ymax1 = np.max(dsigmaerr/dsigma) * 3  # or any suitably large value
     
     ax.plot(xfill, yfill, '--', color='grey', zorder=10, label=r'$3 R_{\rm e}$')
+    ax1.plot(xfill, yfill1, '--', color='grey', zorder=10, label=r'$3 R_{\rm e}$')
 
     xshade = np.insert(xfill, 0, 5)
     yshade = np.insert(yfill, 0, yfill[0])  # horizontal extension
+    yshade1 = np.insert(yfill1, 0, yfill1[0])  # horizontal extension
     
     ax.fill_between(
         xshade,
@@ -101,18 +114,30 @@ def make_plots(pltdir, logMstelarr, Njacks=100):
         zorder=10
     )
 
+    ax1.fill_between(
+        xshade,
+        yshade1,
+        ymax1,
+        color='grey',
+        alpha=0.5,
+        zorder=10
+    )
 
-    #plt.plot(xfit*1e3, yfit, '--', color='grey', zorder=10)
-    #plt.xlim(5, 150)
-    plt.ylabel(r'$\Delta \Sigma[{\rm h M_{\odot} pc^{-2}}]$' )
-    plt.xlabel(r'${\rm R_{\rm p} [h^{-1}kpc]}$')
-    plt.xscale('log')
-    plt.yscale('log')
-    leg = plt.legend(fontsize='xx-small')
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_ylabel(r'$\Delta \Sigma[{\rm h M_{\odot} pc^{-2}}]$' )
+    ax.tick_params(axis='x', labelbottom=False)
+
+    ax1.set_ylabel(r'% error')
+    ax1.set_xlabel(r'${\rm R_{\rm p} [h^{-1}kpc]}$')
+    ax1.set_xscale('log')
+    leg = ax.legend(fontsize='xx-small')
     leg.set_zorder(100)
 
     plt.savefig(pltdir + 'dsigma-signals_paper.pdf')
     return 0
+
+
 
 def plot_snr(pltdir, logMstelarr, Njacks=100):
     #fixing the minimum projected separation to be atleast 2*Re
@@ -124,7 +149,7 @@ def plot_snr(pltdir, logMstelarr, Njacks=100):
 
     for ii, (logMstelmin, logMstelmax)in enumerate(zip(logMstelarr[:-1], logMstelarr[1:])):
         print(logMstelmin, logMstelmax)
-        outdir = 'output/desi_z_0.0_0.4/iso_centrals_p_satellites/%2.2f_%2.2f_seed_%d/'%(logMstelmin, logMstelmax, ii)
+        outdir = 'output/desi_z_0.0_0.4/iso_centrals/%2.2f_%2.2f_seed_%d/'%(logMstelmin, logMstelmax, ii)
         #rbins, dsigma, dsigmaerr, xdsigma, xdsigmaerr = np.loadtxt(outdir + 'dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMstelmin, logMstelmax), unpack=1)
 
         rbins, dsigma, dsigmaerr, xdsigma, xdsigmaerr, stel_dsigma, avg_sigc, avg_sigc_sq = np.loadtxt(outdir + 'dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f_ovpsamp_100'%(logMstelmin, logMstelmax), unpack=1)
@@ -169,30 +194,33 @@ def plot_snr(pltdir, logMstelarr, Njacks=100):
     return 0
 
 
-#ss=17
-#logMmin =   11.20
-#logMmax =   11.30
-#outdir = 'output/desi_z_0.0_0.4/iso_centrals_p_satellites/%2.2f_%2.2f_seed_%d/'%(logMmin, logMmax, ss)
-#get_meas(outdir, [logMmin, logMmax], nover_samp=1000)
-#
-
 
 
 
 logMstelarr = 9.5 + 0.1*np.arange(21)
+logMstelarr = logMstelarr[logMstelarr<=11.6]
+make_plots('./plots/', logMstelarr)
+plt.clf()
+plot_snr('./plots/', logMstelarr)
+
+
+
+
 #for ss,(logMmin, logMmax) in enumerate(zip(logMstelarr[:-1], logMstelarr[1:])):
 #    #if logMmin!=11.5:
 #    #    continue
-#    outdir = 'output/desi_z_0.0_0.4/iso_centrals_p_satellites/%2.2f_%2.2f_seed_%d/'%(logMmin, logMmax, ss)
+#    outdir = 'output/desi_z_0.0_0.4/iso_centrals/%2.2f_%2.2f_seed_%d/'%(logMmin, logMmax, ss)
 #    get_meas(outdir, [logMmin, logMmax], nover_samp=1)
 
 ##print('measurements done')
-make_plots('./plots/', logMstelarr)
-#plt.clf()
-#logMstelarr = logMstelarr[logMstelarr<=11.6]
-#plot_snr('./plots/', logMstelarr)
-
 ## plot only first and last stellar mass bin
+#ss=17
+#logMmin =   11.20
+#logMmax =   11.30
+#outdir = 'output/desi_z_0.0_0.4/iso_centrals/%2.2f_%2.2f_seed_%d/'%(logMmin, logMmax, ss)
+#get_meas(outdir, [logMmin, logMmax], nover_samp=1000)
+#
+
 
 
 
