@@ -30,29 +30,27 @@ def make_plots(pltdir, logMstelarr, Njacks=100):
         if logMstelmin>11.4:
             continue
 
-        outdir = 'output/desi_z_0.0_0.4/iso_centrals/%2.2f_%2.2f_seed_%d/'%(logMstelmin, logMstelmax, ii)
-        file = outdir + 'simed_sources.dat_lmstelmin_%2.2f_lmstelmax_%2.2f_with_shape_noise_w_jacks_jk_%d'%(logMstelmin, logMstelmax, 10) + '_fast' 
-        data = pd.read_csv(file, delim_whitespace=1) 
-        rbin = data['2-rmin/2+rmax/2'].values[:]
-        inp_gammat_arr = data['11-gammat_inp'].values[:]
-        from scipy.interpolate import interp1d
-        idx = np.isfinite(inp_gammat_arr)
-        interpfunc = interp1d(inp_gammat_arr[idx], rbin[idx], kind='cubic')
-        
-        try:
-            rpvt = interpfunc(0.3)
-        except ValueError:
-            rpvt = min(rbin)
+        outdir = 'output/desi_z_0.0_0.4/iso_centrals_p_satellites/%2.2f_%2.2f_seed_%d'%(logMstelmin, logMstelmax, ii)
 
-        rbins, dsigma, dsigmaerr, xdsigma, xdsigmaerr, stel_dsigma, avg_sigc, avg_sigc_sq = np.loadtxt(outdir + 'dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f_ovpsamp_100'%(logMstelmin, logMstelmax), unpack=1)
+        rbins, dsigma, dsigmaerr, xdsigma, xdsigmaerr, stel_dsigma, avg_sigc, avg_sigc_sq = np.loadtxt(outdir + '_ovp_100/' + 'dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMstelmin, logMstelmax), unpack=1)
 
-        #rbins, dsigma, dsigmaerr, xdsigma, xdsigmaerr 
-        cov  = np.loadtxt(outdir + 'cov_dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMstelmin, logMstelmax))
+        cov  = np.loadtxt(outdir + '_ovp_1/' + 'cov_dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMstelmin, logMstelmax))
 
+        # removing the first radialbin
+        rbins      =     rbins      [1:] 
+        dsigma     =     dsigma     [1:] 
+        dsigmaerr  =     dsigmaerr  [1:] 
+        xdsigma    =     xdsigma    [1:] 
+        xdsigmaerr =     xdsigmaerr [1:] 
+        stel_dsigma=     stel_dsigma[1:] 
+        avg_sigc   =     avg_sigc   [1:] 
+        avg_sigc_sq=     avg_sigc_sq[1:]
+
+
+        cov =   cov[1:,1:]
 
         idx             = (lens_metadata['logMmin']==logMstelmin) &(lens_metadata['logMmax']==logMstelmax)
-        Rmin            = lens_metadata['re_50'].values[idx] * 2.5/1e3 # 1e3 factor to convert Mpc to kpc
-
+        Rmin            = lens_metadata['re_50'].values[idx] * 3/1e3 # 1e3 factor to convert Mpc to kpc
         
         if Rmin<rbins[0]:
             Rmin = rbins[0]
@@ -64,29 +62,10 @@ def make_plots(pltdir, logMstelarr, Njacks=100):
             xfit = np.append(xfit, Rmin)
             yfit = np.append(yfit, func(Rmin))
 
-
-        ##removing nans
-        #idx = np.isfinite(dsigma) & (rbins>np.min(rbins))
-        #rbins       =   rbins[idx]
-        #dsigma      =   dsigma[idx]
-
-        #cov         =   np.delete(cov, ~idx, axis=0)
-        #cov         =   np.delete(cov, ~idx, axis=1)
-        
-        #print(sum(idx), cov)
         dsigmaerr   = np.diag(cov)**0.5         
- 
-        icov  = np.linalg.inv(cov)*(Njacks - len(rbins) -2)/(Njacks -1)
-        snr = (np.dot(dsigma, np.dot(icov, dsigma)))**0.5
-        interpfunc = interp1d(rbins,dsigma)
-        print(logMstelmin, logMstelmax, rpvt)
 
-        #ax.plot(rpvt*1e3, interpfunc(rpvt), 'k.', zorder=20)
-        #print(dsigma)
         ax.errorbar(rbins*1e3, dsigma, yerr=dsigmaerr, fmt='.', capsize=3 ,label='(%2.1f, %2.1f)'%(logMstelmin, logMstelmax), color='C%d'%colorcnt)
 
-        print(rbins)
-        print(dsigma)
         print(dsigmaerr/dsigma * 100)
 
         ## reading the best fit model predictions
@@ -108,7 +87,7 @@ def make_plots(pltdir, logMstelarr, Njacks=100):
     ax = plt.gca()
     ymax = np.max(dsigma) * 3  # or any suitably large value
     
-    ax.plot(xfill, yfill, '--', color='grey', zorder=10, label=r'$2.5 R_{\rm e}$')
+    ax.plot(xfill, yfill, '--', color='grey', zorder=10, label=r'$3 R_{\rm e}$')
 
     xshade = np.insert(xfill, 0, 5)
     yshade = np.insert(yfill, 0, yfill[0])  # horizontal extension
@@ -145,7 +124,7 @@ def plot_snr(pltdir, logMstelarr, Njacks=100):
 
     for ii, (logMstelmin, logMstelmax)in enumerate(zip(logMstelarr[:-1], logMstelarr[1:])):
         print(logMstelmin, logMstelmax)
-        outdir = 'output/desi_z_0.0_0.4/iso_centrals/%2.2f_%2.2f_seed_%d/'%(logMstelmin, logMstelmax, ii)
+        outdir = 'output/desi_z_0.0_0.4/iso_centrals_p_satellites/%2.2f_%2.2f_seed_%d/'%(logMstelmin, logMstelmax, ii)
         #rbins, dsigma, dsigmaerr, xdsigma, xdsigmaerr = np.loadtxt(outdir + 'dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMstelmin, logMstelmax), unpack=1)
 
         rbins, dsigma, dsigmaerr, xdsigma, xdsigmaerr, stel_dsigma, avg_sigc, avg_sigc_sq = np.loadtxt(outdir + 'dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f_ovpsamp_100'%(logMstelmin, logMstelmax), unpack=1)
@@ -157,7 +136,7 @@ def plot_snr(pltdir, logMstelarr, Njacks=100):
 
         #removing nans
         idx       = (lens_metadata['logMmin']==logMstelmin) &(lens_metadata['logMmax']==logMstelmax)
-        Rmin      = lens_metadata['re_50'].values[idx] * 2.5/1e3 # 1e3 factor to convert Mpc to kpc
+        Rmin      = lens_metadata['re_50'].values[idx] * 3/1e3 # 1e3 factor to convert Mpc to kpc
 
 
         idx         = (rbins>Rmin)
@@ -193,7 +172,7 @@ def plot_snr(pltdir, logMstelarr, Njacks=100):
 #ss=17
 #logMmin =   11.20
 #logMmax =   11.30
-#outdir = 'output/desi_z_0.0_0.4/iso_centrals/%2.2f_%2.2f_seed_%d/'%(logMmin, logMmax, ss)
+#outdir = 'output/desi_z_0.0_0.4/iso_centrals_p_satellites/%2.2f_%2.2f_seed_%d/'%(logMmin, logMmax, ss)
 #get_meas(outdir, [logMmin, logMmax], nover_samp=1000)
 #
 
@@ -204,7 +183,7 @@ logMstelarr = 9.5 + 0.1*np.arange(21)
 #for ss,(logMmin, logMmax) in enumerate(zip(logMstelarr[:-1], logMstelarr[1:])):
 #    #if logMmin!=11.5:
 #    #    continue
-#    outdir = 'output/desi_z_0.0_0.4/iso_centrals/%2.2f_%2.2f_seed_%d/'%(logMmin, logMmax, ss)
+#    outdir = 'output/desi_z_0.0_0.4/iso_centrals_p_satellites/%2.2f_%2.2f_seed_%d/'%(logMmin, logMmax, ss)
 #    get_meas(outdir, [logMmin, logMmax], nover_samp=1)
 
 ##print('measurements done')
