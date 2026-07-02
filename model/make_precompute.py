@@ -90,5 +90,5 @@ if __name__ == "__main__":
     config['logMmax']     =  args.logMmax 
     config['seed']        = int(5e11*args.seed)
 
-    config['dsigma_fil']  = '/net/ketelmeer/data2/divyarana/github/gammat_scatter/output/desi_z_0.1_0.4_seed_%d/dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(args.seed, args.logMmin, args.logMmax)  # we need this to fix the radial bins
+    config['dsigma_fil']  = '/home/rana/github_0/gammat_scatter/output/desi_z_0.0_0.4/iso_centrals/%2.2f_%2.2f_seed_%d/dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f_ovpsamp_100'%(args.logMmin, args.logMmax, args.seed, args.logMmin, args.logMmax)  # we need this to fix the radial bins
     precomputes(config)

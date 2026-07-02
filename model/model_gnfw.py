@@ -6,6 +6,7 @@ from colossus.cosmology import cosmology
 from colossus.halo import concentration
 
 sys.path.append('/home/rana/github_0/gammat_scatter/src/')
+from halopy import halo
 from stellarpy import stellar
 from distort_com import simshear
 #integration
@@ -83,10 +84,13 @@ class model():
 
 
     def set_esd_spl(self, x, rbins, lzred, reduced=True):
-        alpha, logmh, cfac = x
+        alpha, logmh, cfac,beta = x
+        
+        hp = halo(log_mtot=logmh, con_par=cfac, omg_m=self.Om0 , beta=beta)
+
         #rbins = self.rbins_esd_s
-        #self.esd_dm, self.sigma_dm = self.ss._get_esd_dm(logmh=logmh, lconc=cfac, lzred=lzred, proj_sep=rbins)
-        self.esd_dm, self.sigma_dm = self.ss._get_esd_dm(logmh=logmh, lconc=cfac, kind=0, r_true=rbins)
+        self.esd_dm     = hp.esd_gnfw(r=rbins)
+        self.sigma_dm   = hp.sigma_gnfw(r=rbins)
         sigma       = alpha * 10**(self.spl_log_sigma_s(np.log10(rbins))) + self.sigma_dm
         delta_sigma = alpha * 10**(self.spl_log_esd_s(np.log10(rbins))) + self.esd_dm
 

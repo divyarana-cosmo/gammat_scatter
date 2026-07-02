@@ -6,7 +6,7 @@ import yaml
 import emcee
 import pandas as pd
 from schwimmbad import MPIPool
-from model import model
+from model_gnfw import model
 from colossus.cosmology import cosmology
 from colossus.halo import concentration
 params = {'flat': True, 'H0': 100, 'Om0': 0.319, 'Ob0': 0.049, 'sigma8': 0.813, 'ns': 0.96}
@@ -21,8 +21,8 @@ def gauss(x,mean,sigma):
     return ans
 
 def lnprior(x):
-    alpha, logmh, conc = x
-    if 0.1<alpha<5 and 1e9<10**logmh<1e16 and 0.5<conc<20 :
+    alpha, logmh, beta = x
+    if 0.1<alpha<5 and 1e9<10**logmh<1e16  and 0<beta<3:
         return 0.0 
     return -np.inf
 
@@ -36,6 +36,9 @@ def lnprob(x, rbins, data, icov, mm, median_lzred, invsigc):
     
     begin = time.time()
     
+    lconc  =   concentration.concentration(10**x[1], '200m', median_lzred, model = 'diemer19')
+    x = np.array([x[0],x[1],lconc,x[2]])
+
     # model prediction
     _, esd = mm.set_esd_spl(x, rbins, lzred=median_lzred)
 
@@ -45,7 +48,7 @@ def lnprob(x, rbins, data, icov, mm, median_lzred, invsigc):
     chisq = np.dot(Delta, np.dot(icov, Delta))
 
     blob = np.append(esd, chisq)
-    print( 'alpha, log_Mh, cfac, chisq')
+    print( 'alpha, log_Mh, cfac, beta, chisq')
     print( x,chisq)
     if chisq<0 or np.isnan(chisq) :
         return -np.inf, 5*np.ones(len(data) + 1)
@@ -85,7 +88,7 @@ if __name__ == "__main__":
     parser.add_argument("--logMmin", help="minimum stellar mass", default=9.5, type=float)
     parser.add_argument("--logMmax", help="maximum stellar mass", default=11.0, type=float)
     parser.add_argument("--seed", help="seed", default=123, type=int)
-    parser.add_argument("--Rpmin", help="minimum projected radius to be used for fitting in units of half-light radius", default=3, type=float)
+    parser.add_argument("--Rpmin", help="minimum projected radius to be used for fitting in units of half-light radius", default=3.0, type=float)
 
 
     args = parser.parse_args()
@@ -112,7 +115,7 @@ if __name__ == "__main__":
     rbins, data, err, xdata, err, stelesd, invsigc, invsigcsq = np.loadtxt(outdir + '_ovp_100/' + 'dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMmin, logMmax), unpack=1)
     cov  = np.loadtxt(outdir + '_ovp_1/' + 'cov_dsigma.dat_lmstelmin_%2.2f_lmstelmax_%2.2f'%(logMmin, logMmax))
     cov     =   np.diag(np.diag(cov))
-    
+ 
     #fixing the minimum projected separation to be atleast 2*Re
     lens_metadata   = pd.read_csv('/net/dobbe/data2/github/gammat_scatter/lens_sample.dat', delim_whitespace=1)
     idx             = (lens_metadata['logMmin']==logMmin) &(lens_metadata['logMmax']==logMmax)
@@ -151,11 +154,11 @@ if __name__ == "__main__":
     
     np.random.seed(123)
 
-    p_alpha     = np.random.uniform(0.9,1.1, nwalkers) 
-    p_logmh     = np.log10(np.random.uniform(1e9, 1e16, nwalkers))
-    p_conc      = np.random.uniform(0.1,10, nwalkers)
+    p_alpha     =   np.random.uniform(0.9,    1.1, nwalkers) 
+    p_logmh     =   np.log10(np.random.uniform(1e9, 1e16, nwalkers))
+    p_beta      =   np.random.uniform(0.9, 1.1, nwalkers)
 
-    p_0         = np.transpose([p_alpha, p_logmh, p_conc])
+    p_0         = np.transpose([p_alpha, p_logmh, p_beta])
 
    # Initialize the sampler
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, pool=pool, args=[rbins, data, icov, mm, median_lzred, invsigc])
@@ -163,8 +166,8 @@ if __name__ == "__main__":
     print("Running burn-in...")
     Ntotal = 4000
 
-    burnfile        =   './%s/burnfile_nfw_lmstelmin_%2.2f_lmstelmax_%2.2f.dat_full_desixeuclid_seed_%d_free_conc_14kdr3'%(outputdir, logMmin, logMmax, args.seed)
-    burnpredfile    =   './%s/burnpredfile_nfw_lmstelmin_%2.2f_lmstelmax_%2.2f.dat_full_desixeuclid_seed_%d_free_conc_14kdr3'%(outputdir, logMmin, logMmax, args.seed)
+    burnfile        =   './%s/burnfile_nfw_lmstelmin_%2.2f_lmstelmax_%2.2f.dat_full_desixeuclid_seed_%d_fix_conc_gnfw_14kdr3'%(outputdir, logMmin, logMmax, args.seed)
+    burnpredfile    =   './%s/burnpredfile_nfw_lmstelmin_%2.2f_lmstelmax_%2.2f.dat_full_desixeuclid_seed_%d_fix_conc_gnfw_14kdr3'%(outputdir, logMmin, logMmax, args.seed)
 
 
     pos = runchain(Ntotal,sampler, burnfile, burnpredfile, p_0, nwalkers)
@@ -172,8 +175,8 @@ if __name__ == "__main__":
 
     print("Running production...")
     Ntotal = 8000
-    chainfile = './%s/chainfile_nfw_lmstelmin_%2.2f_lmstelmax_%2.2f.dat_full_desixeuclid_seed_%d_free_conc_14kdr3'%(outputdir, logMmin, logMmax, args.seed)
-    predfile  = './%s/predfile_nfw_lmstelmin_%2.2f_lmstelmax_%2.2f.dat_full_desixeuclid_seed_%d_free_conc_14kdr3'%(outputdir, logMmin, logMmax, args.seed)
+    chainfile = './%s/chainfile_nfw_lmstelmin_%2.2f_lmstelmax_%2.2f.dat_full_desixeuclid_seed_%d_fix_conc_gnfw_14kdr3'%(outputdir, logMmin, logMmax, args.seed)
+    predfile  = './%s/predfile_nfw_lmstelmin_%2.2f_lmstelmax_%2.2f.dat_full_desixeuclid_seed_%d_fix_conc_gnfw_14kdr3'%(outputdir, logMmin, logMmax, args.seed)
 
 
     pos = runchain(Ntotal,sampler, chainfile, predfile, pos, nwalkers)
