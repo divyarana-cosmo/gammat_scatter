@@ -174,19 +174,18 @@ if __name__ == "__main__":
     cosmology.addCosmology('myCosmo', **params)
     cosmo = cosmology.setCosmology('myCosmo')
         
-    zzarr = np.linspace(0,1,10)
+    #zzarr = np.linspace(0,1,10)
 
     plt.subplot(2,2,1)
-    plt.plot(zzarr, cosmo.rho_m(zzarr)*1e9, zorder=10)
+    #for zz in zzarr:
+    for bb in [0.5,1.0,1.5]:
+        hp = halo(log_mtot=14, con_par=3, omg_m=0.3, beta=bb)
+        rr = np.logspace(-3,-1, 20)
+        plt.plot(rr, (hp.esd_gnfw(rr) + 1e12/rr**2)/1e12, label=r'$\beta=%2.2f$'%(bb))
     
-    for zz in zzarr:
-        hp = halo(log_mtot=14, con_par=3, omg_m=omgm0*(1+zz)**3)
-        plt.plot(zz, hp.rho_m , '.k')
-
-        print(hp.rho_m - (cosmo.rho_m(zz)*1e9))
-        print(hp.rho_crt/1e11)
-
+    plt.legend()
     plt.yscale('log')
+    plt.xscale('log')
 
     
     plt.savefig('test.png')
